@@ -5,7 +5,7 @@
 ## 1. 交接时间
 
 - 日期：2026-04-30
-- 工作目录：`/Volumes/extender/CodeBase/BuffettMungerWisdomArchive`
+- 工作目录：`/Volumes/extender/CodeBase/buffett-munger-wisdom-archive`
 
 ## 2. 当前已经完成的事情
 
