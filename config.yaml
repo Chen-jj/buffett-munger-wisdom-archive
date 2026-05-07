@@ -1,0 +1,51 @@
+# CNBC Buffett Archive 抓取 + 翻译 + 字幕烧录
+translation:
+  openai:
+    api_key: "sk-xxx"         # ← 必填：你的 OpenAI API Key
+    base_url: null            # 自定义 API endpoint（如 Ollama: http://localhost:11434/v1）
+    model: "gpt-4o"
+    temperature: 0.1
+    batch_size: 15            # 每批翻译的字幕条数
+
+# yt-dlp 视频下载选项
+download:
+  format: "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
+  rate_limit: null            # 限速，如 "5M"
+  retries: 3
+
+# 字幕样式（ASS 格式）
+subtitle_style:
+  font_name: "Hiragino Sans GB"   # macOS 上当前已验证可被 ffmpeg/libass 正常命中的字体
+  font_size: 30
+  primary_color: "&H00FFFFFF"   # 白色
+  outline_color: "&H00000000"   # 黑色描边
+  outline_width: 2
+  shadow: 1
+  margin_v: 42                # 距底部边距
+  alignment: 2                # 2=底部居中（双语都在下方，中文在上英文在下）
+
+# 双语字幕（中英对照）
+bilingual:
+  enabled: true
+  secondary_font_size: 20
+  secondary_color: "&H0060E6FF"  # 柔和黄色英文
+
+# FFmpeg 编码参数
+ffmpeg:
+  codec: "libx264"
+  crf: 18
+  preset: "medium"            # ultrafast/fast/medium/slow
+
+# WhisperX 语音对齐（可选）
+whisperx:
+  model: "large-v3"
+  device: "cpu"               # cpu / cuda / mps
+  compute_type: "int8"        # int8 / float16
+  vad_method: "pyannote"      # pyannote / silero
+  beam_size: 2               # CPU 上兼顾速度与质量
+  timing_source: "asr"       # 直接使用 ASR+WhisperX 对齐后的英文字幕
+
+# 爬虫设置
+crawl:
+  delay: 1.0                  # 请求间隔（秒），避免被封
+  user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
