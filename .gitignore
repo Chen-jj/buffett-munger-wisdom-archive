@@ -5,3 +5,5 @@ __pycache__/
 log/
 output/
 webapp/app.db
+.trae/
+README.local.md
