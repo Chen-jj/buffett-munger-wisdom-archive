@@ -5,5 +5,6 @@ __pycache__/
 log/
 output/
 webapp/app.db
+legacy-weapp/app.db
 .trae/
 README.local.md

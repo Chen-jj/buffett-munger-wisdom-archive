@@ -6,7 +6,7 @@
 - Stack: Python 3 CLI/media pipeline, `requests`/`beautifulsoup4` crawling, `yt-dlp` download, `ffmpeg`/`ffprobe` media processing, Whisper/WhisperX-style ASR alignment, OpenAI-compatible translation, `pysubs2` subtitle conversion, lightweight static Web review UI.
 - Description: An offline media-asset pipeline for collecting Buffett and Munger related public videos, extracting archive metadata and transcripts, downloading source videos, producing English and Chinese subtitles, burning reviewable subtitled videos, and exposing generated assets through CLI and local Web UI workflows.
 - Product boundary: The repository should optimize for reproducible local processing of long-form archive videos. It is not a general video platform, CMS, or cloud service unless such adapters are explicitly added later.
-- Current migration note: Existing `src/step*.py`, `run.py`, `tools_project_cli.py`, and `webapp/` are legacy-compatible entry points. New work should follow the module map below and only use legacy scripts as migration references.
+- Current migration note: Existing `legacy-src/*.py` and `legacy-weapp/` are legacy-compatible references. New work should follow the module map below and only use legacy scripts as migration references.
 
 ### Module Map
 
@@ -43,8 +43,8 @@
 ## Build, Test & Verify
 
 - Install: `python3 -m venv .venv && . .venv/bin/activate && python3 -m pip install -r requirements.txt`
-- CLI help smoke test: `python3 tools_project_cli.py -h`
-- Legacy pipeline help/check: `python3 run.py --help` if arguments are added later; otherwise inspect `run.py` before use.
+- CLI help smoke test: `python3 legacy-src/tools_project_cli.py -h`
+- Legacy pipeline help/check: `python3 legacy-src/run.py --help` if arguments are added later; otherwise inspect `legacy-src/run.py` before use.
 - Web review smoke test: start the existing review server through the CLI command documented in `README.md`, then open the local review page.
 - Architecture verification: `fd '^AGENTS\.md$' src --max-depth 3 | sort` and inspect module guidance before implementing.
 
@@ -62,3 +62,15 @@
 
 - Module architecture guides live in each `src/<module>/AGENTS.md`.
 - Keep `README.md` focused on user workflows; keep architectural rules in this file and module-level `AGENTS.md` files.
+
+## （暂时）待迁移逻辑
+
+- `legacy-src/run.py` -> legacy one-shot pipeline entrypoint: year/year-range/all selection, step ordering, retry-from-step hints, and custom SRT/video injection.
+- `legacy-src/tools_project_cli.py` -> legacy helper CLI: asset listing/reading, SRT parsing and cleanup, translation helpers, batch export/merge, clip generation, burn/review helpers, Web review serving, catalog generation, favorites API, and output cleanup dry-run logic.
+- `legacy-src/step0_crawl.py` -> acquisition candidate: CNBC year/session discovery, transcript extraction, chapter extraction, source metadata persistence, and crawl politeness settings.
+- `legacy-src/step1_download.py` -> media_download candidate: CNBC playback URL resolution, yt-dlp command construction, fallback download format, and existing-file skip behavior.
+- `legacy-src/step2_align.py` -> transcription candidate: ffmpeg audio extraction, faster-whisper ASR, WhisperX alignment, English SRT writing, and timing normalization.
+- `legacy-src/step3_translate.py` -> translation candidate: OpenAI-compatible client creation, prompt policy, SRT batching, fallback behavior, and Chinese SRT output.
+- `legacy-src/step4_burn.py` -> subtitle_rendering candidate: ASS style conversion, bilingual overlay behavior, ffmpeg burn command construction, and rendered video skip checks.
+- `legacy-src/__init__.py` -> legacy Python package marker retained only to preserve the old package shape during migration.
+- `legacy-weapp/` -> webui/review candidate: static review UI assets, generated catalog contract examples, and local browser-facing review presentation.
