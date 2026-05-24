@@ -16,11 +16,11 @@ from pathlib import Path
 
 import yaml
 
-from src.step0_crawl import crawl_year, get_all_years, get_session, load_config
-from src.step1_download import download_year
-from src.step2_align import align_year
-from src.step3_translate import translate_year
-from src.step4_burn import burn_year
+from step0_crawl import crawl_year, get_all_years, get_session, load_config
+from step1_download import download_year
+from step2_align import align_year
+from step3_translate import translate_year
+from step4_burn import burn_year
 
 
 STEPS = {
