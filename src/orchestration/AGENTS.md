@@ -23,6 +23,10 @@
 - Start with synchronous local execution; do not introduce queues or services prematurely.
 - Make every stage explicit and inspectable before execution.
 - Prefer manifest-driven decisions over checking only file existence.
+- When composing acquisition crawlers, register source-specific crawlers first
+  (`CnbcCrawler`, `YoutubeCrawler`, etc.) and keep `GenericCrawler` last. The
+  generic crawler is an intentional fallback whose `accepts()` may match broadly,
+  and `DefaultCrawlerRegistry` selects the first accepting crawler.
 
 ## Phased Goals
 

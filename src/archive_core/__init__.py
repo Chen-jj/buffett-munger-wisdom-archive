@@ -1,0 +1,2 @@
+"""Shared archive domain contracts."""
+

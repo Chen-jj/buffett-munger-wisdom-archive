@@ -2,30 +2,50 @@
 
 ## Module Purpose
 
-`acquisition` owns web page analysis, crawling, transcript extraction, and source metadata normalization.
+`acquisition` owns source discovery, fetching, source-page parsing, transcript extraction, source metadata normalization, and persistence of acquisition artifacts.
 
-## Responsibilities
+## Current Architecture
 
-- Analyze archive pages and discover year/session/video/transcript resources.
-- Extract chapters, transcript text, speaker/session metadata, and source URLs.
-- Enforce politeness rules: user agent, delay, retry, and crawl scope.
-- Persist normalized acquisition artifacts that downstream modules can consume without re-crawling.
+- `domain/`: source-neutral value objects only: `AcquisitionRequest`, `AcquisitionTarget`, `MediaReference`, `Chapter`, `Transcript`, `SourceMetadata`, `Provenance`, and `AcquisitionResult`.
+- `application/`: source-neutral orchestration. `AcquireUseCase` accepts one `AcquisitionRequest`, selects a crawler through `CrawlerRegistry`, discovers targets, fetches each target, optionally persists each result, and returns a list of `AcquisitionResult`.
+- `infrastructure/`: HTTP, HTML parsing, metadata extraction, transcript normalization, source crawlers, and local artifact writing.
 
-## Layering Rules
+## Dependency Rules
 
-- `domain/`: source page, crawl target, transcript section, chapter, and normalized metadata concepts.
-- `application/`: crawl-year, crawl-session, refresh-metadata, and validate-source use cases.
-- `infrastructure/`: HTTP clients, BeautifulSoup parsers, site-specific CNBC/archive adapters, and local artifact writers.
-- `interfaces/`: CLI command handlers, crawl result DTOs, and orchestration-facing summaries.
+- Dependencies point inward: infrastructure depends on application/domain contracts; application depends on domain and Protocol ports; domain imports only pure primitives and shared `archive_core` identity values.
+- Domain must not import `requests`, `bs4`, filesystem APIs, subprocess, UI, or another module's infrastructure.
+- Calling layers must construct only `AcquisitionRequest`; they must not branch by CNBC year/session, YouTube URL, DOM shape, or page selectors.
+- Site-specific discovery, parsing, normalization, and source quirks belong inside the corresponding crawler.
 
-## Technology Direction
+## Source Crawler Contract
 
-- Use `requests` and `beautifulsoup4` initially; hide both behind infrastructure adapters.
-- Site-specific parsing must not leak into downstream modules.
-- Store raw source references and normalized outputs separately when practical.
+Each site implements `SourceCrawler`:
 
-## Phased Goals
+- `accepts(req) -> bool`
+- `discover(req) -> list[AcquisitionTarget]`
+- `fetch(target) -> AcquisitionResult`
 
-- Phase 1: Extract crawler contracts from legacy `step0` behavior.
-- Phase 2: Add source-specific parser tests using saved HTML fixtures.
-- Phase 3: Support additional Buffett/Munger sources by adding adapters, not new pipeline branches.
+Crawler responsibilities include resource discovery, fetch planning, page parsing, media reference extraction, metadata normalization, and provenance population.
+
+## Infrastructure Notes
+
+- `CnbcCrawler` accepts CNBC URLs, `cnbc:<year>`, or `hints.year`; it expands a year into session targets and applies the legacy rule that skips `highlight` when full morning/afternoon sessions exist.
+- `YoutubeCrawler` accepts YouTube URLs and returns an embed media reference. It does not claim transcript availability unless a future implementation can fetch one.
+- `GenericCrawler` is a fallback for selector-driven HTML pages.
+- `LocalAcquisitionArtifactWriter` must use `archive_core.application.build_asset_workspace(result.asset_id, root)` and write under `output/<source>_<group>_<item>/`.
+
+## Artifact Contract
+
+For every `AcquisitionResult`, the writer stores:
+
+- `meta.json`: normalized `SourceMetadata`, `asset_id`, `source_ref`, and `provenance`.
+- `media_ref.json`: serialized `MediaReference`.
+- `transcript.txt` and `chapters.json`: only when `transcript` is available.
+
+Writes must be atomic per file and must pre-check all planned outputs when `overwrite=False`.
+
+## Testing Direction
+
+- Unit tests cover domain validation, registry routing, `AcquireUseCase` orchestration, and writer file contracts.
+- Offline integration tests use saved HTML fixtures and fake HTTP clients; they must not hit the network or write outside `tmp_path`.
+- Live network tests must be marked `@pytest.mark.live` and skipped by default.
