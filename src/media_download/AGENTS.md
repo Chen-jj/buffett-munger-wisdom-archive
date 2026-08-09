@@ -6,7 +6,7 @@
 
 ## Responsibilities
 
-- Resolve playable media URLs from acquisition metadata or source pages.
+- Resolve playable media URLs from upstream metadata or source pages.
 - Plan and execute downloads through downloader adapters.
 - Capture format, size, checksum, source URL, retry count, and download timestamp metadata.
 - Provide idempotent behavior for existing media assets.

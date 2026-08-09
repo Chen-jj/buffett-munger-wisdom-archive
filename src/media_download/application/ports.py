@@ -5,18 +5,38 @@ from __future__ import annotations
 from typing import Protocol
 
 from media_download.domain import (
+    DownloadInput,
     DownloadedArtifact,
     DownloaderResult,
     DownloadPlan,
-    MediaSource,
+    MediaRef,
 )
 
 
 class MediaUrlResolver(Protocol):
-    """Resolve a source page into a playable media URL."""
+    """Resolve a media reference into a downloader URL."""
 
-    def resolve(self, source: MediaSource) -> str:
+    def accepts(self, input: DownloadInput) -> bool:
+        """Return whether this resolver can handle the input."""
+
+    def resolve(self, input: DownloadInput) -> str:
         """Return the URL that should be passed to the downloader."""
+
+
+class ResolverRegistry:
+    """Ordered resolver registry for media reference dispatch."""
+
+    def __init__(self) -> None:
+        self._resolvers: list[MediaUrlResolver] = []
+
+    def register(self, resolver: MediaUrlResolver) -> None:
+        self._resolvers.append(resolver)
+
+    def select(self, input: DownloadInput) -> MediaUrlResolver:
+        for resolver in self._resolvers:
+            if resolver.accepts(input):
+                return resolver
+        raise ValueError("No media URL resolver accepts input")
 
 
 class MediaDownloader(Protocol):
@@ -47,3 +67,6 @@ class DownloadArtifactStore(Protocol):
 
     def read_manifest(self, path: str) -> DownloadedArtifact:
         """Read a previously recorded download manifest."""
+
+    def read_media_ref(self, path: str) -> MediaRef:
+        """Read an upstream media reference."""

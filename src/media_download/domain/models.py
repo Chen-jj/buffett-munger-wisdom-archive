@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping
 
-from archive_core.domain import SessionId
+from archive_core.domain import AssetId
 
 
 DEFAULT_FORMAT_SELECTOR = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
+MANIFEST_SCHEMA = "media-download.manifest.1"
+MEDIA_REF_KINDS = {"page_url", "direct_url", "embed_id"}
+MediaRefKind = Literal["page_url", "direct_url", "embed_id"]
 
 
 class DownloadAction(str, Enum):
@@ -18,18 +21,58 @@ class DownloadAction(str, Enum):
 
 
 @dataclass(frozen=True)
-class MediaSource:
-    """Source page for one archive session video."""
+class MediaRef:
+    """Media reference produced by upstream artifacts."""
 
-    source: str
-    session_id: SessionId
-    page_url: str
+    kind: MediaRefKind
+    value: str
+    extra: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if not self.source:
-            raise ValueError("source must not be empty")
-        if not self.page_url.startswith(("http://", "https://")):
-            raise ValueError("page_url must be absolute")
+        if self.kind not in MEDIA_REF_KINDS:
+            raise ValueError("kind must be one of page_url, direct_url, embed_id")
+        if not isinstance(self.value, str) or not self.value:
+            raise ValueError("value must be a non-empty string")
+        if not isinstance(self.extra, dict):
+            raise ValueError("extra must be a dict")
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "MediaRef":
+        if "kind" not in data:
+            raise ValueError("kind is required")
+        if "value" not in data:
+            raise ValueError("value is required")
+        kind = data["kind"]
+        if not isinstance(kind, str):
+            raise ValueError("kind must be a string")
+        value = data["value"]
+        if not isinstance(value, str):
+            raise ValueError("value must be a non-empty string")
+        extra = data.get("extra", {})
+        if not isinstance(extra, dict):
+            raise ValueError("extra must be a dict")
+        return cls(kind=kind, value=value, extra=dict(extra))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kind": self.kind,
+            "value": self.value,
+            "extra": dict(self.extra),
+        }
+
+
+@dataclass(frozen=True)
+class DownloadInput:
+    """Input object for planning one asset media download."""
+
+    asset_id: AssetId
+    media_ref: MediaRef
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.asset_id, AssetId):
+            raise ValueError("asset_id must be an AssetId")
+        if not isinstance(self.media_ref, MediaRef):
+            raise ValueError("media_ref must be a MediaRef")
 
 
 @dataclass(frozen=True)
@@ -58,7 +101,8 @@ class DownloadPolicy:
 class DownloadPlan:
     """Resolved download plan independent of any concrete downloader."""
 
-    source: MediaSource
+    asset_id: AssetId
+    media_ref: MediaRef
     media_url: str
     output_path: str
     manifest_path: str
@@ -85,7 +129,9 @@ class DownloaderResult:
 class DownloadedArtifact:
     """Recorded output artifact and provenance for a download decision."""
 
-    source: MediaSource
+    asset_id: AssetId
+    media_kind: MediaRefKind
+    media_ref_value: str
     media_url: str
     output_path: str
     format_selector: str
@@ -99,13 +145,16 @@ class DownloadedArtifact:
 
     def to_manifest_dict(self) -> dict[str, Any]:
         return {
-            "schema_version": "media-download.manifest.v1",
-            "source": {
-                "source": self.source.source,
-                "year": self.source.session_id.year,
-                "session": self.source.session_id.session,
-                "page_url": self.source.page_url,
-                "media_url": self.media_url,
+            "schema_version": MANIFEST_SCHEMA,
+            "asset": {
+                "source": self.asset_id.source,
+                "group": self.asset_id.group,
+                "item": self.asset_id.item,
+            },
+            "media": {
+                "kind": self.media_kind,
+                "ref_value": self.media_ref_value,
+                "resolved_url": self.media_url,
             },
             "artifact": {
                 "path": self.output_path,
@@ -128,21 +177,23 @@ class DownloadedArtifact:
 
     @classmethod
     def from_manifest_dict(cls, data: Mapping[str, Any]) -> "DownloadedArtifact":
-        source_data = dict(data["source"])
+        if data.get("schema_version") != MANIFEST_SCHEMA:
+            raise ValueError("unrecognized manifest schema")
+        asset_data = dict(data["asset"])
+        media_data = dict(data["media"])
         artifact_data = dict(data["artifact"])
         download_data = dict(data["download"])
         checksum_data = dict(artifact_data["checksum"])
         downloader_data = dict(download_data["downloader"])
         return cls(
-            source=MediaSource(
-                source=str(source_data["source"]),
-                session_id=SessionId(
-                    year=int(source_data["year"]),
-                    session=str(source_data["session"]),
-                ),
-                page_url=str(source_data["page_url"]),
+            asset_id=AssetId(
+                source=str(asset_data["source"]),
+                group=str(asset_data["group"]),
+                item=str(asset_data["item"]),
             ),
-            media_url=str(source_data["media_url"]),
+            media_kind=MediaRef(str(media_data["kind"]), str(media_data["ref_value"])).kind,
+            media_ref_value=str(media_data["ref_value"]),
+            media_url=str(media_data["resolved_url"]),
             output_path=str(artifact_data["path"]),
             format_selector=str(download_data["format"]),
             size_bytes=int(artifact_data["size_bytes"]),

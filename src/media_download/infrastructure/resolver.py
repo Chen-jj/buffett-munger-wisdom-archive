@@ -5,11 +5,35 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 
-from acquisition.infrastructure import RequestsHttpClient
-from media_download.domain import MediaSource
+from media_download.application import ResolverRegistry
+from media_download.domain import DownloadInput
+
+from .http import RequestsHttpClient
 
 
 _PLAYBACK_URL_RE = re.compile(r'playbackURL":"(.*?)"')
+
+
+@dataclass(frozen=True)
+class DirectUrlResolver:
+    """Resolve direct media references."""
+
+    def accepts(self, input: DownloadInput) -> bool:
+        return input.media_ref.kind == "direct_url"
+
+    def resolve(self, input: DownloadInput) -> str:
+        return input.media_ref.value
+
+
+@dataclass(frozen=True)
+class EmbedIdResolver:
+    """Resolve platform embed identifiers to downloader URLs."""
+
+    def accepts(self, input: DownloadInput) -> bool:
+        return input.media_ref.kind == "embed_id"
+
+    def resolve(self, input: DownloadInput) -> str:
+        return f"https://www.youtube.com/watch?v={input.media_ref.value}"
 
 
 @dataclass
@@ -18,9 +42,12 @@ class CnbcPlaybackUrlResolver:
 
     http_client: RequestsHttpClient | None = None
 
-    def resolve(self, source: MediaSource) -> str:
-        html = self._http_client().get_text(source.page_url)
-        return extract_cnbc_playback_url(html, fallback_url=source.page_url)
+    def accepts(self, input: DownloadInput) -> bool:
+        return input.media_ref.kind == "page_url"
+
+    def resolve(self, input: DownloadInput) -> str:
+        html = self._http_client().get_text(input.media_ref.value)
+        return extract_cnbc_playback_url(html, fallback_url=input.media_ref.value)
 
     def _http_client(self) -> RequestsHttpClient:
         if self.http_client is None:
@@ -40,3 +67,12 @@ def extract_cnbc_playback_url(html: str, *, fallback_url: str) -> str:
     if media_url.startswith("//"):
         return f"https:{media_url}"
     return media_url
+
+
+def build_default_resolver_registry() -> ResolverRegistry:
+    registry = ResolverRegistry()
+    # The registry uses the first matching resolver, so specific resolvers stay first.
+    registry.register(DirectUrlResolver())
+    registry.register(EmbedIdResolver())
+    registry.register(CnbcPlaybackUrlResolver())
+    return registry

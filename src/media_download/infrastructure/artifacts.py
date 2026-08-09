@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from infrastructure.infrastructure.filesystem import write_json_file
-from media_download.domain import DownloadedArtifact
+from media_download.domain import DownloadedArtifact, MediaRef
 
 
 class LocalDownloadArtifactStore:
@@ -29,3 +29,7 @@ class LocalDownloadArtifactStore:
     def read_manifest(self, path: str) -> DownloadedArtifact:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
         return DownloadedArtifact.from_manifest_dict(data)
+
+    def read_media_ref(self, path: str) -> MediaRef:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        return MediaRef.from_dict(data)
