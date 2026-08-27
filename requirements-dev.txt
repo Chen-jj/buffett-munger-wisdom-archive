@@ -1,0 +1,2 @@
+# Development/test dependencies for the offline test suite.
+pytest>=8.0.0

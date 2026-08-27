@@ -6,7 +6,7 @@ Local media pipeline for collecting Buffett and Munger archive videos, generatin
 
 ### 1. Install System Dependencies
 
-Use Python 3.11 or 3.12 for this project. The ASR stack used by `legacy-src/step2_align.py` depends on PyTorch/WhisperX packages that do not currently support Python 3.13+ reliably.
+Use Python 3.11 or 3.12 for this project. The ASR stack used by the transcription pipeline depends on PyTorch/WhisperX packages that do not currently support Python 3.13+ reliably.
 
 On macOS with Homebrew:
 
@@ -47,16 +47,15 @@ Create a project virtual environment with Python 3.11:
 python3.11 -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip setuptools wheel
-python -m pip install -r requirements.txt
+python -m pip install -r requirements.txt -r requirements-dev.txt
 ```
 
 ### 3. Smoke Test
 
-Run the legacy CLI help command:
+Run the offline test suite:
 
 ```bash
-python legacy-src/tools_project_cli.py -h
-python legacy-src/run.py --help
+python -m pytest tests/ -q
 ```
 
 For ASR/alignment workflows, `faster-whisper` and `whisperx` may download model files on first real use.

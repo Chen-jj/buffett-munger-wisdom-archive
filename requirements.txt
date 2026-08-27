@@ -6,7 +6,7 @@ openai>=1.0.0
 yt-dlp>=2024.0.0
 Pillow>=10.0.0
 
-# ASR/alignment stack used by legacy-src/step2_align.py.
+# ASR/alignment stack for the transcription pipeline.
 # Use Python 3.11 or 3.12; Python 3.13+ is not supported by this stack yet.
 aiohttp==3.13.5
 transformers==4.57.6
