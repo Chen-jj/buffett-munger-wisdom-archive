@@ -5,8 +5,13 @@ import subprocess
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest import mock
 
-from src.infrastructure.infrastructure.config import ConfigLoadError, load_yaml_config
+from src.infrastructure.infrastructure.config import (
+    ConfigLoadError,
+    default_config_path,
+    load_yaml_config,
+)
 from src.infrastructure.infrastructure.filesystem import write_json_file
 from src.infrastructure.infrastructure.process import (
     ProcessExecutionError,
@@ -45,6 +50,97 @@ class TestInfrastructureAdapters(unittest.TestCase):
                 "Config root must be a mapping",
             ):
                 load_yaml_config(config_path)
+
+    def test_load_yaml_config_wraps_unreadable_file(self):
+        with TemporaryDirectory() as tmp:
+            missing = Path(tmp) / "missing.yaml"
+
+            with self.assertRaisesRegex(ConfigLoadError, "Cannot read config file"):
+                load_yaml_config(missing)
+
+    def test_load_yaml_config_wraps_invalid_yaml(self):
+        with TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.yaml"
+            config_path.write_text("key: [1, 2\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(ConfigLoadError, "Invalid YAML"):
+                load_yaml_config(config_path)
+
+    def test_load_yaml_config_returns_empty_mapping_for_empty_file(self):
+        with TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.yaml"
+            config_path.write_text("", encoding="utf-8")
+
+            self.assertEqual(load_yaml_config(config_path), {})
+
+    def test_default_config_path_points_at_repo_config(self):
+        path = default_config_path()
+
+        self.assertEqual(path.name, "config.yaml")
+        self.assertIsInstance(load_yaml_config(path), dict)
+
+    def test_run_process_rejects_empty_command(self):
+        def runner(*args, **kwargs):
+            raise AssertionError("runner should not be called")
+
+        with self.assertRaisesRegex(ValueError, "command must not be empty"):
+            run_process([], runner=runner)
+
+    def test_run_process_reports_missing_binary_as_127(self):
+        def runner(*args, **kwargs):
+            raise FileNotFoundError("No such file or directory")
+
+        result = run_process(["missing-tool"], runner=runner)
+
+        self.assertEqual(result.returncode, 127)
+        self.assertIn("No such file", result.stderr)
+
+    def test_run_process_reports_timeout_as_124(self):
+        def runner(*args, **kwargs):
+            raise subprocess.TimeoutExpired(
+                cmd=["tool"], timeout=5, output="partial out", stderr="partial err"
+            )
+
+        result = run_process(["tool"], runner=runner, timeout=5)
+
+        self.assertEqual(result.returncode, 124)
+        self.assertEqual(result.stdout, "partial out")
+        self.assertEqual(result.stderr, "partial err")
+
+    def test_normalize_process_error_without_detail_lists_command_only(self):
+        result = run_process(["tool", "--flag"], dry_run=True)
+        failed_result = result.__class__(
+            command=result.command,
+            returncode=1,
+            stdout="",
+            stderr="",
+        )
+
+        self.assertEqual(
+            normalize_process_error(failed_result),
+            "Command failed with exit code 1: tool --flag",
+        )
+
+    def test_discover_tool_rejects_empty_name(self):
+        with self.assertRaisesRegex(ValueError, "tool name must not be empty"):
+            discover_tool("")
+
+    def test_write_json_file_removes_temporary_file_when_replace_fails(self):
+        with TemporaryDirectory() as tmp:
+            target = Path(tmp) / "data.json"
+
+            def failing_replace(self, other):
+                raise OSError("replace failed")
+
+            with mock.patch.object(Path, "replace", failing_replace):
+                with self.assertRaisesRegex(OSError, "replace failed"):
+                    write_json_file(target, {"name": "first"})
+
+            leftovers = [
+                entry for entry in Path(tmp).iterdir() if entry.name.startswith(".")
+            ]
+            self.assertEqual(leftovers, [])
+            self.assertFalse(target.exists())
 
     def test_run_process_dry_run_does_not_call_runner(self):
         def runner(*args, **kwargs):

@@ -1,4 +1,5 @@
 from pathlib import Path
+import hashlib
 
 import pytest
 
@@ -13,9 +14,15 @@ from archive_core.domain import (
     AssetId,
     SessionId,
     TimeRange,
+    canonical_artifact_path,
     canonical_filename,
 )
-from archive_core.interfaces import ManifestDTO, ProvenanceDTO
+from archive_core.interfaces import (
+    ArtifactRefDTO,
+    ChecksumDTO,
+    ManifestDTO,
+    ProvenanceDTO,
+)
 
 
 @pytest.mark.parametrize(
@@ -147,6 +154,67 @@ def test_workspace_parser_round_trips_session_builder_output() -> None:
         parse_session_workspace("/repo/output/1994/afternoon")
 
 
+def test_asset_id_rejects_non_string_parts() -> None:
+    with pytest.raises(ValueError, match="must be a string"):
+        AssetId(123, "", "item")  # type: ignore[arg-type]
+
+
+def test_session_id_rejects_invalid_year_and_slug() -> None:
+    with pytest.raises(ValueError, match="year must be a four-digit integer"):
+        SessionId(year=99, session="morning")
+    with pytest.raises(ValueError, match="session must be a lowercase slug"):
+        SessionId(year=1994, session="Morning Session")
+
+
+def test_canonical_artifact_path_supports_both_id_types() -> None:
+    assert (
+        canonical_artifact_path(SessionId(1994, "morning"), ArtifactType.TRANSCRIPT)
+        == "output/cnbc_1994_morning/transcript.txt"
+    )
+    assert (
+        canonical_artifact_path(AssetId("cnbc", "1994", "morning"), ArtifactType.TRANSCRIPT)
+        == "cnbc_1994_morning/transcript.txt"
+    )
+
+
+def test_artifact_ref_rejects_paths_outside_workspace() -> None:
+    asset_id = AssetId("cnbc", "1994", "morning")
+
+    with pytest.raises(ValueError, match="within the archive workspace"):
+        ArtifactRef(asset_id, ArtifactType.TRANSCRIPT, "/absolute/transcript.txt")
+    with pytest.raises(ValueError, match="within the archive workspace"):
+        ArtifactRef(asset_id, ArtifactType.TRANSCRIPT, "../escape/transcript.txt")
+
+
+def test_time_range_rejects_negative_start() -> None:
+    with pytest.raises(ValueError, match="start_seconds must be non-negative"):
+        TimeRange(-0.5, 1.0)
+
+
+def test_build_asset_workspace_hashes_unsanitizable_item(tmp_path: Path) -> None:
+    item = "***"
+    expected_hash = hashlib.sha256(item.encode("utf-8")).hexdigest()[:8]
+
+    workspace = build_asset_workspace(AssetId("generic", "host", item), tmp_path)
+
+    assert workspace.name == f"generic_host_{expected_hash}"
+
+
+def test_parse_session_workspace_rejects_invalid_paths() -> None:
+    with pytest.raises(ValueError, match="workspace path must end with"):
+        parse_session_workspace("cnbc_1994_morning")
+    with pytest.raises(ValueError, match="workspace path must end with"):
+        parse_session_workspace("other/cnbc_1994_morning")
+    with pytest.raises(ValueError, match="workspace path must end with"):
+        parse_session_workspace("output/yt_1994_morning")
+
+
+def test_build_session_workspace_appends_output_when_missing() -> None:
+    built = build_session_workspace("/repo", SessionId(1994, "morning"))
+
+    assert built.workspace_path == "/repo/output/cnbc_1994_morning"
+
+
 def test_manifest_dto_round_trips_explicit_json_shape() -> None:
     asset_id = AssetId("cnbc", "1994", "morning")
     transcript = ArtifactRef.canonical(asset_id, ArtifactType.TRANSCRIPT)
@@ -181,3 +249,29 @@ def test_time_range_validates_monotonic_bounds() -> None:
 
     with pytest.raises(ValueError):
         TimeRange(2.0, 1.0)
+
+
+def test_manifest_dto_exposes_checksums_asset_id_and_schema_rejection() -> None:
+    checksum = ChecksumDTO(algorithm="sha256", value="abc123")
+    ref_dto = ArtifactRefDTO(
+        asset_id="cnbc:1994:morning",
+        artifact_type="transcript",
+        path="cnbc_1994_morning/transcript.txt",
+        checksum=checksum,
+    )
+
+    data = ref_dto.to_dict()
+
+    assert data["checksum"] == {"algorithm": "sha256", "value": "abc123"}
+    assert ArtifactRefDTO.from_dict(data).checksum == ChecksumDTO.from_dict(
+        {"algorithm": "sha256", "value": "abc123"}
+    )
+
+    manifest = ManifestDTO.from_domain(
+        AssetId("cnbc", "1994", "morning"),
+        [ArtifactRef.canonical(AssetId("cnbc", "1994", "morning"), ArtifactType.TRANSCRIPT)],
+    )
+    assert manifest.asset_id == "cnbc:1994:morning"
+
+    with pytest.raises(ValueError, match="unsupported manifest schema"):
+        ManifestDTO.from_dict({**manifest.to_dict(), "schema_version": "bogus"})

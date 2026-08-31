@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -106,6 +107,43 @@ def test_writer_skips_transcript_files_when_transcript_is_unavailable(
     assert not (output_dir / "chapters.json").exists()
     assert (output_dir / "meta.json").exists()
     assert (output_dir / "media_ref.json").exists()
+
+
+def test_writer_overwrite_regenerates_all_contract_files(tmp_path: Path) -> None:
+    result = _sample_result()
+    writer = LocalAcquisitionArtifactWriter(root=tmp_path / "output", overwrite=True)
+
+    first_dir = Path(writer.save(result))
+    (first_dir / "transcript.txt").write_text("stale", encoding="utf-8")
+    second_dir = Path(writer.save(result))
+
+    assert second_dir == first_dir
+    assert "=== Chapter 1: Opening ===" in (
+        (first_dir / "transcript.txt").read_text(encoding="utf-8")
+    )
+    assert json.loads((first_dir / "meta.json").read_text(encoding="utf-8"))[
+        "schema_version"
+    ] == "acquisition.source-metadata.v1"
+
+
+def test_writer_cleans_up_temporary_files_when_replace_fails(tmp_path: Path) -> None:
+    result = _sample_result()
+    writer = LocalAcquisitionArtifactWriter(root=tmp_path / "output")
+
+    def failing_replace(self, other):
+        raise OSError("replace failed")
+
+    with mock.patch.object(Path, "replace", failing_replace):
+        with pytest.raises(OSError, match="replace failed"):
+            writer.save(result)
+
+    output_dir = build_asset_workspace(result.asset_id, tmp_path / "output")
+    assert output_dir.exists()
+    leftovers = [
+        entry for entry in output_dir.iterdir() if entry.name.startswith(".")
+    ]
+    assert leftovers == []
+    assert not (output_dir / "meta.json").exists()
 
 
 def test_writer_prechecks_all_outputs_before_writing(tmp_path: Path) -> None:
