@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import sys
+import types
 
 import pytest
 
@@ -26,6 +28,7 @@ from media_download.infrastructure import (
     DirectUrlResolver,
     EmbedIdResolver,
     LocalDownloadArtifactStore,
+    RequestsHttpClient,
     Sha256ChecksumCalculator,
     YtDlpDownloader,
 )
@@ -43,6 +46,108 @@ class StubHttpClient:
     def get_text(self, url: str) -> str:
         self.urls.append(url)
         return self.html
+
+
+class _FakeMediaResponse:
+    """Simulates requests' decoding: ``text`` decodes ``content`` with the
+    current ``encoding``, so reassigning ``encoding`` changes the result."""
+
+    def __init__(
+        self,
+        content: bytes,
+        *,
+        encoding: str | None = "utf-8",
+        apparent_encoding: str = "utf-8",
+        fail: bool = False,
+    ) -> None:
+        self.content = content
+        self.encoding = encoding
+        self.apparent_encoding = apparent_encoding
+        self._fail = fail
+
+    @property
+    def text(self) -> str:
+        return self.content.decode(self.encoding or "utf-8")
+
+    def raise_for_status(self) -> None:
+        if self._fail:
+            raise RuntimeError("404 Client Error")
+
+
+class _FakeMediaSession:
+    def __init__(self, response: _FakeMediaResponse) -> None:
+        self._response = response
+        self.calls: list[tuple[str, dict[str, str], float]] = []
+
+    def get(self, url: str, headers: dict[str, str], timeout: float):
+        self.calls.append((url, dict(headers), timeout))
+        return self._response
+
+
+def _install_fake_requests(monkeypatch, session: _FakeMediaSession) -> None:
+    module = types.ModuleType("requests")
+    module.Session = lambda: session  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "requests", module)
+
+
+def test_http_client_sends_headers_and_reuses_session(monkeypatch) -> None:
+    session = _FakeMediaSession(_FakeMediaResponse(b"page html"))
+    _install_fake_requests(monkeypatch, session)
+    client = RequestsHttpClient(timeout=7.0, user_agent="media-agent/2")
+
+    assert client.get_text("https://example.test/video") == "page html"
+    assert client.get_text("https://example.test/other") == "page html"
+
+    assert session.calls == [
+        (
+            "https://example.test/video",
+            {"User-Agent": "media-agent/2"},
+            7.0,
+        ),
+        (
+            "https://example.test/other",
+            {"User-Agent": "media-agent/2"},
+            7.0,
+        ),
+    ]
+
+
+def test_http_client_propagates_http_errors(monkeypatch) -> None:
+    session = _FakeMediaSession(_FakeMediaResponse(b"", fail=True))
+    _install_fake_requests(monkeypatch, session)
+
+    with pytest.raises(RuntimeError, match="404"):
+        RequestsHttpClient().get_text("https://example.test/missing")
+
+
+def test_http_client_requires_requests_package(monkeypatch) -> None:
+    monkeypatch.setitem(sys.modules, "requests", None)
+
+    with pytest.raises(RuntimeError, match="requests is required"):
+        RequestsHttpClient().get_text("https://example.test/video")
+
+
+@pytest.mark.parametrize(
+    ("encoding", "apparent_encoding"),
+    [
+        ("ISO-8859-1", "utf-8"),
+        (None, "utf-8"),
+    ],
+)
+def test_http_client_decodes_utf8_pages_correctly(
+    monkeypatch, encoding, apparent_encoding
+) -> None:
+    body = "playbackURL: \u2014/master.m3u8\n".encode("utf-8")
+    session = _FakeMediaSession(
+        _FakeMediaResponse(
+            body, encoding=encoding, apparent_encoding=apparent_encoding
+        )
+    )
+    _install_fake_requests(monkeypatch, session)
+
+    text = RequestsHttpClient().get_text("https://buffett.cnbc.com/video")
+
+    assert text == "playbackURL: \u2014/master.m3u8\n"
 
 
 class FakeResolver:

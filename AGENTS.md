@@ -6,7 +6,7 @@
 
 仓库正处于迁移中期。动手前先核实现实，不要假设某个模块能用。
 
-> 状态最后核对：2026-08-29 19:07 CST。**每次完成编码任务后，若实现状态或本文件中的事实发生变化，必须在同一次提交中更新本节（含核对时间）。**
+> 状态最后核对：2026-08-29 21:35 CST。**每次完成编码任务后，若实现状态或本文件中的事实发生变化，必须在同一次提交中更新本节（含核对时间）。**
 
 | 状态 | 模块 |
 |---|---|
@@ -17,7 +17,7 @@
 - 路线图与规划文档（大型任务前必读）：
   - `docs/ai-workflow-refactor-plan.md` —— 模块重建路线图（阶段、验收标准）
   - `docs/agentic-workflow-plan.md` —— 本仓库的 agent 工作流约定
-- 尚无 lint/typecheck/CI。离线 pytest 套件是唯一的验证门槛。
+- 尚无 lint/typecheck/CI。离线 pytest 套件是唯一的验证门槛；另有少量 `live` 标记的真实网络测试，包括 acquisition→media_download 跨模块集成测试（`RUN_REAL_NETWORK=1` 门控，downloader 打桩，不真下载视频）。
 - `webapp/app.db` 是已被 gitignore 的遗留残留，忽略它。
 
 ## 开工规则
