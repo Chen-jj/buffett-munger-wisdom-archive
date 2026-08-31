@@ -1,30 +1,24 @@
 # infrastructure AGENTS.md
 
-## Module Purpose
+## 模块定位
 
-`infrastructure` owns shared technical adapters that are not specific enough to belong to one feature module.
+`infrastructure` 持有不够具体、不足以归属某个功能模块的共享技术适配器。
 
-## Responsibilities
+## 职责
 
-- Provide config loading, logging, filesystem helpers, process execution, HTTP base clients, and external tool discovery.
-- Keep cross-cutting technical behavior consistent across modules.
-- Avoid becoming a dumping ground for business logic.
+- 提供配置加载、日志、文件系统辅助、进程执行、HTTP 基础客户端、外部工具发现。
+- 保证横切技术行为在各模块间一致。
+- 避免沦落为业务逻辑的垃圾场。
 
-## Layering Rules
+## 分层规则
 
-- `domain/`: normally empty; if a concept has business meaning, place it in `archive_core` or the relevant feature module.
-- `application/`: normally minimal; shared app services are allowed only when they are genuinely technical and cross-cutting.
-- `infrastructure/`: concrete implementations for config, logging, filesystem, subprocess, HTTP, and tool probing.
-- `interfaces/`: small adapter-facing protocols or DTOs if needed by multiple modules.
+- `domain/`：通常为空；若某概念有业务含义，应放入 `archive_core` 或对应功能模块。
+- `application/`：通常最小化；仅当服务真正是技术性且横切时才允许共享应用服务。
+- `infrastructure/`：配置、日志、文件系统、subprocess、HTTP、工具探测的具体实现。
+- `interfaces/`：多模块需要的小型适配器协议或 DTO。
 
-## Technology Direction
+## 技术方向
 
-- Keep dependencies lightweight and explicit.
-- Make subprocess execution injectable so ffmpeg/yt-dlp calls can be tested without running binaries.
-- Centralize config parsing, but let feature modules own feature-specific config meaning.
-
-## Phased Goals
-
-- Phase 1: Define shared process/config/filesystem adapter contracts.
-- Phase 2: Replace duplicated subprocess and config loading code from legacy scripts.
-- Phase 3: Add focused tests for command construction and error normalization.
+- 依赖保持轻量且显式。
+- subprocess 执行可注入，使 ffmpeg/yt-dlp 调用无需运行真实二进制即可测试。
+- 集中配置解析，但功能特定配置的含义归各功能模块所有。

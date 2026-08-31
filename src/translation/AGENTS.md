@@ -1,31 +1,26 @@
 # translation AGENTS.md
 
-## Module Purpose
+## 模块定位
 
-`translation` owns translation planning, batching, provider calls, glossary/style policy, and translated subtitle validation.
+`translation` 负责翻译计划、分批、服务方调用、术语表/风格策略，以及翻译字幕校验。
 
-## Responsibilities
+## 职责
 
-- Translate subtitle text while preserving cue count, order, and timestamps.
-- Apply Buffett/Munger domain terminology, tone, and Chinese style guidelines.
-- Batch requests safely and record provider/model/prompt provenance.
-- Validate provider output before it becomes a downstream subtitle artifact.
+- 翻译字幕文本，同时保持 cue 数量、顺序与时间戳不变。
+- 应用巴菲特/芒格领域术语、语气与中文风格规范。
+- 安全地分批发起请求，记录提供方/模型/prompt 溯源。
+- 在服务方输出成为下游字幕工件之前先校验。
 
-## Layering Rules
+## 分层规则
 
-- `domain/`: translation unit, glossary term, style policy, translation batch, and provider result concepts.
-- `application/`: plan-translation, translate-srt, validate-translation, and retry-failed-batches use cases.
-- `infrastructure/`: OpenAI-compatible client, rate limit/retry handling, prompt loading, and response parsing.
-- `interfaces/`: CLI handlers, progress events, and orchestration-facing translation summaries.
+- `domain/`：翻译单元、术语条目、风格策略、翻译批次、提供方结果等概念。
+- `application/`：plan-translation、translate-srt、validate-translation、retry-failed-batches 用例。
+- `infrastructure/`：OpenAI 兼容客户端、限速/重试处理、prompt 加载、响应解析。
+- `interfaces/`：CLI 处理器、进度事件、面向 orchestration 的翻译摘要。
 
-## Technology Direction
+## 技术方向
 
-- Use OpenAI-compatible APIs through an adapter so local or alternate providers can be swapped later.
-- Keep prompts versioned and tied to output provenance.
-- Never let translation change timing; only text content may change.
-
-## Phased Goals
-
-- Phase 1: Stabilize translation input/output contracts around SRT cues.
-- Phase 2: Add glossary/style policy and validation for cue count mismatch.
-- Phase 3: Add resumable batch translation with cached intermediate results.
+- 通过适配器使用 OpenAI 兼容 API，便于日后换本地或备选提供方。
+- prompt 保持版本化，并与产出溯源绑定。
+- 翻译绝不改变时间轴；只有文本内容可以变。
+- 凭据只经配置注入，适配器不得记录或输出 API key。

@@ -1,31 +1,26 @@
 # subtitle_rendering AGENTS.md
 
-## Module Purpose
+## 模块定位
 
-`subtitle_rendering` owns subtitle styling, ASS generation, burn-in planning, ffmpeg execution, and render artifact metadata.
+`subtitle_rendering` 负责字幕样式、ASS 生成、烧录计划、ffmpeg 执行，以及渲染工件元数据。
 
-## Responsibilities
+## 职责
 
-- Convert validated subtitle documents into styled ASS or render-ready assets.
-- Plan ffmpeg commands for hard-subtitle outputs without hiding user-impacting quality settings.
-- Capture render settings, input hashes, output path, and review sidecars.
-- Keep visual style decisions separate from SRT text processing.
+- 把校验通过的字幕文档转换为带样式的 ASS 或可渲染资产。
+- 规划硬字幕输出的 ffmpeg 命令，不隐藏影响用户观感的质量参数。
+- 采集渲染设置、输入哈希、输出路径与评审 sidecar。
+- 视觉样式决策与 SRT 文本处理保持分离。
 
-## Layering Rules
+## 分层规则
 
-- `domain/`: render profile, subtitle style, render input set, render plan, and render artifact concepts.
-- `application/`: build-ass, render-video, verify-render-inputs, and generate-render-manifest use cases.
-- `infrastructure/`: `pysubs2` ASS adapter, ffmpeg process runner, font discovery, and filesystem outputs.
-- `interfaces/`: CLI handlers, render progress messages, and review/orchestration-facing summaries.
+- `domain/`：渲染 profile、字幕样式、渲染输入集、渲染计划、渲染工件等概念。
+- `application/`：build-ass、render-video、verify-render-inputs、generate-render-manifest 用例。
+- `infrastructure/`：`pysubs2` ASS 适配器、ffmpeg 进程执行器、字体发现、文件系统输出。
+- `interfaces/`：CLI 处理器、渲染进度消息、面向评审/orchestration 的摘要。
 
-## Technology Direction
+## 技术方向
 
-- Use `ffmpeg`/libass for burn-in rendering behind an adapter.
-- Treat quality settings such as CRF, preset, resolution, and subtitle style as explicit profiles.
-- Prefer dry-run command planning for debugging and review.
-
-## Phased Goals
-
-- Phase 1: Separate ASS/style generation from ffmpeg execution.
-- Phase 2: Add render manifest and input validation before expensive jobs.
-- Phase 3: Support multiple render profiles such as sample, review, and final.
+- ASS/样式生成与 ffmpeg 执行分离，各自可独立测试。
+- 烧录渲染通过适配器使用 `ffmpeg`/libass。
+- CRF、preset、分辨率、字幕样式等质量设置作为显式 profile 管理。
+- 优先支持 dry-run 命令规划，便于调试与评审。

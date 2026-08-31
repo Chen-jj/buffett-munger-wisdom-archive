@@ -1,31 +1,27 @@
 # media_download AGENTS.md
 
-## Module Purpose
+## 模块定位
 
-`media_download` owns media URL resolution, video/audio download workflows, and downloaded artifact provenance.
+`media_download` 负责媒体 URL 解析、视频/音频下载工作流，以及下载工件的溯源。
 
-## Responsibilities
+## 架构
 
-- Resolve playable media URLs from upstream metadata or source pages.
-- Plan and execute downloads through downloader adapters.
-- Capture format, size, checksum, source URL, retry count, and download timestamp metadata.
-- Provide idempotent behavior for existing media assets.
+- 应用服务是两段式：先 `plan()` 产出可检视的下载计划（action 与 reason），再 `execute()` 按计划执行；dry-run 只出计划不落盘。
+- 媒体 URL 解析经 resolver registry 选择：特定解析器在前，宽匹配解析器在后，registry 选第一个接受者——与 acquisition 的爬虫注册是同一条策略。
+- 下载、校验和计算、工件存取均为注入端口；`yt-dlp` 只是默认下载适配器。
 
-## Layering Rules
+## 依赖规则
 
-- `domain/`: media source, requested format, downloaded asset, download policy, and provenance concepts.
-- `application/`: resolve-media, download-session-video, verify-download, and resume-download use cases.
-- `infrastructure/`: `yt-dlp` adapter, HTTP probing, filesystem writes, and checksum calculation.
-- `interfaces/`: CLI command handlers, progress events, and orchestration-facing download results.
+- 依赖只能向内指：infrastructure 依赖 application/domain 契约；application 依赖 domain 与 Protocol 端口；domain 只 import 纯原语与共享的 `archive_core` 身份值。
+- 输出路径与文件名一律经 `archive_core` 的 workspace 与 `canonical_filename()` 解析，不得自创。
 
-## Technology Direction
+## 技术方向
 
-- Use `yt-dlp` as the default adapter, isolated behind a port.
-- Use `ffprobe` only for verification metadata, not as a business-rule dependency.
-- Prefer resumable and explicit overwrite behavior.
+- `yt-dlp` 为默认适配器，隔离在端口之后；`ffprobe` 仅用于校验元数据，不作为业务规则依赖。
+- 跳过/续传/覆盖决策必须由 manifest 与 `DownloadPolicy` 显式驱动，**不得以"文件存在"作为完成判据**。
+- 媒体文件的覆盖必须显式；下载 manifest 属廉价元数据，允许覆写。
 
-## Phased Goals
+## 测试方向
 
-- Phase 1: Preserve current download behavior behind a clean application service.
-- Phase 2: Add manifest-based skip/resume decisions.
-- Phase 3: Support alternate download providers through adapter registration.
+- 离线测试：fake downloader/resolver/checksum，不触网、不执行 yt-dlp。
+- 注册顺序、dry-run、覆盖策略、manifest 往返必须有用例覆盖。

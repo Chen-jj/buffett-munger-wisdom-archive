@@ -1,31 +1,24 @@
 # archive_core AGENTS.md
 
-## Module Purpose
+## 模块定位
 
-`archive_core` owns repository-wide domain primitives and contracts that every other module can safely share.
+`archive_core` 持有全仓库共享的领域原语与契约，是其他所有模块都可以安全依赖的基础。
 
-## Responsibilities
+## 职责
 
-- Define asset identity: year, session, source page, media item, transcript, subtitle, render, and review artifact concepts.
-- Define stable path and naming policies for `input/`, `output/<year>/<session>/`, and generated sidecar metadata.
-- Define pipeline status, provenance, checksum, overwrite, and resumability concepts.
-- Provide pure validation rules that are independent of HTTP, ffmpeg, OpenAI-compatible APIs, or Web UI concerns.
+- 存放各模块都能安全共享的基础领域模型：资产身份、工件与命名契约、工作区路径策略、管线状态、溯源等横切领域概念。
+- 判据：与具体站点、外部工具无关且被多个模块需要 → 放这里；只属于单个管线阶段的业务概念 → 放对应功能模块。
+- 本模块的规则必须保持纯：不依赖 HTTP、ffmpeg、OpenAI 兼容 API 或 Web UI。
 
-## Layering Rules
+## 分层规则
 
-- `domain/`: value objects, entities, validation policies, naming rules, and artifact state transitions.
-- `application/`: shared use cases only when they are truly cross-cutting, such as resolving an asset workspace or validating an artifact manifest.
-- `infrastructure/`: minimal shared adapters for reading/writing core manifests if they are not specific to one feature module.
-- `interfaces/`: DTOs and serializers used by CLI, Web UI, review, and orchestration.
+- `domain/`：值对象、实体、校验策略、命名规则、工件状态流转。
+- `application/`：仅当用例真正跨模块时才放这里，如解析资产工作区、校验工件 manifest。
+- `infrastructure/`：读写核心 manifest 的最小共享适配器（仅当不属于某个具体功能模块时）。
+- `interfaces/`：供 CLI、Web UI、review、orchestration 使用的 DTO 与序列化器。
 
-## Technology Direction
+## 技术方向
 
-- Prefer dataclasses or small typed objects for domain concepts.
-- Keep serialization explicit and versioned; avoid leaking raw dictionaries across modules.
-- Avoid heavy dependencies in this module.
-
-## Phased Goals
-
-- Phase 1: Document asset identifiers, canonical filenames, and metadata contracts.
-- Phase 2: Move shared path/provenance logic out of legacy scripts.
-- Phase 3: Add focused tests for path rules and manifest compatibility.
+- 领域概念优先用 dataclass 或小型类型化对象。
+- 序列化保持显式且有版本号；避免跨模块裸传 dict。
+- 本模块避免重依赖。

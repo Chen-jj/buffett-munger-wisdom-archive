@@ -1,31 +1,25 @@
 # srt_processing AGENTS.md
 
-## Module Purpose
+## 模块定位
 
-`srt_processing` owns subtitle structure, SRT parsing/writing, timing-preserving transformations, bilingual composition, and subtitle QA.
+`srt_processing` 负责字幕结构、SRT 解析/写出、保时序变换、双语合成，以及字幕 QA。
 
-## Responsibilities
+## 职责
 
-- Parse, normalize, split, merge, and write SRT while preserving sequence and timing.
-- Validate subtitle numbering, timestamp monotonicity, overlaps, empty entries, and duration anomalies.
-- Compose bilingual subtitle representations without coupling to rendering style.
-- Provide reusable text segmentation utilities for translation and review.
+- 解析、规范化、拆分、合并、写出 SRT，同时保持序号与时序不变。
+- 校验字幕编号、时间戳单调性、重叠、空条目、时长异常。
+- 合成双语字幕表示，不与渲染样式耦合。
+- 为翻译与评审提供可复用的文本分段工具。
 
-## Layering Rules
+## 分层规则
 
-- `domain/`: subtitle cue, time range, subtitle document, validation finding, and transform policy.
-- `application/`: validate-srt, repair-structure, merge-bilingual, split-for-translation, and compare-subtitles use cases.
-- `infrastructure/`: `pysubs2` adapter and filesystem codecs.
-- `interfaces/`: CLI handlers, review DTOs, and rendering/translation-facing contracts.
+- `domain/`：字幕 cue、时间区间、字幕文档、校验发现、变换策略。
+- `application/`：validate-srt、repair-structure、merge-bilingual、split-for-translation、compare-subtitles 用例。
+- `infrastructure/`：`pysubs2` 适配器与文件系统编解码。
+- `interfaces/`：CLI 处理器、评审 DTO、面向渲染/翻译的契约。
 
-## Technology Direction
+## 技术方向
 
-- Use `pysubs2` as an adapter, not as the domain model.
-- Keep translation provider calls out of this module; this module prepares and validates text units only.
-- Keep ASS styling out of this module; rendering owns presentation styles.
-
-## Phased Goals
-
-- Phase 1: Define canonical subtitle document and validation findings.
-- Phase 2: Move reusable SRT checks out of CLI/rendering code.
-- Phase 3: Add fixture tests for malformed, bilingual, and long-duration subtitles.
+- `pysubs2` 只作为适配器，不作为领域模型。
+- 翻译服务调用不得进入本模块；本模块只准备与校验文本单元。
+- ASS 样式不得进入本模块；呈现样式归渲染所有。
