@@ -1,52 +1,79 @@
-# ADR-0001：transcription 采用句级时间戳与可替换 ASR provider
+# ADR-0001：transcription 采用词级对齐与本地句界恢复
 
-- 状态：已接受
-- 日期：2026-09-13
-- 影响模块：`transcription`、`archive_core`（后续实现公共工件契约时）
+- 状态：讨论中
+- 日期：2026-09-14
+- 影响模块：`transcription`、`archive_core`（公共工件契约）
 - 所属阶段：Phase 1
 
-## 1. 一句话结论
+> 本文是讨论稿。被接受前不替代模块 `AGENTS.md` 或现有实现约束。
 
-`transcription` 把已下载的 `video.mp4` 转为带句级时间轴的英文文本，以
-`alignment.json` 和 `english.srt` 作为一等产物；不实现词级对齐。ASR、音频提取等
-外部能力通过端口注入，昂贵的 ASR 结果按内容哈希缓存，并在落地前依次经过可选的
-官方逐字稿文本融合和强制 SRT 可用性校验。
+## 1. 候选结论
 
-## 2. 背景
-
-主链路为：
+`transcription` 把已下载的 `video.mp4` 转为带时间信息的完整英文句子。候选流程为：
 
 ```text
-media_download → transcription → srt_processing → translation → subtitle_rendering
+video.mp4
+  → audio.wav
+  → ASR / VAD
+  → 词级时间对齐
+  → 官方英文逐字稿融合（可选）
+  → 本地标点恢复与句界检测
+  → source_alignment.json
 ```
 
-上游已经提供下载完成且经过溯源记录的 `video.mp4`。下游需要合法、可追溯、可恢复
-生成的英文字幕，而不是仅凭文件存在判断阶段完成。
+本模块候选边界：
 
-CNBC 来源还可能提供 `transcript.txt`。它通常在人名、术语和原句文本上优于 ASR，
-但没有时间信息，因此只能用于修正文本，不能取代 ASR 时间轴。
+- 负责音频提取、英文 ASR、词级时间对齐、英文文本融合、标点恢复和句界检测。
+- 输出词级时间信息以及由词范围定义的完整英文句子。
+- 不翻译。
+- 不规划字幕 cue。
+- 不生成 `english.srt`；英文 SRT 如有需要，由 `srt_processing` 从最终 cue plan 投影。
+- 句界恢复只使用本地模型和算法，不调用远程 LLM。
 
-历史方案提出过词级时间戳和 forced alignment。最终烧录只消费 cue 的开始时间、结束
-时间和文本，词级时间不会改善当前核心烧录能力，却会引入额外模型、耗时和失败面。
+这份候选决策撤回旧版 ADR 中“ASR segment 等于句子”“不持久化词级时间”“由
+transcription 生成 canonical `english.srt`”的方向，但尚未被接受。
+
+## 2. 背景与问题
+
+ASR/VAD segment 是模型窗口、静音或解码边界，不保证是完整语言句子。例如：
+
+```text
+segment 1: I think the most important thing
+segment 2: when you're evaluating a business
+segment 3: is to understand its competitive position.
+```
+
+翻译需要看到完整句意，字幕又需要可靠时间锚点。因此必须区分：
+
+```text
+ASR segment      = 识别处理单元
+word             = 最小时间锚点
+sentence         = 英文完整句子/翻译单元
+subtitle cue     = 最终显示单元
+```
+
+四者不要求一一对应。
 
 ## 3. 目标与非目标
 
 ### 3.1 目标
 
-- 从 `video.mp4` 提取适合 ASR 的音频。
-- 生成英文句级文本及其开始、结束时间。
-- 在有官方逐字稿时，用其修正可靠匹配到的 ASR 文本，同时保留 ASR 时间轴。
-- 生成可被 `srt_processing` 稳定消费的 `english.srt`。
-- 通过 manifest、校验和与参数记录实现可恢复、可解释的阶段执行。
-- 通过 fake provider 让 domain/application 测试无需网络、ffmpeg 或真实 ASR 模型。
+- 从 `video.mp4` 提取适合 ASR 的本地音频。
+- 得到英文词序列及非负整数毫秒时间戳。
+- 将 ASR segment 重建为完整、按时间有序的英文句子。
+- 有官方英文逐字稿时，可靠地利用其拼写、大小写、标点和句界。
+- 产出可供 translation 与 srt_processing 共同消费的权威结构化工件。
+- 通过 provider 端口、内容哈希缓存和 fake 实现离线测试。
+- 保存足够的 manifest/溯源信息解释结果如何产生。
 
 ### 3.2 非目标
 
-- 不生成或持久化词级时间戳。
-- 不实现单词级 forced alignment、卡拉 OK 高亮或逐词动画。
-- 不负责字幕翻译、双语合并、ASS 样式和视频烧录。
-- 不在本模块中实现 CLI 业务规则或跨阶段任务调度。
-- 不因模型能力“顺手”增加当前下游不消费的产物。
+- 不翻译文本。
+- 不生成 English/Chinese/Bilingual SRT。
+- 不决定字幕行宽、阅读速度、双语排版或最终 cue 边界。
+- 不实现卡拉 OK、逐词高亮或视频烧录。
+- 不使用远程 LLM 恢复标点或句界。
+- 不把 ASR segment 当作自然语言句子。
 
 ## 4. 输入、输出与权威性
 
@@ -54,291 +81,351 @@ CNBC 来源还可能提供 `transcript.txt`。它通常在人名、术语和原�
 
 | 输入 | 必需 | 说明 |
 |---|---:|---|
-| `video.mp4` | 是 | 由 `media_download` 生成，并通过上游 manifest/校验和确认 |
-| `transcript.txt` | 否 | 官方逐字稿；只有文本、没有时间，当前主要用于 CNBC 链路 |
-| ASR 配置 | 是 | 模型、语言、设备、精度、VAD/分段等影响结果的参数 |
-| 执行策略 | 是 | 是否允许覆盖、是否允许使用缓存、dry-run 等显式选项 |
+| `video.mp4` | 是 | 来自 `media_download`，必须验证上游 manifest 和校验和 |
+| 官方英文 `transcript.txt` | 否 | 可用于修正英文文本及句界，没有时间信息 |
+| 官方中文翻译稿 | 否 | 不直接用于英文句界；将来可作为翻译参考或评测资料 |
+| ASR/VAD/对齐配置 | 是 | provider、模型、语言、设备、精度、VAD、forced alignment 参数 |
+| 句界配置 | 是 | 本地模型版本、停顿阈值、最长句长、缩写规则等 |
+| 执行策略 | 是 | 缓存、dry-run、显式覆盖策略 |
 
-### 4.2 输出
+### 4.2 候选输出
 
 | 产物 | 角色 | 说明 |
 |---|---|---|
-| `audio.wav` | 可复用中间产物 | 16 kHz、单声道 PCM WAV；必须记录输入视频校验和与抽取参数 |
-| `alignment.json` | 一等产物 | 后续投影 SRT 的句级时间轴与有效英文文本 |
-| `english.srt` | canonical 产物 | 供下游消费；只有通过门禁 B 后才具权威性 |
-| `transcription_manifest.json` | 阶段运行记录 | 输入/输出校验和、provider、参数、缓存、融合和校验结果 |
+| `audio.wav` | 可复用中间产物 | 候选为 16 kHz、单声道 PCM WAV |
+| 原始 ASR 结果 | 可重建缓存 | 保存 provider 原始 segment/word 结果，不直接给下游 |
+| `source_alignment.json` | canonical 工件 | 权威英文词级时间与完整句子 |
+| `transcription_manifest.json` | 阶段记录 | 输入输出校验和、模型、参数、缓存、融合、句界与 QA 指标 |
+| `transcription_report.json` | 诊断报告（待定） | 未对齐词、低置信度句界、逐字稿覆盖率等 |
 
-`archive_core` 当前还没有 `alignment.json` 对应的 `ArtifactType`，也没有阶段 manifest 的
-公共类型。实现本模块前应先用最小改动补充公共工件契约；本 ADR 不修改代码。
+`english.srt` 不属于本模块输出。文件名、`ArtifactType` 和公共 schema 需要在
+`archive_core` 中补充，具体命名仍待定。
 
-阶段 manifest 使用独立文件名，避免不同昂贵阶段相互覆盖。未来由 orchestration 汇总到
-资产级 `manifest.json`，但阶段完成判定不等待该汇总能力。
+## 5. ASR 与词级时间对齐
 
-## 5. 句级 alignment 数据契约
+### 5.1 provider 能力
 
-时间使用非负整数毫秒，避免浮点误差影响 SRT 的毫秒精度。segment 顺序即时间顺序，
-`id` 在单个 alignment 内连续且稳定。
+OpenAI Whisper 和 faster-whisper 均能请求词级时间，但属于模型推算。WhisperX 在 ASR
+之后使用 forced alignment 将文本重新贴合音频，候选生产实现优先考虑 WhisperX。
 
-建议的最小结构如下：
+候选端口：
+
+```python
+class AsrEngine(Protocol):
+    def transcribe(self, audio: AudioRef, config: AsrConfig) -> RawTranscription:
+        ...
+```
+
+application 不依赖 Whisper/WhisperX 的具体返回对象。
+
+### 5.2 原始 ASR 内部结构示例
 
 ```json
 {
-  "schema_version": "transcription.alignment.v1",
+  "schema_version": "transcription.raw-asr.v1",
   "language": "en",
   "segments": [
     {
       "id": 1,
-      "start_ms": 1240,
-      "end_ms": 4860,
-      "text": "The effective text used for SRT projection.",
-      "asr_text": "The original ASR text.",
-      "text_source": "official_transcript"
+      "start_ms": 1200,
+      "end_ms": 3100,
+      "text": "I think the most important thing",
+      "words": [
+        {
+          "id": 1,
+          "text": "I",
+          "start_ms": 1200,
+          "end_ms": 1320,
+          "probability": 0.98
+        },
+        {
+          "id": 2,
+          "text": "think",
+          "start_ms": 1320,
+          "end_ms": 1580,
+          "probability": 0.97
+        }
+      ]
     }
   ]
 }
 ```
 
-约束：
+此结构是 adapter 输出/缓存候选，不是跨模块公共契约。
 
-- `start_ms < end_ms`。
-- segments 时间单调且不重叠。
-- `text` 与 `asr_text` 均为规范化后的非空英文文本。
-- `text_source` 只能表示本句最终文本来源，例如 `asr` 或
-  `official_transcript`。
-- 不加入 `words` 字段；未来若出现真实消费需求，必须另开 ADR。
+### 5.3 词级不变量
 
-## 6. 最终处理流程
+候选硬门禁：
 
-```text
-video.mp4
-   │
-   ▼
-提取 audio.wav
-   │
-   ▼
-ASR：原始英文句级文本 + 时间戳 ─────► ASR 内容哈希缓存
-   │
-   ▼
-门禁 A：可选官方逐字稿文本融合（软门禁）
-   │
-   ▼
-写出 alignment.json
-   │
-   ▼
-纯函数投影 english.srt
-   │
-   ▼
-门禁 B：SRT 可用性校验（硬门禁）
-   │
-   ▼
-原子落地 canonical 产物 + transcription_manifest.json
-```
+- word ID 唯一、连续或至少稳定有序（最终形式待定）。
+- `0 <= start_ms < end_ms`。
+- word 时间单调，不允许无法解释的重叠。
+- word 文本规范化后非空。
+- sentence 引用的 word 范围必须存在且连续。
+- 未对齐词不得静默丢弃，必须采用显式策略并写入报告。
 
-### 6.1 音频提取
+## 6. 官方逐字稿融合
 
-- 由 application 层调用 `AudioExtractor` 端口。
-- 生产适配器使用 ffmpeg，将媒体转换为 16 kHz、单声道 PCM WAV。
-- domain/application 不拼接 ffmpeg 命令。
-- 音频是否可复用由 manifest 中的视频校验和与抽取参数共同决定，不能只检查
-  `audio.wav` 是否存在。
+### 6.1 官方英文逐字稿
 
-### 6.2 ASR
+候选流程：
 
-- `AsrEngine` 返回按时间排序的句级 segment；application 不依赖 Whisper 特定对象。
-- 生产环境首选 WhisperX 或 faster-whisper 适配器，最终选择通过配置显式指定。
-- 模型名、模型版本（可得时）、语言、设备、精度、VAD/分段参数必须写入 manifest。
-- provider 返回词级信息时也不进入领域契约和持久化产物。
+1. 分别规范化官方英文文本和 ASR words。
+2. 使用保序序列匹配建立 transcript token 与 ASR word 的映射。
+3. 高置信度区域使用官方拼写、大小写、标点和句界。
+4. 时间始终来自音频对齐结果。
+5. 未可靠匹配的区域保留 ASR 文本，并进入本地句界恢复。
+6. manifest 记录逐字稿校验和、阈值、覆盖率、未匹配数量和替换范围。
 
-### 6.3 门禁 A：官方逐字稿文本融合
+不得将官网编辑、删减或新增但音频中不存在的文字强行贴到时间轴。
 
-这是质量增强步骤，不是阶段阻断条件，仅在存在 `transcript.txt` 时启用。
+### 6.2 官方中文翻译稿
 
-1. 对 ASR 句子与官方逐字稿进行文本规范化。
-2. 用保序序列匹配建立官方文本片段与 ASR segment 的映射。
-3. 只有达到显式匹配阈值的映射才用官方文本覆盖 `text`；`start_ms`、`end_ms` 始终
-   保留 ASR 值。
-4. 无法可靠匹配的 segment 保留 ASR 文本，流程继续。
-5. 在 manifest 中记录逐字稿校验和、匹配阈值、覆盖 segment 数、总 segment 数、
-   覆盖率与未匹配数量。
+如果来源只有官方中文译稿，它不直接参与英文句界恢复，因为跨语言对应关系尚未建立。
+候选用途是 translation 的参考资料、术语来源或人工评测基准，是否纳入 v1 待定。
 
-“冲突时采用官方逐字稿”仅适用于已经可靠映射的文本片段；禁止把未可靠匹配的官方
-句子强行放到 ASR 时间段中。
+## 7. 本地标点恢复与句界检测
 
-### 6.4 SRT 投影
+### 7.1 候选默认方案
 
-`alignment.json → english.srt` 是确定性的纯变换：
-
-- cue 序号从 1 连续递增。
-- cue 时间直接来自 segment 时间。
-- cue 文本使用 segment 的 `text`。
-- 相同 alignment 与投影配置必须得到字节一致的 SRT。
-
-因此，调整 SRT 投影规则不触发 ASR 重算。
-
-### 6.5 门禁 B：SRT 可用性校验
-
-这是硬门禁。至少检查：
-
-- cue 序号从 1 连续递增。
-- `start < end`，时间轴单调且不重叠。
-- cue 文本非空。
-- 所有有效 alignment segment 均被投影，投影覆盖率为 100%。
-- SRT cue 数与当前一段一 cue 的投影策略下的 segment 数一致。
-- 最后一个 cue 不超过已探测的媒体时长（允许显式的毫秒级容差）。
-
-失败时不发布 `english.srt`，阶段状态记为失败，并保留足够的诊断信息。不得把失败或
-未校验的临时文件视为权威产物。
-
-## 7. 缓存、幂等与覆盖策略
-
-### 7.1 ASR 缓存键
+当前讨论中的 v1 候选是：
 
 ```text
-sha256(audio_content + canonical_asr_parameters)
+官方英文句界（可靠匹配区域）
+  或
+WhisperX 标点 + spaCy sentence detector + 词间停顿规则
 ```
 
-`canonical_asr_parameters` 必须使用稳定序列化，至少包含会改变识别结果的 provider、
-模型、语言、精度、VAD 与分段参数。
+候选规则信号：
 
-缓存保存原始 ASR 句级结果。`alignment.json` 是本次运行在可选融合后的权威物化结果。
-这样，官方逐字稿变化时只需重跑融合与投影，不会错误复用旧融合文本，也不必重跑
-昂贵 ASR。
+- `. ? !` 等终止标点。
+- 单词之间的停顿长度。
+- 缩写、人名缩写、数字和小数点例外。
+- 句子最大词数/持续时间。
+- ASR segment 仅作为弱提示，不作为句界。
 
-若未来缓存融合后的 alignment，其缓存键还必须包含逐字稿校验和与融合参数；不能继续
-只使用音频和 ASR 参数。
+NVIDIA NeMo 等专用本地标点模型暂不确定是否引入；应先用真实长视频评测 WhisperX
+标点质量和依赖成本。
 
-### 7.2 完成判定
+### 7.2 句界结果示例
 
-阶段仅在以下条件全部满足时视为完成：
+```json
+{
+  "sentences": [
+    {
+      "id": "s1",
+      "first_word_id": 1,
+      "last_word_id": 18,
+      "start_ms": 1200,
+      "end_ms": 7800,
+      "text": "I think the most important thing when you're evaluating a business is to understand its competitive position.",
+      "text_source": "official_transcript",
+      "boundary_source": "official_transcript",
+      "boundary_confidence": 0.97
+    },
+    {
+      "id": "s2",
+      "first_word_id": 19,
+      "last_word_id": 27,
+      "start_ms": 7900,
+      "end_ms": 11200,
+      "text": "That is what determines its long-term economics.",
+      "text_source": "asr",
+      "boundary_source": "punctuation_and_pause",
+      "boundary_confidence": 0.91
+    }
+  ]
+}
+```
 
-- manifest 状态为成功且 schema 可读。
-- manifest 中的输入校验和与当前输入一致。
-- 影响结果的参数与当前配置一致。
-- `alignment.json`、`english.srt` 的校验和与 manifest 一致。
-- 门禁 B 结果为通过。
+`start_ms/end_ms` 可从首尾 word 推导，但为方便消费者是否冗余持久化仍待定。
 
-文件存在本身不是完成判据。
+## 8. `source_alignment.json` 候选契约
 
-### 7.3 写入和覆盖
+```json
+{
+  "schema_version": "transcription.source-alignment.v1",
+  "language": "en",
+  "words": [
+    {
+      "id": 1,
+      "text": "I",
+      "start_ms": 1200,
+      "end_ms": 1320
+    },
+    {
+      "id": 2,
+      "text": "think",
+      "start_ms": 1320,
+      "end_ms": 1580
+    }
+  ],
+  "sentences": [
+    {
+      "id": "s1",
+      "first_word_id": 1,
+      "last_word_id": 18,
+      "start_ms": 1200,
+      "end_ms": 7800,
+      "text": "I think the most important thing when you're evaluating a business is to understand its competitive position.",
+      "text_source": "official_transcript",
+      "boundary_source": "official_transcript"
+    }
+  ]
+}
+```
 
-- 所有正式 JSON/SRT 产物先写同目录临时文件，再原子 rename。
-- 已存在的成功产物默认不覆盖。
-- 覆盖昂贵产物必须由调用方显式请求。
-- 缓存是可重建数据，canonical 产物是 manifest 追踪的数据；两者目录与生命周期分离。
-- 本模块不得自行删除源媒体、canonical 产物或缓存。
+`sentences` 同时是 translation 的源翻译单元。translation 可在内存中提取紧凑的
+`sentence_id + text` 请求，不需要再持久化一份重复的 `translation_units`。
 
-## 8. 分层与端口
+## 9. 最终候选流程
 
-### 8.1 domain
+```text
+验证 video.mp4 与上游 provenance
+  ↓
+提取/复用 audio.wav
+  ↓
+ASR + VAD
+  ↓
+forced word alignment
+  ↓
+缓存原始 ASR 结果
+  ↓
+可选官方英文逐字稿融合
+  ↓
+本地标点恢复 + 句界检测
+  ↓
+词级/句级硬门禁
+  ↓
+原子发布 source_alignment.json + transcription_manifest.json
+```
 
-纯领域对象与规则：
+## 10. 分层与候选端口
 
-- `SentenceSegment`
-- `SentenceAlignment`
+### domain
+
+- `AlignedWord`
+- `SourceSentence`
+- `SourceAlignment`
 - `TextSource`
-- 时间轴不变量
-- 文本融合决策与指标
-- SRT 投影和可用性校验规则
+- `BoundarySource`
+- 时间轴、word 覆盖、sentence 覆盖不变量
 
-domain 不得导入 ffmpeg、Whisper、文件系统、CLI 或网络客户端。
-
-### 8.2 application
-
-模块内用例协调：
+### application
 
 - `extract_audio`
-- `transcribe_session`
-- `fuse_official_transcript`
-- `project_english_srt`
+- `transcribe_words`
+- `align_official_transcript`
+- `restore_punctuation`
+- `detect_sentence_boundaries`
+- `build_source_alignment`
 - `validate_transcription_output`
 
-application 依赖抽象端口，不直接构造具体 provider。
-
-### 8.3 infrastructure
-
-外部系统适配器：
+### infrastructure
 
 - `FfmpegAudioExtractor`
-- `WhisperXAsrEngine` 或 `FasterWhisperAsrEngine`
-- 本地 ASR 缓存
-- alignment/SRT/manifest 文件存储
-- 媒体时长探测器
+- `WhisperXAsrEngine` / `FasterWhisperAsrEngine`
+- 本地句界/标点 provider
+- 原始 ASR 缓存
+- alignment/manifest store
+- media probe
 
-### 8.4 interfaces
+### interfaces
 
-提供给 CLI、Web UI 与 orchestration 的稳定 DTO/handler：
+向 orchestration 暴露资产标识、配置、执行策略以及稳定的产物引用和 QA 摘要，不暴露
+Whisper、spaCy 或 ffmpeg 内部对象。
 
-- 输入：资产标识、执行策略、ASR/融合/投影配置。
-- 输出：状态、产物引用、缓存是否命中、融合摘要、校验摘要和错误码。
-- 不暴露 Whisper 或 ffmpeg 的内部对象。
-
-### 8.5 最小端口集合
+### 候选最小端口
 
 - `AudioExtractor`
 - `AsrEngine`
+- `SentenceBoundaryDetector`
+- `OfficialTranscriptAligner`
 - `MediaProbe`
 - `TranscriptionCache`
 - `TranscriptionArtifactStore`
 - `ChecksumService`
 
-测试使用对应 fake，完整 application 流程不得要求网络、真实 ffmpeg 或模型文件。
+`PunctuationRestorer` 是否需要独立于 `SentenceBoundaryDetector` 仍待定。
 
-## 9. 错误语义
+## 11. 缓存、幂等与失败语义
 
-- 输入视频或上游溯源无效：立即失败，不调用 ASR。
-- 音频提取、媒体探测或 ASR provider 失败：阶段失败，记录具体步骤与可诊断信息。
-- 官方逐字稿缺失或局部无法匹配：继续执行，记录融合未启用或未匹配指标。
-- alignment 不满足时间轴不变量：立即失败，不生成权威 SRT。
-- 门禁 B 失败：阶段失败，不发布 canonical `english.srt`。
-- manifest/产物写入失败：阶段失败，不将部分落地视为成功。
+- 原始 ASR 缓存键至少包含音频内容哈希及所有结果相关 ASR/VAD/对齐参数。
+- 句界物化结果还依赖官方逐字稿校验和、句界模型/规则版本和阈值。
+- `source_alignment.json` 与 manifest 必须原子发布。
+- 成功产物默认不覆盖；覆盖必须由调用方显式请求。
+- 文件存在不是阶段完成判据。
+- ASR、forced alignment、硬门禁或正式写入失败时，阶段失败。
+- 官方逐字稿缺失或局部不匹配可以降级到 ASR + 本地句界，但必须记录。
+- 未对齐词、低置信度边界是否阻断发布由明确 QA 阈值决定，当前待定。
 
-## 10. 验证策略与验收标准
+## 12. 验证与候选验收标准
 
-### 10.1 纯单元测试
+### 离线单元测试
 
-- alignment 时间范围、排序、重叠和空文本不变量。
-- 官方逐字稿可靠匹配时替换文本但不改变时间。
-- 匹配不足时保留 ASR 文本并产生指标。
-- alignment 到 SRT 的确定性投影。
-- 门禁 B 对乱序、重叠、断号、空文本、越界和覆盖缺失的拒绝。
-- 缓存键稳定，并随音频内容或任一结果相关 ASR 参数变化。
+- word 时间范围、排序、重叠和空文本校验。
+- sentence 对 word 的连续、无重复、全覆盖引用。
+- 多个 ASR segment 合并为一个完整句子。
+- 单个 ASR segment 内多个句子的边界恢复。
+- 缩写、小数、问句、长停顿和无标点长句。
+- 官方逐字稿高置信度匹配时采用其文本/句界但保留音频时间。
+- 低置信度匹配时保留 ASR 文本。
+- 缓存键随结果相关输入或参数变化。
 
-### 10.2 application 离线测试
+### application 测试
 
-- 注入 `FakeAudioExtractor`、`FakeAsrEngine`、`FakeMediaProbe` 和内存 store，完整流程
-  无网络、无 ffmpeg、无 Whisper 可运行。
-- 第二次以相同音频与参数运行时命中缓存，不再次调用 ASR。
-- 逐字稿变化时复用原始 ASR 缓存，但重新执行融合和 SRT 投影。
-- 产物或参数与 manifest 不一致时不得误判为完成。
-- 写入失败时不会留下被识别为成功的半成品。
+- fake ASR、fake transcript aligner、fake sentence detector 下完整离线运行。
+- ASR 缓存命中时不重复运行昂贵模型。
+- 官方逐字稿变化时复用原始 ASR 缓存，但重做融合和句界。
+- 任一正式产物或 manifest 校验和不一致时不得判定完成。
 
-### 10.3 集成与 golden 验收
+### golden/人工验收
 
-1. 对同一 `video.mp4` 与可取得的 legacy 输出比较，句级时间戳和英文字幕差异为空或
-   有书面解释。
-2. CNBC 样例中，可靠匹配处采用官方文本并保留 ASR 时间，manifest 包含融合覆盖率。
-3. 故意构造乱序或重叠时间轴时，门禁 B 报错并阻止正式 SRT 发布。
-4. 删除工作区视频衍生产物后重跑，只要音频内容和 ASR 参数相同，就命中 ASR 缓存。
-5. 完整离线 pytest 套件通过。
+- 选择至少一段 Buffett/Munger 长访谈，人工标注词时间和句界样本。
+- 统计词时间误差、未对齐词比例、句界 precision/recall 或等价指标。
+- 有/无官方逐字稿区域分别评测。
+- 完整离线 pytest 通过。
 
-## 11. 取舍与后果
+## 13. 待决策问题
 
-### 正面后果
+1. 生产 ASR provider 最终选择 WhisperX、原生 Whisper 还是 faster-whisper + 独立 aligner？
+2. forced alignment 使用哪个模型、版本和设备策略？目标 macOS/CPU/MPS/CUDA 支持矩阵是什么？
+3. `source_alignment.json` 的最终文件名、schema version 和 `ArtifactType` 是什么？
+4. canonical `words` 应保存 ASR 词，还是保存官方 transcript token 与 ASR 时间融合后的有效词？
+5. 官方文本与 ASR token 数不同、含编辑删减时如何表达一对多、多对一和未对齐 token？
+6. 未对齐词采用 nearest/linear interpolation、附着相邻词还是阻断？
+7. word ID 必须连续整数，还是只要求稳定唯一字符串？sentence ID 同理。
+8. 是否持久化 word probability；若持久化，是否有可比较/可校准语义？
+9. 是否冗余保存 sentence 的 `start_ms/end_ms`，还是只保存 word 范围？
+10. 是否需要 speaker diarization/`speaker_id`；缺失它是否影响翻译上下文和双人字幕？
+11. 默认句界实现使用 spaCy `senter`、dependency parser、纯规则还是专用本地模型？
+12. 是否需要独立 NeMo `PunctuationRestorer`，其模型体积、许可、Apple Silicon 和离线安装成本是否可接受？
+13. 停顿阈值、最长句长、异常句阻断阈值如何通过样本确定？
+14. `boundary_confidence` 如何计算和校准；低于何值仅告警、低于何值失败？
+15. 官方英文逐字稿的匹配算法、阈值和覆盖率门禁是什么？
+16. 官方中文翻译稿是否进入 v1 translation 输入，还是只作为人工参考？
+17. 原始 ASR 结果、`audio.wav` 和诊断报告是否持久化；生命周期和路径是什么？
+18. 工具/模型版本变化是否使 canonical 工件 stale？
+19. 当前模块 `AGENTS.md`、路线图和 archive_core 公共契约何时随 ADR 接受而同步？
 
-- 直接满足字幕烧录需要，减少模型依赖、运行时间和故障面。
-- alignment 与 SRT 解耦，修改投影规则无需重跑 ASR。
-- 官方逐字稿得到利用，同时不会伪造时间轴。
-- provider 隔离使测试可离线运行，也允许以后替换本地 ASR 引擎。
-- manifest 与内容哈希缓存避免昂贵阶段被重复执行或误判完成。
+## 14. 风险
 
-### 代价
+- **词时间并非真值**：Whisper word timestamp 和 forced alignment 都会在噪声、重叠讲话、
+  人名、数字和未登录词上漂移。
+- **依赖与硬件风险**：WhisperX、对齐模型和 PyTorch 组合可能与 Python、macOS/MPS/CUDA
+  版本冲突，首次模型下载昂贵。
+- **标点错误传播**：错误句界会直接降低翻译质量，并使后续 cue 规划困难。
+- **官方逐字稿并非逐字**：官网文本可能删改口语、遗漏段落或改变顺序，错误融合会伪造音频内容。
+- **文本/时间双权威风险**：若 canonical words 与 sentence text 来自不同来源而没有明确映射，
+  下游无法可靠分割英文文本。
+- **置信度误用**：provider probability 和自定义 boundary confidence 可能不可校准，不能伪装成客观准确率。
+- **长视频资源风险**：ASR、forced alignment 和本地 NLP 模型会增加内存、磁盘、模型加载和运行时间。
+- **职责膨胀**：transcription 同时承担音频、ASR、融合、标点和句界，需要通过端口和层次避免形成单体流程。
+- **迁移冲突**：现有指南仍描述句级 ASR 和 English SRT；讨论稿接受前存在文档不一致。
 
-- 不能支持逐词高亮或卡拉 OK 字幕；若未来出现此类需求需重新决策。
-- 官方逐字稿融合需要可解释的保序匹配和阈值调优。
-- 实现前需要为 `alignment.json` 补充 `archive_core` 公共工件契约。
+## 15. 参考
 
-## 12. 被替代的旧方向
-
-本决策明确替代路线图和旧模块指南中关于“词级时间戳”“词级/分段对齐”和 forced
-alignment 为 Phase 1 必需能力的表述。那些文档可在后续独立文档维护切片中同步；
-实现时以本 ADR 和更新后的 `src/transcription/AGENTS.md` 为准。
+- [OpenAI Whisper `word_timestamps` 实现](https://github.com/openai/whisper/blob/main/whisper/transcribe.py)
+- [WhisperX：词级时间与 forced alignment](https://arxiv.org/abs/2303.00747)
+- [spaCy sentence segmentation](https://spacy.io/usage/linguistic-features)
+- [NVIDIA NeMo punctuation and capitalization](https://docs.nvidia.com/nemo-framework/user-guide/24.07/nemotoolkit/nlp/punctuation_and_capitalization.html)
