@@ -1,149 +1,113 @@
-# ADR-0001：transcription 采用词级对齐与本地句界恢复
+# ADR-0001：transcription 采用 WhisperX 词级对齐、官网逐字稿融合与本地句界恢复
 
-- 状态：讨论中
-- 日期：2026-09-14
-- 影响模块：`transcription`、`archive_core`（公共工件契约）
+- 状态：已接受，待实现
+- 首次提出：2026-09-14
+- 接受日期：2026-09-24
+- 影响模块：`archive_core`、`acquisition`、`transcription`、`infrastructure`
+- 下游模块：`translation`、`srt_processing`
 - 所属阶段：Phase 1
 
-> 本文是讨论稿。被接受前不替代模块 `AGENTS.md` 或现有实现约束。
+## 1. 决策摘要
 
-## 1. 候选结论
-
-`transcription` 把已下载的 `video.mp4` 转为带时间信息的完整英文句子。候选流程为：
+`transcription` 把经过验证的 `video.mp4` 转换为带词级时间锚点和完整英文句界的
+`source_alignment.json`。生产 ASR 使用 WhisperX 一体化管线，固定英文识别、质量优先，
+不使用 LLM。
 
 ```text
 video.mp4
   → audio.wav
-  → ASR / VAD
-  → 词级时间对齐
-  → 官方英文逐字稿融合（可选）
-  → 本地标点恢复与句界检测
+  → pyannote VAD
+  → Whisper large-v3 ASR
+  → raw_asr.json
+  → WhisperX forced alignment
+  → aligned_asr.json
+  → 官网逐字稿本地融合（可选输入，CNBC 路径）
+  → transcript_fusion.json（有官网逐字稿时）
+  → 本地句界恢复
   → source_alignment.json
 ```
 
-本模块候选边界：
+本 ADR 接受以下边界：
 
-- 负责音频提取、英文 ASR、词级时间对齐、英文文本融合、标点恢复和句界检测。
-- 输出词级时间信息以及由词范围定义的完整英文句子。
-- 不翻译。
-- 不规划字幕 cue。
-- 不生成 `english.srt`；英文 SRT 如有需要，由 `srt_processing` 从最终 cue plan 投影。
-- 句界恢复只使用本地模型和算法，不调用远程 LLM。
+- `transcription` 负责音频提取、VAD、英文 ASR、词级声学对齐、官网英文逐字稿融合、
+  本地句界恢复、QA、缓存、日志和阶段 provenance。
+- `transcription` 不调用 LLM，不翻译，不规划字幕 cue，不生成任何 SRT。
+- `source_alignment.json` 是本模块唯一供下游消费的 canonical 内容工件。
+- `english.srt`、`chinese.srt` 和 `bilingual.srt` 由 `srt_processing` 从最终 cue plan 投影。
+- 所有时间使用原视频时间轴上的非负整数毫秒。
+- 昂贵和诊断工件持久化；不得因文件存在就判定阶段完成，也不得静默覆盖或删除。
 
-这份候选决策撤回旧版 ADR 中“ASR segment 等于句子”“不持久化词级时间”“由
-transcription 生成 canonical `english.srt`”的方向，但尚未被接受。
+## 2. 背景与术语
 
-## 2. 背景与问题
-
-ASR/VAD segment 是模型窗口、静音或解码边界，不保证是完整语言句子。例如：
+ASR/VAD segment 是处理窗口或解码边界，不保证是完整语言句子：
 
 ```text
-segment 1: I think the most important thing
-segment 2: when you're evaluating a business
-segment 3: is to understand its competitive position.
+ASR segment 1: I think the most important thing
+ASR segment 2: when you're evaluating a business
+ASR segment 3: is to understand its competitive position.
+
+完整句子：
+I think the most important thing when you're evaluating a business
+is to understand its competitive position.
 ```
 
-翻译需要看到完整句意，字幕又需要可靠时间锚点。因此必须区分：
+必须区分：
 
 ```text
-ASR segment      = 识别处理单元
-word             = 最小时间锚点
-sentence         = 英文完整句子/翻译单元
-subtitle cue     = 最终显示单元
+VAD region       = 检测到语音的时间范围
+ASR chunk        = 为模型计算组织的音频块
+ASR segment      = Whisper 解码处理单元
+ASR word         = WhisperX 声学对齐前后的识别词
+timed word       = 融合后供下游使用的最小时间文本单元
+sentence         = 完整英文句子，也是 translation 的翻译单元
+subtitle cue     = srt_processing 决定的最终显示单元
 ```
 
-四者不要求一一对应。
+这些概念不要求一一对应，尤其禁止把 ASR segment 直接当作 sentence 或 subtitle cue。
 
-## 3. 目标与非目标
+## 3. 权威来源
 
-### 3.1 目标
+不同输入只在各自擅长的范围内权威：
 
-- 从 `video.mp4` 提取适合 ASR 的本地音频。
-- 得到英文词序列及非负整数毫秒时间戳。
-- 将 ASR segment 重建为完整、按时间有序的英文句子。
-- 有官方英文逐字稿时，可靠地利用其拼写、大小写、标点和句界。
-- 产出可供 translation 与 srt_processing 共同消费的权威结构化工件。
-- 通过 provider 端口、内容哈希缓存和 fake 实现离线测试。
-- 保存足够的 manifest/溯源信息解释结果如何产生。
+```text
+音频                    是否真的说过某段内容
+WhisperX 声学对齐        时间位置
+CNBC 官网英文逐字稿      拼写、大小写、标点、句界和可选 speaker 标签
+本地句界算法             无可靠官网覆盖区域的句界
+```
 
-### 3.2 非目标
+官网逐字稿相对正确，但可能删掉口头语、修正文法、补写内容、遗漏片段或与视频剪辑版本
+不完全一致。因此它不能无条件覆盖音频，也不能给未验证的官网文本伪造时间。
 
-- 不翻译文本。
-- 不生成 English/Chinese/Bilingual SRT。
-- 不决定字幕行宽、阅读速度、双语排版或最终 cue 边界。
-- 不实现卡拉 OK、逐词高亮或视频烧录。
-- 不使用远程 LLM 恢复标点或句界。
-- 不把 ASR segment 当作自然语言句子。
-
-## 4. 输入、输出与权威性
-
-### 4.1 输入
+## 4. 输入契约
 
 | 输入 | 必需 | 说明 |
 |---|---:|---|
-| `video.mp4` | 是 | 来自 `media_download`，必须验证上游 manifest 和校验和 |
-| 官方英文 `transcript.txt` | 否 | 可用于修正英文文本及句界，没有时间信息 |
-| 官方中文翻译稿 | 否 | 不直接用于英文句界；将来可作为翻译参考或评测资料 |
-| ASR/VAD/对齐配置 | 是 | provider、模型、语言、设备、精度、VAD、forced alignment 参数 |
-| 句界配置 | 是 | 本地模型版本、停顿阈值、最长句长、缩写规则等 |
-| 执行策略 | 是 | 缓存、dry-run、显式覆盖策略 |
+| `video.mp4` | 是 | 来自 `media_download`；必须验证成功 manifest、路径、大小和 SHA-256 |
+| `chapters.json` | 否 | 结构化官网英文逐字稿；CNBC 路径使用，YouTube 通常没有 |
+| ASR/VAD/对齐配置 | 是 | 模型身份、版本、设备、精度、VAD 和 alignment 参数 |
+| 句界配置 | 是 | 缩写规则、停顿规则、fallback 与 QA policy 版本 |
+| 执行策略 | 是 | dry-run、缓存和显式替换策略 |
 
-### 4.2 候选输出
+`transcript.txt` 是人工查看和归档格式，不是 transcription 的机器输入。机器输入使用
+结构化 `chapters.json`。
 
-| 产物 | 角色 | 说明 |
-|---|---|---|
-| `audio.wav` | 可复用中间产物 | 候选为 16 kHz、单声道 PCM WAV |
-| 原始 ASR 结果 | 可重建缓存 | 保存 provider 原始 segment/word 结果，不直接给下游 |
-| `source_alignment.json` | canonical 工件 | 权威英文词级时间与完整句子 |
-| `transcription_manifest.json` | 阶段记录 | 输入输出校验和、模型、参数、缓存、融合、句界与 QA 指标 |
-| `transcription_report.json` | 诊断报告（待定） | 未对齐词、低置信度句界、逐字稿覆盖率等 |
+### 4.1 结构化官网逐字稿
 
-`english.srt` 不属于本模块输出。文件名、`ArtifactType` 和公共 schema 需要在
-`archive_core` 中补充，具体命名仍待定。
-
-## 5. ASR 与词级时间对齐
-
-### 5.1 provider 能力
-
-OpenAI Whisper 和 faster-whisper 均能请求词级时间，但属于模型推算。WhisperX 在 ASR
-之后使用 forced alignment 将文本重新贴合音频，候选生产实现优先考虑 WhisperX。
-
-候选端口：
-
-```python
-class AsrEngine(Protocol):
-    def transcribe(self, audio: AudioRef, config: AsrConfig) -> RawTranscription:
-        ...
-```
-
-application 不依赖 Whisper/WhisperX 的具体返回对象。
-
-### 5.2 原始 ASR 内部结构示例
+`acquisition` 应发布版本化、来源无关的结构化契约，示意如下：
 
 ```json
 {
-  "schema_version": "transcription.raw-asr.v1",
+  "schema_version": "acquisition.transcript.v2",
   "language": "en",
-  "segments": [
+  "chapters": [
     {
-      "id": 1,
-      "start_ms": 1200,
-      "end_ms": 3100,
-      "text": "I think the most important thing",
-      "words": [
+      "number": 1,
+      "title": "Opening Remarks",
+      "paragraphs": [
         {
-          "id": 1,
-          "text": "I",
-          "start_ms": 1200,
-          "end_ms": 1320,
-          "probability": 0.98
-        },
-        {
-          "id": 2,
-          "text": "think",
-          "start_ms": 1320,
-          "end_ms": 1580,
-          "probability": 0.97
+          "speaker_label": "WARREN BUFFETT",
+          "text": "Good morning. We welcome shareholders to the annual meeting."
         }
       ]
     }
@@ -151,96 +115,265 @@ application 不依赖 Whisper/WhisperX 的具体返回对象。
 }
 ```
 
-此结构是 adapter 输出/缓存候选，不是跨模块公共契约。
+- chapter title、speaker label 和舞台说明不作为 spoken words 送入对齐器。
+- `speaker_label` 是通用可选字段；YouTube 或无法可靠识别的来源写 `null`。
+- CNBC 页面格式知识属于 `acquisition.infrastructure`，不得进入 transcription。
+- transcription 不用正则重新解析 CNBC 专用的 `SPEAKER: text` 格式。
+- 公共 DTO/schema 放在 `archive_core`，两个功能模块不得互相导入内部实现。
 
-### 5.3 词级不变量
+## 5. 输出与持久化工件
 
-候选硬门禁：
+| 文件 | 角色 | 是否供下游消费 |
+|---|---|---:|
+| `audio.wav` | 16 kHz、mono、PCM 的可复用派生音频 | 否 |
+| `vad.json` | pyannote VAD region、参数与原时间映射 | 否 |
+| `raw_asr.json` | WhisperX/Whisper 原始 segment 结果和缓存 | 否 |
+| `aligned_asr.json` | 词级声学对齐结果和 alignment score | 否 |
+| `transcript_fusion.json` | ASR 与官网 token 映射及取舍；仅官网路径 | 否 |
+| `source_alignment.json` | 完整 timed words 与 sentences | **是，canonical** |
+| `transcription.log` | 全级别详细结构化事件日志 | 否 |
+| `transcription_report.json` | 汇总、findings、QA 和阶段状态 | 否 |
+| `transcription_manifest.json` | 输入输出 checksum、工具、模型、参数和状态 | 否 |
 
-- word ID 唯一、连续或至少稳定有序（最终形式待定）。
-- `0 <= start_ms < end_ms`。
-- word 时间单调，不允许无法解释的重叠。
-- word 文本规范化后非空。
-- sentence 引用的 word 范围必须存在且连续。
-- 未对齐词不得静默丢弃，必须采用显式策略并写入报告。
+`raw_asr.json`、`aligned_asr.json` 与 `transcript_fusion.json` 是持久化缓存/诊断工件，
+不是跨模块业务契约。它们不得被 translation 或 srt_processing 直接消费。
 
-## 6. 官方逐字稿融合
+所有文件名和公共 schema 必须先在 `archive_core` 中形成契约。写入者使用
+`build_asset_workspace()` 和 canonical filename，不得自创工作区路径。
 
-### 6.1 官方英文逐字稿
+## 6. 音频、VAD 与 ASR
 
-候选流程：
+### 6.1 音频提取
 
-1. 分别规范化官方英文文本和 ASR words。
-2. 使用保序序列匹配建立 transcript token 与 ASR word 的映射。
-3. 高置信度区域使用官方拼写、大小写、标点和句界。
-4. 时间始终来自音频对齐结果。
-5. 未可靠匹配的区域保留 ASR 文本，并进入本地句界恢复。
-6. manifest 记录逐字稿校验和、阈值、覆盖率、未匹配数量和替换范围。
-
-不得将官网编辑、删减或新增但音频中不存在的文字强行贴到时间轴。
-
-### 6.2 官方中文翻译稿
-
-如果来源只有官方中文译稿，它不直接参与英文句界恢复，因为跨语言对应关系尚未建立。
-候选用途是 translation 的参考资料、术语来源或人工评测基准，是否纳入 v1 待定。
-
-## 7. 本地标点恢复与句界检测
-
-### 7.1 候选默认方案
-
-当前讨论中的 v1 候选是：
+`transcription` 使用 ffmpeg 从 `video.mp4` 生成并持久化：
 
 ```text
-官方英文句界（可靠匹配区域）
-  或
-WhisperX 标点 + spaCy sentence detector + 词间停顿规则
+audio.wav
+format: PCM WAV
+sample rate: 16 kHz
+channels: mono
+sample format: signed 16-bit
 ```
 
-候选规则信号：
+`audio.wav` 是 transcription 派生工件，不属于 `media_download`。管线禁止自动删除；只有
+用户显式授权替换时才能重建并覆盖。manifest 记录输入视频 checksum、ffmpeg 版本与完整
+参数。
 
-- `. ? !` 等终止标点。
-- 单词之间的停顿长度。
-- 缩写、人名缩写、数字和小数点例外。
-- 句子最大词数/持续时间。
-- ASR segment 仅作为弱提示，不作为句界。
+### 6.2 VAD
 
-NVIDIA NeMo 等专用本地标点模型暂不确定是否引入；应先用真实长视频评测 WhisperX
-标点质量和依赖成本。
+VAD 使用 pyannote，只判断哪些原视频时间范围包含语音，不负责识别文本、speaker 或句界。
+处理块可以跳过静音，但必须保留到原视频绝对时间轴的映射。
 
-### 7.2 句界结果示例
+```text
+原视频： | music | speech A | pause | speech B | applause |
+VAD：             [A]                 [B]
+ASR chunk：       [A + B]
+时间映射：         A→原视频区间，B→原视频区间
+```
+
+`vad.json` 记录模型身份/版本、onset/offset、padding、region、cut-and-merge 配置和映射。
+pyannote VAD 不等于 speaker diarization；v1 不根据声音猜 speaker。
+
+### 6.3 ASR
+
+生产配置：
+
+```text
+provider = WhisperX
+model    = large-v3
+language = en
+task     = transcribe
+quality  = priority
+```
+
+开发测试可以显式使用小模型，但结果不能冒充正式产物。ASR segment 仅是处理单元；
+`raw_asr.json` 保存其粗时间、文本和必要诊断信息。
+
+## 7. WhisperX forced alignment
+
+WhisperX 在 ASR 粗时间窗口内把已识别文本重新贴合声学信号，输出词级时间。
+
+```text
+ASR segment:
+06.000 ├──── "We'll start with the questions." ────┤ 12.000
+
+forced alignment:
+06.100 |We'll| 06.510 |start| 06.950 |with| |the| |questions| 08.120
+```
+
+### 7.1 `aligned_asr.json`
 
 ```json
 {
-  "sentences": [
+  "schema_version": "transcription.aligned-asr.v1",
+  "language": "en",
+  "words": [
     {
-      "id": "s1",
-      "first_word_id": 1,
-      "last_word_id": 18,
-      "start_ms": 1200,
-      "end_ms": 7800,
-      "text": "I think the most important thing when you're evaluating a business is to understand its competitive position.",
-      "text_source": "official_transcript",
-      "boundary_source": "official_transcript",
-      "boundary_confidence": 0.97
-    },
-    {
-      "id": "s2",
-      "first_word_id": 19,
-      "last_word_id": 27,
-      "start_ms": 7900,
-      "end_ms": 11200,
-      "text": "That is what determines its long-term economics.",
-      "text_source": "asr",
-      "boundary_source": "punctuation_and_pause",
-      "boundary_confidence": 0.91
+      "id": "aw1",
+      "segment_id": "seg1",
+      "text": "We'll",
+      "start_ms": 6100,
+      "end_ms": 6360,
+      "alignment_score": 0.91,
+      "timing_source": "acoustic_alignment"
     }
   ]
 }
 ```
 
-`start_ms/end_ms` 可从首尾 word 推导，但为方便消费者是否冗余持久化仍待定。
+- 不持久化字符级时间，只保存词级时间。
+- `alignment_score` 只在 `aligned_asr.json` 中保留并用于诊断；它不是文字正确率，也不
+  跨模型比较。
+- 标点附着到相邻 word 的表面文本，如 `morning,`、`everyone.`；标点没有独立时间单元。
+- 所有时间为非负整数毫秒。
 
-## 8. `source_alignment.json` 候选契约
+### 7.2 未对齐 word
+
+不得静默丢词。只有同时满足以下条件才允许插值：
+
+1. 未对齐范围很小；
+2. 左右两侧都有可靠声学锚点；
+3. 可用时间范围合法且足以容纳文本；
+4. 原因可解释，例如数字、符号或 alignment model 词表限制。
+
+允许时记录：
+
+```json
+{
+  "text": "10%",
+  "start_ms": 10700,
+  "end_ms": 11200,
+  "alignment_score": null,
+  "timing_source": "interpolated",
+  "left_anchor_id": "aw10",
+  "right_anchor_id": "aw12"
+}
+```
+
+连续大段未对齐、缺少双侧锚点、时间不足、明显幻觉或非法时间轴均为硬失败。v1 不自动
+修复 word overlap；发现无法解释的重叠时记录错误并阻止 canonical 发布。
+
+## 8. 官网逐字稿融合
+
+有 `chapters.json` 时，在 `aligned_asr.json` 之后运行纯本地融合；没有时直接使用 aligned
+ASR words 进入本地句界恢复。transcription 不使用 LLM。
+
+### 8.1 规范化与保序对齐
+
+每个 token 同时保留：
+
+```text
+surface text     最终候选显示文字
+normalized text  只用于匹配
+```
+
+规范化覆盖大小写、标点、可证明等价的数字/百分比/货币、连字符和 contraction。例如：
+
+```text
+10%                    ↔ ten percent
+1998                   ↔ nineteen ninety eight
+cannot                 ↔ can not
+Berkshire-Hathaway     ↔ Berkshire Hathaway
+```
+
+长视频先寻找顺序一致的连续 n-gram 锚点，再只在相邻锚点之间做局部动态规划，避免对数万
+个 token 做一个巨大矩阵。允许 exact、normalized exact、substitution、one-to-many、
+many-to-one、ASR-only 和 official-only 映射，顺序不得倒退。
+
+### 8.2 冲突规则
+
+| 情形 | 处理 |
+|---|---|
+| exact / normalized exact | 使用官网表面文字，保留声学时间 |
+| 双侧锚定的拼写替换 | 使用官网拼写，保留声学时间并记录 substitution |
+| ASR 有、官网没有 | 只要已声学对齐就保留，并记录 ASR-only |
+| 官网有、ASR 没有 | 必须在双侧锚定的局部音频窗口再次 forced align；成功才加入 |
+| 无可靠双侧锚点的大段冲突 | 不猜测，记录失败并阻止 canonical 发布 |
+
+官网独有文字未通过局部声学验证时，保留在诊断报告但不得进入 spoken timeline。
+
+### 8.3 一对多与多对一
+
+只有已经确认语义等价时才能折叠；不能仅凭 token 数量选择文字。
+
+```text
+ASR 一个、官网多个：
+ASR [10%] ↔ 官网 [ten] [percent]
+显示 "10%"，直接使用 ASR 单词时间。
+
+ASR 多个、官网一个：
+ASR [nineteen] [ninety] [eight] ↔ 官网 [1998]
+显示 "1998"，时间合并为第一个 ASR word start 到最后一个 ASR word end。
+```
+
+融合后的一个 timed word 可以引用多个来源 token：
+
+```json
+{
+  "id": "w301",
+  "text": "1998",
+  "start_ms": 20000,
+  "end_ms": 21010,
+  "asr_word_ids": ["aw301", "aw302", "aw303"],
+  "official_token_ids": ["ot280"],
+  "match_type": "many_to_one",
+  "text_source": "official_transcript",
+  "timing_source": "merged_acoustic_alignment"
+}
+```
+
+`transcript_fusion.json` 保存全部映射、未采用内容、局部声学验证和取舍原因。
+
+## 9. 本地句界恢复
+
+### 9.1 CNBC 高可信覆盖区
+
+- 已可靠融合的官网 `. ? !` 是确定句界，但必须排除缩写、小数、姓名首字母等例外。
+- speaker 变化强制结束当前 sentence；一个 sentence 不得跨 speaker。
+- paragraph 变化只是弱信号，不能无条件切句。
+- chapter 是文档结构边界，不作为 spoken word。
+
+### 9.2 YouTube 与官网未匹配区
+
+v1 使用：
+
+```text
+Whisper 标点
++ 本地 sentence detector
++ 词间停顿规则
++ ASR segment 弱提示
+```
+
+不引入 NeMo 等独立标点恢复模型。固定停顿阈值不能单独决定句界；长停顿可能发生在
+句中，而句间也可能没有明显停顿。ASR segment 只提供弱提示。
+
+不得为了字幕行宽、阅读速度或时长而在 transcription 中机械切句；这些属于
+`srt_processing`。无标点异常长文本只能按版本化 fallback policy 恢复边界，并记录为
+低可信 finding。
+
+### 9.3 边界 provenance
+
+不用未经校准的 `0.0..1.0` confidence，改用可解释枚举：
+
+```text
+boundary_source:
+  official_punctuation
+  speaker_change
+  asr_punctuation
+  punctuation_and_pause
+  pause_fallback
+
+boundary_status:
+  verified
+  inferred
+  fallback
+```
+
+`speaker_label` 是 sentence 的通用可选元数据；没有可靠来源时为 `null`，不得猜测。
+
+## 10. `source_alignment.json` 公共契约
+
+示意：
 
 ```json
 {
@@ -248,184 +381,284 @@ NVIDIA NeMo 等专用本地标点模型暂不确定是否引入；应先用真�
   "language": "en",
   "words": [
     {
-      "id": 1,
-      "text": "I",
-      "start_ms": 1200,
-      "end_ms": 1320
-    },
-    {
-      "id": 2,
-      "text": "think",
-      "start_ms": 1320,
-      "end_ms": 1580
+      "id": "w1",
+      "text": "Good",
+      "start_ms": 2100,
+      "end_ms": 2320,
+      "asr_word_ids": ["aw1"],
+      "official_token_ids": ["ot1"],
+      "match_type": "normalized_exact",
+      "text_source": "official_transcript",
+      "timing_source": "acoustic_alignment"
     }
   ],
   "sentences": [
     {
       "id": "s1",
-      "first_word_id": 1,
-      "last_word_id": 18,
-      "start_ms": 1200,
-      "end_ms": 7800,
-      "text": "I think the most important thing when you're evaluating a business is to understand its competitive position.",
+      "first_word_id": "w1",
+      "last_word_id": "w3",
+      "start_ms": 2100,
+      "end_ms": 3050,
+      "text": "Good morning, everyone.",
+      "speaker_label": "WARREN BUFFETT",
       "text_source": "official_transcript",
-      "boundary_source": "official_transcript"
+      "boundary_source": "official_punctuation",
+      "boundary_status": "verified"
     }
   ]
 }
 ```
 
-`sentences` 同时是 translation 的源翻译单元。translation 可在内存中提取紧凑的
-`sentence_id + text` 请求，不需要再持久化一份重复的 `translation_units`。
+硬不变量：
 
-## 9. 最终候选流程
+- word 和 sentence ID 稳定、唯一且按文档顺序排列；具体字符串生成规则由公共 schema 固定。
+- `0 <= start_ms < end_ms`，且不得超过音频时长。
+- word 时间单调，不允许无法解释的重叠。
+- 每个 word 文本规范化后非空。
+- sentence 引用的 word 范围存在、连续、无重复；所有有效 word 恰好属于一个 sentence。
+- `sentence.start_ms == first_word.start_ms`。
+- `sentence.end_ms == last_word.end_ms`。
+- sentence text 必须能由其 timed words 按规范化空格/标点规则重建。
+- `speaker_label` 可以为 `null`；非空时必须来自结构化可靠来源。
+
+translation 只提取完整 sentence 的 `id + text`。srt_processing 同时使用 words、sentences
+和 translation result 规划 cue。
+
+## 11. 日志、报告与用户可见性
+
+alignment 和 transcript fusion 的匹配、替换、插值、冲突、排除、恢复及失败均产生带稳定
+事件 code 的结构化事件。
 
 ```text
-验证 video.mp4 与上游 provenance
-  ↓
-提取/复用 audio.wav
-  ↓
-ASR + VAD
-  ↓
-forced word alignment
-  ↓
-缓存原始 ASR 结果
-  ↓
-可选官方英文逐字稿融合
-  ↓
-本地标点恢复 + 句界检测
-  ↓
-词级/句级硬门禁
-  ↓
-原子发布 source_alignment.json + transcription_manifest.json
+事件流
+  ├── transcription.log
+  │     DEBUG / INFO / WARNING / ERROR 全部详细事件
+  ├── transcription_report.json
+  │     汇总计数、WARNING/ERROR findings、QA 与最终状态
+  └── CLI
+        只显示 WARNING / ERROR 和阶段汇总
 ```
 
-## 10. 分层与候选端口
+事件至少包含可用的：
 
-### domain
+- `asset_id`、stage、event code、severity；
+- word/token/segment ID；
+- 原始文本、结果文本和原视频时间范围；
+- 采取的动作与原因。
 
-- `AlignedWord`
+典型 event code：
+
+```text
+alignment.word_unaligned
+alignment.word_interpolated
+alignment.word_unrecoverable
+alignment.word_overlap
+fusion.surface_adjusted
+fusion.text_replaced
+fusion.one_to_many_collapsed
+fusion.many_to_one_collapsed
+fusion.asr_only_retained
+fusion.official_only_recovered
+fusion.official_only_excluded
+fusion.region_unmatched
+boundary.official_applied
+boundary.speaker_change
+boundary.pause_inferred
+boundary.fallback_used
+```
+
+普通完全匹配只进入 DEBUG 或汇总。大小写/标点等实际调整写详细日志但不逐条打印到 CLI。
+阶段汇总至少显示 aligned/interpolated/unrecoverable、各融合类型、warnings、errors 和状态。
+
+失败时仍尽力持久化详细日志、report 和失败 manifest，但不发布不完整的
+`source_alignment.json`。
+
+## 12. 分层与端口
+
+### 12.1 domain
+
+- `VadRegion`
+- `RawAsrSegment`
+- `AlignedAsrWord`
+- `TranscriptToken`
+- `TranscriptMatch`
+- `TimedWord`
 - `SourceSentence`
 - `SourceAlignment`
-- `TextSource`
-- `BoundarySource`
-- 时间轴、word 覆盖、sentence 覆盖不变量
+- `TranscriptionFinding`
+- 时间轴、覆盖、融合和句界不变量
 
-### application
+domain 不依赖 ffmpeg、WhisperX、pyannote、spaCy、文件系统或日志实现。
 
-- `extract_audio`
-- `transcribe_words`
-- `align_official_transcript`
-- `restore_punctuation`
-- `detect_sentence_boundaries`
-- `build_source_alignment`
-- `validate_transcription_output`
+### 12.2 application
 
-### infrastructure
+- 验证输入视频和上游 manifest；
+- 提取/复用音频；
+- 运行或复用 VAD、ASR 与 forced alignment；
+- 融合可选官网逐字稿；
+- 恢复句界并构建 `SourceAlignment`；
+- 运行 QA、管理缓存键和阶段状态；
+- 通过事件端口发布结构化事件；
+- 原子发布成功工件或持久化失败诊断。
 
-- `FfmpegAudioExtractor`
-- `WhisperXAsrEngine` / `FasterWhisperAsrEngine`
-- 本地句界/标点 provider
-- 原始 ASR 缓存
-- alignment/manifest store
-- media probe
+### 12.3 infrastructure
 
-### interfaces
+- ffmpeg 音频提取；
+- WhisperX + pyannote adapter；
+- 本地 sentence detector adapter；
+- JSON/file artifact store；
+- checksum、原子写和结构化日志 adapter。
 
-向 orchestration 暴露资产标识、配置、执行策略以及稳定的产物引用和 QA 摘要，不暴露
-Whisper、spaCy 或 ffmpeg 内部对象。
+### 12.4 interfaces
 
-### 候选最小端口
+向 orchestration/CLI 暴露稳定 command/result、工件引用、阶段摘要和事件，不暴露 WhisperX、
+pyannote 或 spaCy 返回对象。CLI 只负责过滤和展示 WARNING/ERROR 与汇总，不持有业务规则。
+
+最小端口集合：
 
 - `AudioExtractor`
 - `AsrEngine`
-- `SentenceBoundaryDetector`
+- `ForcedAligner`
 - `OfficialTranscriptAligner`
+- `SentenceBoundaryDetector`
 - `MediaProbe`
-- `TranscriptionCache`
 - `TranscriptionArtifactStore`
 - `ChecksumService`
+- `TranscriptionEventSink`
 
-`PunctuationRestorer` 是否需要独立于 `SentenceBoundaryDetector` 仍待定。
+## 13. 缓存、幂等和替换策略
 
-## 11. 缓存、幂等与失败语义
+缓存逐层失效：
 
-- 原始 ASR 缓存键至少包含音频内容哈希及所有结果相关 ASR/VAD/对齐参数。
-- 句界物化结果还依赖官方逐字稿校验和、句界模型/规则版本和阈值。
-- `source_alignment.json` 与 manifest 必须原子发布。
-- 成功产物默认不覆盖；覆盖必须由调用方显式请求。
-- 文件存在不是阶段完成判据。
-- ASR、forced alignment、硬门禁或正式写入失败时，阶段失败。
-- 官方逐字稿缺失或局部不匹配可以降级到 ASR + 本地句界，但必须记录。
-- 未对齐词、低置信度边界是否阻断发布由明确 QA 阈值决定，当前待定。
+```text
+audio cache key
+  = video SHA-256 + ffmpeg identity + extraction config
 
-## 12. 验证与候选验收标准
+VAD/ASR cache key
+  = audio SHA-256 + WhisperX/Whisper/pyannote identities + 所有结果相关参数
 
-### 离线单元测试
+alignment cache key
+  = raw_asr SHA-256 + alignment model identity + alignment/interpolation policy
 
-- word 时间范围、排序、重叠和空文本校验。
-- sentence 对 word 的连续、无重复、全覆盖引用。
-- 多个 ASR segment 合并为一个完整句子。
-- 单个 ASR segment 内多个句子的边界恢复。
-- 缩写、小数、问句、长停顿和无标点长句。
-- 官方逐字稿高置信度匹配时采用其文本/句界但保留音频时间。
-- 低置信度匹配时保留 ASR 文本。
-- 缓存键随结果相关输入或参数变化。
+fusion cache key
+  = aligned_asr SHA-256 + chapters.json SHA-256 + normalization/matching policy
 
-### application 测试
+sentence cache key
+  = fused/aligned input SHA-256 + sentence detector/rule policy
+```
 
-- fake ASR、fake transcript aligner、fake sentence detector 下完整离线运行。
-- ASR 缓存命中时不重复运行昂贵模型。
-- 官方逐字稿变化时复用原始 ASR 缓存，但重做融合和句界。
-- 任一正式产物或 manifest 校验和不一致时不得判定完成。
+- 官网逐字稿变化时复用 audio、VAD、raw ASR 和基础 alignment，只重做融合及其下游。
+- 句界规则变化时只重做句界及 canonical 输出。
+- 工具、模型、配置或输入 hash 变化使相应层及其下游 stale。
+- manifest 和 checksum 决定完成状态，文件存在不构成完成证据。
+- 成功的昂贵工件禁止自动删除或静默覆盖；只有用户显式授权替换时才允许重建。
+- 正式输出先写临时文件、完成 QA 后原子发布。
 
-### golden/人工验收
+## 14. 失败语义与 QA
 
-- 选择至少一段 Buffett/Munger 长访谈，人工标注词时间和句界样本。
-- 统计词时间误差、未对齐词比例、句界 precision/recall 或等价指标。
-- 有/无官方逐字稿区域分别评测。
-- 完整离线 pytest 通过。
+硬失败至少包括：
 
-## 13. 待决策问题
+- 上游下载 manifest/checksum 无法验证；
+- ffmpeg、VAD、ASR 或 forced alignment 失败；
+- 无法安全恢复的大段未对齐词；
+- 非法、倒退、越界或无法解释的重叠时间；
+- 官网与 ASR 大段冲突且没有可靠单调双侧锚点；
+- timed words 无法被 sentences 连续且完整覆盖；
+- 正式工件或 manifest 写入/校验失败。
 
-1. 生产 ASR provider 最终选择 WhisperX、原生 Whisper 还是 faster-whisper + 独立 aligner？
-2. forced alignment 使用哪个模型、版本和设备策略？目标 macOS/CPU/MPS/CUDA 支持矩阵是什么？
-3. `source_alignment.json` 的最终文件名、schema version 和 `ArtifactType` 是什么？
-4. canonical `words` 应保存 ASR 词，还是保存官方 transcript token 与 ASR 时间融合后的有效词？
-5. 官方文本与 ASR token 数不同、含编辑删减时如何表达一对多、多对一和未对齐 token？
-6. 未对齐词采用 nearest/linear interpolation、附着相邻词还是阻断？
-7. word ID 必须连续整数，还是只要求稳定唯一字符串？sentence ID 同理。
-8. 是否持久化 word probability；若持久化，是否有可比较/可校准语义？
-9. 是否冗余保存 sentence 的 `start_ms/end_ms`，还是只保存 word 范围？
-10. 是否需要 speaker diarization/`speaker_id`；缺失它是否影响翻译上下文和双人字幕？
-11. 默认句界实现使用 spaCy `senter`、dependency parser、纯规则还是专用本地模型？
-12. 是否需要独立 NeMo `PunctuationRestorer`，其模型体积、许可、Apple Silicon 和离线安装成本是否可接受？
-13. 停顿阈值、最长句长、异常句阻断阈值如何通过样本确定？
-14. `boundary_confidence` 如何计算和校准；低于何值仅告警、低于何值失败？
-15. 官方英文逐字稿的匹配算法、阈值和覆盖率门禁是什么？
-16. 官方中文翻译稿是否进入 v1 translation 输入，还是只作为人工参考？
-17. 原始 ASR 结果、`audio.wav` 和诊断报告是否持久化；生命周期和路径是什么？
-18. 工具/模型版本变化是否使 canonical 工件 stale？
-19. 当前模块 `AGENTS.md`、路线图和 archive_core 公共契约何时随 ADR 接受而同步？
+可发布但必须 warning/report 的情形包括：
 
-## 14. 风险
+- 少量有双侧锚点的插值词；
+- ASR-only spoken words 被保留；
+- official-only word 经局部声学验证恢复或因失败被排除；
+- 低可信 fallback 句界未超过配置的发布门禁。
 
-- **词时间并非真值**：Whisper word timestamp 和 forced alignment 都会在噪声、重叠讲话、
-  人名、数字和未登录词上漂移。
-- **依赖与硬件风险**：WhisperX、对齐模型和 PyTorch 组合可能与 Python、macOS/MPS/CUDA
-  版本冲突，首次模型下载昂贵。
-- **标点错误传播**：错误句界会直接降低翻译质量，并使后续 cue 规划困难。
-- **官方逐字稿并非逐字**：官网文本可能删改口语、遗漏段落或改变顺序，错误融合会伪造音频内容。
-- **文本/时间双权威风险**：若 canonical words 与 sentence text 来自不同来源而没有明确映射，
-  下游无法可靠分割英文文本。
-- **置信度误用**：provider probability 和自定义 boundary confidence 可能不可校准，不能伪装成客观准确率。
-- **长视频资源风险**：ASR、forced alignment 和本地 NLP 模型会增加内存、磁盘、模型加载和运行时间。
-- **职责膨胀**：transcription 同时承担音频、ASR、融合、标点和句界，需要通过端口和层次避免形成单体流程。
-- **迁移冲突**：现有指南仍描述句级 ASR 和 English SRT；讨论稿接受前存在文档不一致。
+具体 VAD、alignment、融合覆盖和 fallback 句界数值阈值不是架构常量。实现任务必须基于
+真实 CNBC/YouTube golden sample 建立版本化 QA policy，并把最终数值、样本和评测结果写入
+实现文档/配置；阈值变化会使相关缓存 stale。
 
-## 15. 参考
+## 15. 验证标准
+
+### 15.1 离线单元测试
+
+- 16 kHz mono PCM 音频计划与 provenance；
+- VAD 原视频时间映射与 chunk 重组；
+- raw/aligned ASR schema、整数毫秒、单调性、重叠和越界；
+- 有双侧锚点的少量插值与不可恢复区域失败；
+- exact、substitution、ASR-only、official-only、one-to-many、many-to-one；
+- official-only 局部 forced alignment 成功与失败；
+- chapter/speaker/annotation 不进入 spoken word timeline；
+- 缩写、小数、问句、speaker change、跨 ASR segment、长停顿和无标点长句；
+- speaker 为可选通用字段，缺失时序列化为 `null`；
+- 所有调整产生稳定日志事件，CLI 仅显示 warning/error 与汇总；
+- cache key 随相关输入、模型、配置或 policy 变化。
+
+### 15.2 application 测试
+
+- fake audio extractor、ASR、aligner、transcript aligner、sentence detector 下完整离线运行；
+- cache hit 不重复执行昂贵 provider；
+- 官网逐字稿变化只重做融合及下游；
+- 失败时保留 log/report/failed manifest，不发布 canonical；
+- 成功时 `source_alignment.json` 与 manifest 原子发布；
+- 未显式授权时不覆盖任何昂贵成功工件。
+
+### 15.3 golden/人工验收
+
+至少覆盖：
+
+- CNBC 清晰单人讲话；
+- CNBC 多 speaker 问答；
+- YouTube 老录音或噪声；
+- 人名、公司名、数字、百分比和货币；
+- 官网删口头语、ASR 漏词、官网新增/编辑内容；
+- 跨 ASR segment 的完整句子和一个 segment 内的多个句子。
+
+记录词时间误差、未对齐/插值比例、融合覆盖、冲突类型、句界 precision/recall 或等价
+人工指标、运行时间和峰值资源。完整离线 pytest 必须通过。
+
+## 16. 已决策与实现期参数
+
+以下架构问题已经关闭：
+
+- WhisperX 一体化、`large-v3`、`language=en`、`task=transcribe`；
+- pyannote VAD；
+- transcription 不使用 LLM；
+- 持久化 audio、VAD、raw ASR、aligned ASR、融合、日志、报告和 manifest；
+- 只持久化词级而非字符级时间；
+- 少量双侧锚定未对齐词可显式插值；
+- 结构化官网逐字稿、保留 ASR-only、声学验证 official-only；
+- 可证明等价的一对多/多对一折叠规则；
+- 本地句界、optional speaker、冗余 sentence 时间和枚举式 boundary provenance；
+- CLI 只展示 WARNING/ERROR 和汇总，详细事件进入日志文件。
+
+实现时仍需通过任务验收确定并锁定：
+
+- WhisperX、pyannote、alignment model 和 sentence detector 的具体版本与设备支持矩阵；
+- batch size、compute type、VAD/padding 参数；
+- normalization 字典和 n-gram/局部匹配阈值；
+- interpolation、融合覆盖和 fallback 句界发布阈值；
+- golden sample 的量化基线。
+
+这些是版本化运行参数和评测结论，不得改变本 ADR 的权威来源、失败语义或模块边界。
+
+## 17. 后果与风险
+
+- **收益**：官网文字质量和音频时间各取所长；YouTube 仍有完整本地降级路径；翻译获得完整
+  句子，字幕规划获得词级锚点；所有调整可审计且昂贵计算可分层复用。
+- **代价**：transcription 管线和持久化工件增加，WhisperX/pyannote/PyTorch 依赖较重，
+  首次模型下载和长视频资源消耗高。
+- **词时间非真值**：噪声、重叠讲话、数字和词表外字符仍可能漂移，必须依赖 QA 和人工
+  golden sample，而不能把 alignment score 当准确率。
+- **官网逐字稿非逐字真值**：错误融合会伪造内容，因此 official-only 必须声学验证，
+  ASR-only 默认保留。
+- **公开契约迁移**：现有 acquisition `chapters.json` 需要升级为结构化、版本化 schema；
+  下游必须只依赖 archive_core 公共 DTO。
+- **日志体积**：详细调整全部落盘，CLI 通过级别过滤避免刷屏；日志生命周期后续由统一
+  本地资产策略管理，不得自动删除生成资产。
+
+## 18. 参考
 
 - [OpenAI Whisper `word_timestamps` 实现](https://github.com/openai/whisper/blob/main/whisper/transcribe.py)
 - [WhisperX：词级时间与 forced alignment](https://arxiv.org/abs/2303.00747)
+- [WhisperX 项目与限制](https://github.com/m-bain/whisperX)
 - [spaCy sentence segmentation](https://spacy.io/usage/linguistic-features)
-- [NVIDIA NeMo punctuation and capitalization](https://docs.nvidia.com/nemo-framework/user-guide/24.07/nemotoolkit/nlp/punctuation_and_capitalization.html)

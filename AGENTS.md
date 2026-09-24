@@ -43,13 +43,19 @@
 
 ## 管线数据流（目标态）
 
-```
-acquisition ─→ media_download ─→ transcription ─→ srt_processing ─→ translation ─→ subtitle_rendering
-（网页抓取/         （yt-dlp）      （WhisperX）     （SRT 解析/        （OpenAI           （libass/
- 逐字稿）                            + 对齐）          分段/合并）        兼容翻译）         ffmpeg 烧录）
-        │
-        └────────────── archive_core：资产身份、路径、manifest.v1、溯源 ──────────────────────────────┘
-                orchestration（可恢复任务计划）· cli / webui（薄接口）· infrastructure（适配器）
+```text
+acquisition ─→ media_download ─→ transcription ── source_alignment.json ─┬─→ translation
+（网页抓取/         （yt-dlp）      （WhisperX + 词级对齐/句界）             │   （句级翻译）
+ 结构化逐字稿）                                                         │        │
+                                                                        │        ▼
+                                                                        └─→ srt_processing
+                                                         translation_result.json ─┘
+                                                                                │
+                                                                                ▼
+                                                               subtitle_rendering（libass/ffmpeg）
+
+archive_core：资产身份、路径、公共 schema、manifest、溯源
+orchestration：可恢复任务计划 · cli/webui：薄接口 · infrastructure：共享适配器
 ```
 
 各阶段状态：实现到 `media_download` 为止；其下游全部是脚手架。
@@ -59,9 +65,9 @@ acquisition ─→ media_download ─→ transcription ─→ srt_processing ─
 - `src/archive_core/` —— 共享领域原语：资产身份、规范文件名、路径策略、`manifest.v1`、溯源。
 - `src/acquisition/` —— 网页分析、爬虫、逐字稿提取、元数据规范化、抓取礼貌性规则。
 - `src/media_download/` —— 媒体 URL 解析、yt-dlp 下载编排、校验和/溯源采集。
-- `src/transcription/` —— 音频提取、ASR、词级/分段对齐、英文字幕。*（脚手架）*
-- `src/srt_processing/` —— SRT 解析/校验/分段、双语合并、保时序变换、QA。*（脚手架）*
-- `src/translation/` —— 翻译计划、分批、术语表/风格策略、服务适配器、翻译结果校验。*（脚手架）*
+- `src/transcription/` —— 音频提取、VAD、ASR、词级对齐、逐字稿融合、英文句界。*（脚手架）*
+- `src/srt_processing/` —— 结构化句子到 cue 的规划、SRT 投影/解析、双语合成与 QA。*（脚手架）*
+- `src/translation/` —— 完整英文句子翻译、分批、术语/风格策略、服务适配器与结果校验。*（脚手架）*
 - `src/subtitle_rendering/` —— SRT/ASS 样式、烧录渲染、ffmpeg 命令规划、渲染元数据。*（脚手架）*
 - `src/webui/` —— 本地评审 UI 边界、目录契约。*（脚手架）*
 - `src/cli/` —— 命令解析、面向人的命令、进度显示。*（脚手架）*

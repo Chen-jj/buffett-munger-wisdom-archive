@@ -130,7 +130,7 @@ stage 状态 = f(输入产物状态, 本 stage run manifest)
 ### 4.4 QA 门禁（每个 stage 的 verify）
 | Stage | 门禁 |
 |-------|------|
-| transcription | cue 序号连续、时间轴单调不重叠、覆盖率（静音间隙报告）、文本规范化 |
+| transcription | word 时间单调不重叠、sentence 连续全覆盖、逐字稿融合溯源、插值/冲突/fallback 门禁 |
 | translation | cue 数一致、时间轴逐条相等、说话人标记保留、术语表命中、行长（≤20 汉字）抽检 |
 | rendering | ffprobe 校验输出时长≈源视频、字幕流存在、文件完整性 |
 - 门禁失败 → `state=failed`，canonical 产物不落/标废，禁止 fallback 原文混入（修 P3）。
@@ -147,7 +147,7 @@ stage 状态 = f(输入产物状态, 本 stage run manifest)
 1. **Prompt 资源化**：`translation/prompts/zh-v2.md` + 术语表 `glossary.yaml`（人名/公司/口头禅），随 provenance 记录版本；diff prompt = 失效翻译缓存。
 2. **翻译记忆（TM）**：跨年份复用完全相同 cue 的译文（开场白、常见段子公司介绍重复率极高），再省一截成本。
 3. **LLM-as-judge 抽检**：翻译完成后按比例抽 N 条做"信达雅+术语"评分，低于阈值标记进 review 报告，不阻塞管线。
-4. **网页 transcript × ASR 融合（可选后期）**：用 ASR 词级时间戳对官方 transcript 做 forced alignment 式映射，得到"官方文本 + 精确时间轴"的英文字幕，修复 P10。作为 transcription 的对齐策略之一，而非硬编码。
+4. **网页 transcript × ASR 融合（Phase 1 已决策）**：按 ADR-0001 使用结构化官网逐字稿、保序文本对齐和局部 forced alignment，得到可追溯的“官网文字 + 音频时间”；无逐字稿的 YouTube 路径使用 aligned ASR 和本地句界。
 5. **说话人标注**：WhisperX 已有对齐能力，diarization 作为可选 provider，反哺翻译的说话人标记规则。
 6. **成本预估 dry-run**：`archive plan` 顺带估算 token 与时长（按历史 metrics），跑前知道要花多少钱、多久。
 
@@ -160,9 +160,10 @@ stage 状态 = f(输入产物状态, 本 stage run manifest)
 - 验收：单测覆盖；`ARCHIVE_OPENAI_API_KEY` 生效；无密钥泄漏进 git。
 
 ### Phase 1 — transcription 迁移
-- `domain`: AsrSegment/WordTiming/TimingPolicy；`application`: extract-audio/transcribe/emit-english-srt/verify；`infrastructure`: ffmpeg adapter、faster-whisper/whisperx adapter（可 mock）。
-- 持久化词级 JSON；修 P3 同源的"半成品 SRT"问题。
-- 验收：与 legacy `step2` 同输入 golden 对比；QA 单调性测试；离线 mock 测试。
+- 按 ADR-0001 实现 `audio → pyannote VAD → WhisperX large-v3 ASR → forced alignment → 可选官网逐字稿融合 → 本地句界`。
+- 持久化分层缓存/诊断工件，唯一 canonical 内容输出为 `source_alignment.json`；transcription 不生成 SRT、不使用 LLM。
+- 先升级 archive_core 公共契约与 acquisition 结构化 `chapters.json`，再按 `docs/tasks/README.md` 的依赖图实现各切片。
+- 验收：CNBC 有逐字稿和 YouTube 无逐字稿两条 golden 路径；word/sentence QA；详细日志与 manifest；离线 fake 测试。
 
 ### Phase 2 — srt_processing 迁移
 - 把散落在 step2/step3/tools_cli 的解析、规范化、分段、双语合并收拢为纯函数库。
@@ -191,7 +192,7 @@ stage 状态 = f(输入产物状态, 本 stage run manifest)
 1. **并行度**：session 级并行（同一年 morning/afternoon）几乎无风险，是否 Phase 5 就开？年份级并行受 crawl 礼貌间隔与 API 限流约束，建议后置。
 2. **翻译 provider**：主力 OpenAI 兼容 + 本地 Ollama 备选，缓存键已含 model，切换无损。是否需要多 provider A/B？
 3. **ASR 硬件路径**：macOS CPU（int8）目前可用但慢；是否预留 remote worker adapter（只在 infrastructure 层）？
-4. **web transcript 融合**（§5.4）做不做、何时做。
+4. **web transcript 融合**：已由 ADR-0001 决定纳入 Phase 1；具体模型版本、阈值和 golden 基线在实现任务中锁定。
 5. **旧产物回收**：存量 `output/` 如何补登 manifest（一次性 backfill 工具 vs 只管新产物）。
 
 ---
