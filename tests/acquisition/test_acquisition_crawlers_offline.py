@@ -24,7 +24,7 @@ import acquisition.infrastructure.cnbc as cnbc_module
 import acquisition.infrastructure.youtube as youtube_module
 
 
-FIXTURES = Path(__file__).parent / "fixtures"
+FIXTURES = Path(__file__).parents[1] / "fixtures"
 
 
 class StubHttpClient:

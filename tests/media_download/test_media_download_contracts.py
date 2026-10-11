@@ -38,7 +38,7 @@ from media_download.infrastructure import (
 import media_download.infrastructure.resolver as resolver_module
 
 
-FIXTURES = Path(__file__).parent / "fixtures"
+FIXTURES = Path(__file__).parents[1] / "fixtures"
 
 
 class StubHttpClient:
