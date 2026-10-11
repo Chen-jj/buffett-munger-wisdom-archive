@@ -6,7 +6,7 @@
 
 仓库正处于迁移中期。动手前先核实现实，不要假设某个模块能用。
 
-> 状态最后核对：2026-10-11 17:28 CST。**每次完成编码任务后，若实现状态或本文件中的事实发生变化，必须在同一次提交中更新本节（含核对时间）。**
+> 状态最后核对：2026-10-12 00:22 CST。**每次完成编码任务后，若实现状态或本文件中的事实发生变化，必须在同一次提交中更新本节（含核对时间）。**
 
 | 状态 | 模块 |
 |---|---|
@@ -14,9 +14,8 @@
 | 已实现 + 离线测试 + CNBC 真实集成测试 | `transcription` |
 | 仅脚手架（分层目录 + AGENTS.md，无代码） | `cli`、`orchestration`、`srt_processing`、`translation`、`subtitle_rendering`、`webui` |
 
-- 遗留管线（`run.py` step0–4 + Web 评审应用）已在提交 `cc9df50` 中删除。目前**没有 CLI 入口，管线无法端到端运行**。按 `docs/tasks/README.md` 的任务依赖图逐模块重建功能。
-- 当前技术入口：`docs/tasks/README.md`（任务依赖）和 `docs/decisions/`（已接受 ADR）。此前两份
-  路线图已由用户删除，不得恢复或继续把它们当作现行文档。
+- 遗留管线（`run.py` step0–4 + Web 评审应用）已在提交 `cc9df50` 中删除。目前**没有 CLI 入口，管线无法端到端运行**。ADR-0001 与其实现任务已完成并归档到 `docs/archive/`。
+- 当前技术入口是 `docs/decisions/` 中仍生效的 ADR。归档任务仅记录已完成工作，不再作为现行路线图；此前两份路线图已由用户删除，不得恢复。
 - 尚无 lint/typecheck/CI。离线 pytest 套件是唯一的验证门槛；另有少量 `live` 标记测试，包括
   acquisition→media_download 真实网络测试，以及 `RUN_TRANSCRIPTION_INTEGRATION=1` 门控的真实
   WhisperX 集成测试。本地 CNBC 2000 上午场第 3 节样本可从空 `output/` 自动准备，并在唯一的
@@ -133,6 +132,6 @@ fd '^AGENTS\.md$' src --max-depth 3 | sort
 ## 补充文档
 
 - 模块指南：`src/<module>/AGENTS.md`（11 份）—— 动某个模块前先读对应那份。
-- 技术任务入口：`docs/tasks/README.md`；已接受决策：`docs/decisions/`。
+- 已接受决策：`docs/decisions/`；已完成的 ADR 与任务：`docs/archive/`。
 - `README.md` 是面向人的快速上手（安装、工具链设置）；架构规则在本文件和各模块指南中。
 - 规则冲突时的优先级：`src/<module>/AGENTS.md` > 本文件 > `docs/` 规划文档。但本文件「关键约束」中的安全规则始终有效，模块指南不得覆盖。

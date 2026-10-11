@@ -1,6 +1,6 @@
 # ADR-0001：transcription 采用 WhisperX 词级对齐、官网逐字稿融合与本地句界恢复
 
-- 状态：已接受，待实现
+- 状态：已完成
 - 首次提出：2026-09-14
 - 接受日期：2026-09-24
 - 影响模块：`archive_core`、`acquisition`、`transcription`、`infrastructure`

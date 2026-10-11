@@ -4,7 +4,7 @@
 
 `transcription` 负责把已验证的英文源视频转换为带词级时间锚点和完整英文句界的
 `source_alignment.json`。详细决策见
-`docs/decisions/0001-transcription-sentence-level-alignment.md`。
+`docs/archive/adr-0001-transcription-sentence-level-alignment/decision.md`。
 
 ## 职责
 
@@ -141,8 +141,8 @@
   ASR segment 可跨句也可被一句跨越；任何切分都不得使用字幕行宽、阅读速度或 cue 时长。
 - 无标点异常长文本只由 `sentence-boundary.v1` fallback policy 处理。fallback 数量/比例超过
   policy 门禁时保留 boundary findings 与失败事件，但不得发布 `source_alignment.json`。
-  当前 policy 数值是 TR-05 的版本化离线基线；TR-06 golden 评测若调整数值必须升级 policy 并使
-  sentence cache stale。
+  当前 policy 数值是 TR-05 的版本化离线基线；如未来 orchestration 集成验收调整数值，必须升级
+  policy 并使 sentence cache stale。
 - canonical 发布前必须构造并 round-trip `archive_core.interfaces.SourceAlignmentDTO`，让公共 DTO
   校验稳定 ID、整数毫秒、时间单调、连续且恰好一次的 sentence 覆盖、冗余首尾时间和可重建文字。
   `speaker_label` 只来自映射后的结构化官网 token；identity/YouTube 路径保持 `null`。
@@ -172,7 +172,7 @@
 - 真实模型测试必须显式门控；当前模块只维护 CNBC live integration，完整跨模块管线由未来
   orchestration 集成测试覆盖。
 
-## 当前实现与 integration 状态（2026-10-11）
+## 当前实现与 integration 状态（2026-10-12）
 
 - TR-01～TR-06 的 application workflow、分层 cache、manifest、失败保留与 provider-neutral
   command/result 已实现，并由 fake provider 离线测试覆盖；`source_alignment.json` 可作为

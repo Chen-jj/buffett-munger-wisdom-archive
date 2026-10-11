@@ -5,7 +5,7 @@
 - 影响模块：`archive_core`
 - 依赖：无
 - 被依赖：`AQ-01`、`TR-01`、`TR-02`
-- 对应决策：[ADR-0001](../decisions/0001-transcription-sentence-level-alignment.md) §4、§5、§10
+- 对应决策：[ADR-0001](../decision.md) §4、§5、§10
 - 状态：已实现
 
 ## 目标

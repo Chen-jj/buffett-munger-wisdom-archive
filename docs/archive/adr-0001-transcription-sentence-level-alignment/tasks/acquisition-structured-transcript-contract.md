@@ -5,7 +5,7 @@
 - 影响模块：`acquisition`、`archive_core` 公共 DTO 的消费
 - 依赖：`AC-01`
 - 被依赖：`TR-04`、`TR-06`
-- 对应决策：[ADR-0001](../decisions/0001-transcription-sentence-level-alignment.md) §4.1
+- 对应决策：[ADR-0001](../decision.md) §4.1
 - 状态：已实现
 
 ## 背景

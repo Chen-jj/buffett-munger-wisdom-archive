@@ -5,7 +5,7 @@
 - 影响模块：`transcription`
 - 依赖：`TR-03`、`AQ-01`
 - 被依赖：`TR-05`、`TR-06`
-- 对应决策：[ADR-0001](../decisions/0001-transcription-sentence-level-alignment.md) §8
+- 对应决策：[ADR-0001](../decision.md) §8
 - 状态：已实现
 
 ## 目标

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from scripts.prepare_cnbc_transcription_integration import (
+from tests.transcription.live_fixture import (
     PreparationError,
     parse_timestamp,
     select_hls_segments,

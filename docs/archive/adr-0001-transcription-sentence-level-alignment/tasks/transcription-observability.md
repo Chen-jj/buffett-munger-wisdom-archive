@@ -5,7 +5,7 @@
 - 影响模块：`transcription`、`infrastructure` 日志适配器
 - 依赖：`AC-01`
 - 被依赖：`TR-02`～`TR-06`
-- 对应决策：[ADR-0001](../decisions/0001-transcription-sentence-level-alignment.md) §11
+- 对应决策：[ADR-0001](../decision.md) §11
 - 状态：已实现
 
 ## 目标

@@ -5,7 +5,7 @@
 - 影响模块：`transcription`，与 `media_download`/`acquisition` 仅通过公共工件集成
 - 依赖：`MD-01`、`AQ-01`、`TR-01`、`TR-02`、`TR-03`、`TR-04`、`TR-05`
 - 被依赖：translation、srt_processing、orchestration 后续阶段
-- 对应决策：[ADR-0001](../decisions/0001-transcription-sentence-level-alignment.md) §13～§15
+- 对应决策：[ADR-0001](../decision.md) §13～§15
 - 状态：已完成——工作流、缓存、manifest、离线测试和 CNBC 真实 integration 均已验收
 
 > 当前范围（2026-10-11）：CNBC 2000 上午场第 3 节样本可从空 `output/` 自动准备，在唯一的

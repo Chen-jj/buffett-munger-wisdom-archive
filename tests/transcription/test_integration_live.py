@@ -10,14 +10,14 @@ import pytest
 from archive_core.application import build_asset_workspace
 from archive_core.domain import AssetId, ArtifactType, canonical_filename
 from archive_core.interfaces import SourceAlignmentDTO
-from scripts.prepare_cnbc_transcription_integration import (
+from tests.transcription.live_fixture import (
     DEFAULT_OUTPUT_ROOT,
     INTEGRATION_PLAN_FILENAME,
     INTEGRATION_SAMPLE_FILENAME,
     parse_args as parse_preparation_args,
     prepare,
 )
-from scripts.run_transcription_golden import load_json, main
+from tests.transcription.live_runner import load_json, main
 from transcription.application import AudioVadAsrCacheManifest
 from transcription.domain import (
     AlignedAsrArtifact,
@@ -84,8 +84,6 @@ def test_real_cnbc_transcription_pipeline_produces_every_artifact(
         [
             "--plan",
             str(plan_path),
-            "--allow-partial-plan",
-            "--integration-only",
         ]
     ) == 0
     captured_stdout = capsys.readouterr().out

@@ -5,7 +5,7 @@
 - 影响模块：`transcription`、`archive_core` 公共 DTO 的消费
 - 依赖：`TR-03`、`TR-04`
 - 被依赖：`TR-06`、translation、srt_processing 后续任务
-- 对应决策：[ADR-0001](../decisions/0001-transcription-sentence-level-alignment.md) §9、§10
+- 对应决策：[ADR-0001](../decision.md) §9、§10
 - 状态：已实现 + 离线测试（2026-10-08）
 
 ## 目标
