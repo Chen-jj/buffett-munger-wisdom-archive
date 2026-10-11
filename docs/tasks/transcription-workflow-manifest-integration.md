@@ -1,4 +1,4 @@
-# 技术任务：transcription 工作流组装、缓存、manifest 与 golden 验收
+# 技术任务：transcription 工作流、缓存、manifest 与 integration 验收
 
 - 任务 ID：`TR-06`
 - 优先级：`P3`
@@ -6,16 +6,18 @@
 - 依赖：`MD-01`、`AQ-01`、`TR-01`、`TR-02`、`TR-03`、`TR-04`、`TR-05`
 - 被依赖：translation、srt_processing、orchestration 后续阶段
 - 对应决策：[ADR-0001](../decisions/0001-transcription-sentence-level-alignment.md) §13～§15
-- 状态：进行中——工作流/缓存/manifest 与离线验收已实现；真实 WhisperX golden 待运行
+- 状态：已完成——工作流、缓存、manifest、离线测试和 CNBC 真实 integration 均已验收
 
-> Golden 阻塞（2026-10-08）：仓库没有获准使用的 CNBC/YouTube 音视频样本，本机没有 HF
-> token，默认 Hugging Face/Torch/Whisper 模型缓存也不存在。已提供显式 `live` 门控入口、候选
-> 版本化 QA policy、人工 reference 和运行记录模板；未联网、未下载模型、未伪造评测结果。
+> 当前范围（2026-10-11）：CNBC 2000 上午场第 3 节样本可从空 `output/` 自动准备，在唯一的
+> integration workspace 用真实 WhisperX/pyannote/alignment model 跑通至
+> `source_alignment.json`。第二次运行按 manifest 复用全部 transcription 工件。
+> reference-based Golden Live 已从 transcription 移除；未来完整跨模块管线由 orchestration
+> 集成测试负责。
 
 ## 目标
 
-把已验证的 transcription 切片组装为可恢复、manifest 驱动、可真实评测的完整阶段，并锁定
-实现期模型版本、参数和 QA 门禁。
+把已验证的 transcription 切片组装为可恢复、manifest 驱动、可用真实 CNBC 输入验证的完整阶段，
+并锁定实现期模型版本、参数和 QA 门禁。
 
 ## 实现范围
 
@@ -26,25 +28,23 @@
 - 失败时保留 `transcription.log`、report 和 failed manifest，不发布/替换 canonical。
 - 默认禁止覆盖或删除成功昂贵工件；显式用户授权才允许替换。
 - 汇总 CLI-facing 结果，只暴露 WARNING/ERROR 和阶段摘要。
-- 建立真实 CNBC/YouTube golden sample 与手工检查记录，锁定版本化 QA policy。
-- 更新根状态/模块指南和路线图中因实现完成而变化的事实。
+- 提供显式门控的 CNBC live integration；默认测试保持离线。
+- 更新根状态和模块指南中因实现完成而变化的事实。
 
-## Golden 样本最低覆盖
+## Live integration 范围
 
-- CNBC 清晰单人讲话和多 speaker 问答；
-- YouTube 老录音或噪声；
-- 人名、公司名、数字、百分比和货币；
-- 官网删口头语、ASR 漏词、官网新增或编辑文字；
-- 跨 segment 完整句和单 segment 多句。
-
-记录：词时间误差、未对齐/插值比例、融合覆盖、冲突类型、句界人工指标、运行时间、峰值
-资源和所用硬件。
+- CNBC 真实视频片段和官网逐字稿；
+- fixture preparation 生成 canonical acquisition/media 输入，但不冒充 orchestration 测试；
+- 真实 ffmpeg、pyannote、WhisperX ASR、forced alignment、官网融合和句界发布；
+- 逐一解析所有 canonical 中间产物；
+- 首次运行验证零 transcription cache hit；第二次运行验证六层 cache 全命中。
 
 ## 非目标
 
 - 不实现 translation、subtitle cue、SRT 或 rendering。
 - 不引入数据库、后台 worker 或云持久化。
 - 不在默认离线测试中下载模型或访问网络。
+- 不在 transcription 模块维护 reference-based Golden Live 或整条跨模块管线测试。
 
 ## 验收标准
 
@@ -54,5 +54,6 @@
 - cache hit 不重复运行昂贵 provider；文件存在但 manifest/checksum 不合法时不会命中。
 - 中途失败后重跑复用所有已验证上游工件。
 - 未授权替换、部分写入和坏 checksum 均不会破坏已有成功 canonical。
-- 至少一次显式门控的真实 WhisperX golden 运行形成评测记录；默认测试仍完全离线。
-- `python -m pytest tests/ -q -m "not live"` 全绿。
+- `RUN_TRANSCRIPTION_INTEGRATION=1` 从空 `output/` 生成输入及全部 transcription 工件。
+- 相同 live 测试再次运行时六层 transcription cache 全命中。
+- `.venv/bin/python -m pytest tests/ -q` 全绿，默认跳过 live 测试。

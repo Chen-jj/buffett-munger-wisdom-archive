@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any, Mapping
+import wave
 
 from infrastructure.infrastructure.filesystem import write_json_file
 from infrastructure.infrastructure.process import (
@@ -32,11 +33,13 @@ from transcription.domain import (
     VadArtifact,
     VadConfig,
     VadRegion,
+    tokenize_surface_text,
 )
 
 
 ProcessRunner = Callable[..., ProcessResult]
 AlignmentModelResolver = Callable[[str, str], str]
+AudioLoader = Callable[[str], Mapping[str, Any]]
 
 
 @dataclass(frozen=True)
@@ -135,10 +138,12 @@ class PyannoteVadDetector:
         pyannote_version: str,
         auth_token: str | None = None,
         pipeline_loader: Callable[..., Any] | None = None,
+        audio_loader: AudioLoader | None = None,
     ) -> None:
         self._identity = ProviderIdentity("pyannote", pyannote_version)
         self._auth_token = auth_token
         self._pipeline_loader = pipeline_loader
+        self._audio_loader = audio_loader
         self._pipelines: dict[tuple[str, str, float, float], Any] = {}
 
     @property
@@ -149,7 +154,8 @@ class PyannoteVadDetector:
         self, audio_path: str, config: VadConfig
     ) -> tuple[VadRegion, ...]:
         pipeline = self._pipeline(config)
-        output = pipeline(audio_path)
+        loader = self._audio_loader or self._default_audio_loader
+        output = pipeline(loader(audio_path))
         timeline = output.get_timeline().support()
         regions = tuple(
             VadRegion(
@@ -178,7 +184,12 @@ class PyannoteVadDetector:
         )
         if hasattr(pipeline, "instantiate"):
             pipeline.instantiate(
-                {"onset": float(config.onset), "offset": float(config.offset)}
+                {
+                    "onset": float(config.onset),
+                    "offset": float(config.offset),
+                    "min_duration_on": 0.0,
+                    "min_duration_off": 0.0,
+                }
             )
         self._pipelines[cache_key] = pipeline
         return pipeline
@@ -188,7 +199,8 @@ class PyannoteVadDetector:
         model: str, *, model_version: str, auth_token: str | None
     ) -> Any:
         try:
-            from pyannote.audio import Pipeline
+            from pyannote.audio import Model
+            from pyannote.audio.pipelines import VoiceActivityDetection
         except ImportError as error:
             raise RuntimeError("pyannote.audio is required for VAD") from error
         kwargs: dict[str, Any] = {}
@@ -196,7 +208,34 @@ class PyannoteVadDetector:
             kwargs["revision"] = model_version
         if auth_token is not None:
             kwargs["token"] = auth_token
-        return Pipeline.from_pretrained(model, **kwargs)
+        segmentation = Model.from_pretrained(model, **kwargs)
+        if segmentation is None:
+            raise RuntimeError(f"pyannote model could not be loaded: {model}")
+        return VoiceActivityDetection(segmentation=segmentation)
+
+    @staticmethod
+    def _default_audio_loader(audio_path: str) -> Mapping[str, Any]:
+        try:
+            import torch
+        except ImportError as error:
+            raise RuntimeError("torch is required for pyannote VAD") from error
+        try:
+            with wave.open(audio_path, "rb") as source:
+                channels = source.getnchannels()
+                sample_width = source.getsampwidth()
+                sample_rate = source.getframerate()
+                frames = source.readframes(source.getnframes())
+        except (OSError, wave.Error) as error:
+            raise RuntimeError(f"cannot read canonical WAV audio: {audio_path}") from error
+        if channels != 1 or sample_width != 2:
+            raise RuntimeError("pyannote VAD requires mono signed 16-bit PCM WAV audio")
+        waveform = (
+            torch.frombuffer(bytearray(frames), dtype=torch.int16)
+            .to(torch.float32)
+            .reshape(1, -1)
+            / 32768.0
+        )
+        return {"waveform": waveform, "sample_rate": sample_rate}
 
 
 class WhisperXAsrEngine:
@@ -331,18 +370,46 @@ class WhisperXForcedAligner:
         word_segments = result.get("word_segments", [])
         if not isinstance(word_segments, list):
             raise RuntimeError("WhisperX alignment word_segments must be an array")
-        if len(word_segments) != len(tokens):
+        provider_words: list[tuple[str, int | None, int | None, float | None]] = []
+        for provider_word in word_segments:
+            text = provider_word.get("word")
+            if not isinstance(text, str):
+                raise RuntimeError("WhisperX aligned word text must be a string")
+            surfaces = tokenize_surface_text(text) if text.strip() else ()
+            if not surfaces:
+                continue
+            start = provider_word.get("start")
+            end = provider_word.get("end")
+            if (start is None) != (end is None):
+                raise RuntimeError("WhisperX returned a partially timed aligned word")
+            if start is None:
+                spans = ((None, None),) * len(surfaces)
+                score = None
+            else:
+                start_ms = _seconds_to_ms(start)
+                end_ms = _seconds_to_ms(end)
+                if end_ms - start_ms < len(surfaces):
+                    raise RuntimeError("WhisperX compound word timing is too short")
+                spans = tuple(
+                    (
+                        start_ms + (end_ms - start_ms) * index // len(surfaces),
+                        start_ms
+                        + (end_ms - start_ms) * (index + 1) // len(surfaces),
+                    )
+                    for index in range(len(surfaces))
+                )
+                score = float(provider_word.get("score", 1.0))
+            provider_words.extend(
+                (surface, word_start, word_end, score)
+                for surface, (word_start, word_end) in zip(surfaces, spans)
+            )
+        if len(provider_words) != len(tokens):
             raise RuntimeError(
                 "WhisperX alignment did not preserve raw lexical word coverage"
             )
         candidates: list[AlignmentCandidate] = []
-        for token, provider_word in zip(tokens, word_segments):
-            text = provider_word.get("word")
-            if not isinstance(text, str):
-                raise RuntimeError("WhisperX aligned word text must be a string")
-            start = provider_word.get("start")
-            end = provider_word.get("end")
-            if start is None and end is None:
+        for token, (text, start_ms, end_ms, score) in zip(tokens, provider_words):
+            if start_ms is None:
                 candidates.append(
                     AlignmentCandidate(
                         raw_word_id=token.id,
@@ -355,16 +422,14 @@ class WhisperXForcedAligner:
                     )
                 )
                 continue
-            if start is None or end is None:
-                raise RuntimeError("WhisperX returned a partially timed aligned word")
             candidates.append(
                 AlignmentCandidate(
                     raw_word_id=token.id,
                     segment_id=token.segment_id,
                     text=text.strip(),
-                    start_ms=_seconds_to_ms(start),
-                    end_ms=_seconds_to_ms(end),
-                    alignment_score=provider_word.get("score"),
+                    start_ms=start_ms,
+                    end_ms=end_ms,
+                    alignment_score=score,
                 )
             )
         return tuple(candidates)

@@ -6,20 +6,23 @@
 
 仓库正处于迁移中期。动手前先核实现实，不要假设某个模块能用。
 
-> 状态最后核对：2026-10-08 21:27 CST。**每次完成编码任务后，若实现状态或本文件中的事实发生变化，必须在同一次提交中更新本节（含核对时间）。**
+> 状态最后核对：2026-10-11 17:28 CST。**每次完成编码任务后，若实现状态或本文件中的事实发生变化，必须在同一次提交中更新本节（含核对时间）。**
 
 | 状态 | 模块 |
 |---|---|
 | 已实现 + 离线测试 | `archive_core`、`acquisition`、`media_download`、`infrastructure` |
-| 已实现 + 离线测试；真实 golden 待运行 | `transcription` |
+| 已实现 + 离线测试 + CNBC 真实集成测试 | `transcription` |
 | 仅脚手架（分层目录 + AGENTS.md，无代码） | `cli`、`orchestration`、`srt_processing`、`translation`、`subtitle_rendering`、`webui` |
 
 - 遗留管线（`run.py` step0–4 + Web 评审应用）已在提交 `cc9df50` 中删除。目前**没有 CLI 入口，管线无法端到端运行**。按 `docs/tasks/README.md` 的任务依赖图逐模块重建功能。
 - 当前技术入口：`docs/tasks/README.md`（任务依赖）和 `docs/decisions/`（已接受 ADR）。此前两份
   路线图已由用户删除，不得恢复或继续把它们当作现行文档。
 - 尚无 lint/typecheck/CI。离线 pytest 套件是唯一的验证门槛；另有少量 `live` 标记测试，包括
-  acquisition→media_download 真实网络测试，以及 `RUN_TRANSCRIPTION_GOLDEN=1` 门控的真实
-  WhisperX golden。后者尚未运行：当前缺获准使用的媒体样本、HF token 和本地模型缓存。
+  acquisition→media_download 真实网络测试，以及 `RUN_TRANSCRIPTION_INTEGRATION=1` 门控的真实
+  WhisperX 集成测试。本地 CNBC 2000 上午场第 3 节样本可从空 `output/` 自动准备，并在唯一的
+  integration workspace 跑通至 `source_alignment.json`；第二次运行按 manifest 复用全部
+  transcription 工件。transcription 不再提供 reference-based Golden Live 入口；未来全管线
+  连通性由 orchestration 集成测试负责。
 - `webapp/app.db` 是已被 gitignore 的遗留残留，忽略它。
 
 ## 开工规则
@@ -60,8 +63,8 @@ archive_core：资产身份、路径、公共 schema、manifest、溯源
 orchestration：可恢复任务计划 · cli/webui：薄接口 · infrastructure：共享适配器
 ```
 
-各阶段状态：实现到 `transcription` 为止；transcription 已通过离线测试但真实 golden 尚待，
-因此不能视为完全验收。其下游仍是脚手架。
+各阶段状态：实现到 `transcription` 为止；transcription 已通过离线测试与当前 CNBC 真实集成
+验收。其下游仍是脚手架。
 
 ## 模块地图
 
@@ -69,7 +72,7 @@ orchestration：可恢复任务计划 · cli/webui：薄接口 · infrastructure
 - `src/acquisition/` —— 网页分析、爬虫、逐字稿提取、元数据规范化、抓取礼貌性规则。
 - `src/media_download/` —— 媒体 URL 解析、yt-dlp 下载编排、校验和/溯源采集。
 - `src/transcription/` —— 音频提取、VAD、ASR、词级对齐、逐字稿融合、英文句界。*（已实现 +
-  离线测试；真实 golden 待运行）*
+  离线测试 + CNBC 真实集成测试）*
 - `src/srt_processing/` —— 结构化句子到 cue 的规划、SRT 投影/解析、双语合成与 QA。*（脚手架）*
 - `src/translation/` —— 完整英文句子翻译、分批、术语/风格策略、服务适配器与结果校验。*（脚手架）*
 - `src/subtitle_rendering/` —— SRT/ASS 样式、烧录渲染、ffmpeg 命令规划、渲染元数据。*（脚手架）*

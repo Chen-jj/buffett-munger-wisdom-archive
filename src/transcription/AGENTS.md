@@ -75,8 +75,9 @@
   `AudioVadAsrPolicy(overwrite=True)` 时才可替换；有效上游 cache 仍应复用。
 - provider-specific 模型加载只在 infrastructure adapter：WhisperX production 固定
   `large-v3` 并显式使用 pyannote VAD。`PyannoteVadDetector` 和 `WhisperXAsrEngine` 都在首次
-  调用时才加载模型；首次真实运行可能下载模型文件，应复用本地模型缓存。默认测试必须注入
-  fake/loader，不联网、不加载模型。
+  调用时才加载模型；pyannote 4 使用固定 revision 的 segmentation model 组装 VAD，并从 canonical
+  PCM WAV 预载内存 waveform，避免依赖 torchcodec 解码。首次真实运行可能下载模型文件，应复用
+  本地模型缓存。默认测试必须注入 fake/loader，不联网、不加载模型。
 
 ## Forced alignment 契约
 
@@ -168,18 +169,23 @@
 - provider、ffmpeg、文件系统与日志均通过可注入端口离线 fake。
 - 单元测试覆盖时间轴、插值、融合映射、speaker、句界、日志和 cache stale 传播。
 - 默认 pytest 不访问网络、不运行 ffmpeg、不加载 WhisperX/pyannote 模型。
-- 真实模型测试必须显式门控，并使用 CNBC/YouTube golden sample 记录量化结果。
+- 真实模型测试必须显式门控；当前模块只维护 CNBC live integration，完整跨模块管线由未来
+  orchestration 集成测试覆盖。
 
-## 当前实现与 golden 状态（2026-10-08）
+## 当前实现与 integration 状态（2026-10-11）
 
 - TR-01～TR-06 的 application workflow、分层 cache、manifest、失败保留与 provider-neutral
   command/result 已实现，并由 fake provider 离线测试覆盖；`source_alignment.json` 可作为
   transcription 的 canonical 输出，但仓库仍没有面向人的 CLI 入口。
-- 真实入口是 `scripts/run_transcription_golden.py`；默认不运行，真实执行同时要求
-  `RUN_TRANSCRIPTION_GOLDEN=1`、完成的本地 plan、获准使用的三类样本和 HF token，或显式
-  `HF_HUB_OFFLINE=1` 且模型已完整缓存。入口要求 cold workspace，永不启用 overwrite。
-- 候选 policy、plan/reference/record 模板和运行说明位于 `docs/golden/transcription/`。记录必须
-  包含 provider/model/sentence detector 版本、设备和参数、词时间误差、未对齐/插值、融合覆盖、
-  冲突类型、句界 precision/recall、耗时和峰值资源；token 值不得进入记录。
-- 真实 golden 尚未完成：当前仓库无媒体样本，本机无 HF token 和模型缓存。本状态下不得声称
-  TR-06 完全验收；不得用 fake 结果或空模板代替真实运行记录。
+- live 入口是 `tests/transcription/test_integration_live.py`；默认跳过，设置
+  `RUN_TRANSCRIPTION_INTEGRATION=1` 后，从空 `output/` 自动准备 CNBC canonical 上游输入并运行
+  真实 WhisperX。准备步骤使用 acquisition/media adapter 生成 fixture，不代表完整 orchestration。
+- 所有输入和 transcription 工件统一保存在
+  `output/transcription-integration/cnbc_2000_morning/`；第二次运行必须通过 manifest 命中 audio、
+  VAD、raw ASR、alignment、fusion 和 source alignment 六层缓存。
+- CNBC integration 已真实完成：gitignore 的 2000 上午场第 3 节 `11:48`～`21:40` 样本从
+  `video.mp4` 跑到 `source_alignment.json`，产出 1,544 words、94 sentences、97.28% 官网词覆盖，
+  时间轴单调且 report succeeded。实跑同时验证了固定 revision 模型、本地 HF 登录、NLTK 数据和
+  断点 cache；`tests/transcription/test_integration_live.py` 验证所有 canonical 中间产物可解析。
+- 当前 CNBC-only 连通性验收已完成。transcription 的 reference-based Golden Live 入口已移除；
+  integration 输出不是人工真值，未来全管线连通性由 orchestration 集成测试负责。

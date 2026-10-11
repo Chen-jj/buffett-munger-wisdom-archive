@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the explicitly gated real WhisperX transcription golden evaluation."""
+"""Run the explicitly gated real WhisperX integration or golden evaluation."""
 
 from __future__ import annotations
 
@@ -62,10 +62,12 @@ from transcription.infrastructure import (
 
 
 PLAN_SCHEMA = "transcription.golden-plan.v1"
+INTEGRATION_PLAN_SCHEMA = "transcription.integration-plan.v1"
 REFERENCE_SCHEMA = "transcription.golden-reference.v1"
 RECORD_SCHEMA = "transcription.golden-run-record.v1"
 POLICY_SCHEMA = "transcription.golden-qa-policy.v1"
 LIVE_GATE_ENV = "RUN_TRANSCRIPTION_GOLDEN"
+INTEGRATION_LIVE_GATE_ENV = "RUN_TRANSCRIPTION_INTEGRATION"
 PLAN_ENV = "TRANSCRIPTION_GOLDEN_PLAN"
 TOKEN_ENV_NAMES = ("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN")
 REQUIRED_SAMPLE_KINDS = {
@@ -116,17 +118,36 @@ def load_json(path: Path) -> Mapping[str, Any]:
     return _object(data, str(path))
 
 
-def require_live_gate(environment: Mapping[str, str]) -> None:
-    if environment.get(LIVE_GATE_ENV) != "1":
+def hugging_face_token(environment: Mapping[str, str]) -> str | None:
+    token = next(
+        (environment[name] for name in TOKEN_ENV_NAMES if environment.get(name)),
+        None,
+    )
+    if token is not None:
+        return token
+    try:
+        from huggingface_hub import get_token
+    except ImportError:
+        return None
+    return get_token()
+
+
+def require_live_gate(
+    environment: Mapping[str, str],
+    *,
+    cached_token_present: bool = False,
+    gate_env: str = LIVE_GATE_ENV,
+) -> None:
+    if environment.get(gate_env) != "1":
         raise GoldenConfigurationError(
-            f"real golden execution requires explicit {LIVE_GATE_ENV}=1"
+            f"real execution requires explicit {gate_env}=1"
         )
     has_token = any(environment.get(name) for name in TOKEN_ENV_NAMES)
     offline_cache = environment.get("HF_HUB_OFFLINE") == "1"
-    if not has_token and not offline_cache:
+    if not has_token and not cached_token_present and not offline_cache:
         raise GoldenConfigurationError(
-            "set HF_TOKEN/HUGGING_FACE_HUB_TOKEN, or set HF_HUB_OFFLINE=1 only "
-            "after populating the required local model cache"
+            "run `hf auth login`, set HF_TOKEN/HUGGING_FACE_HUB_TOKEN, or set "
+            "HF_HUB_OFFLINE=1 only after populating the required local model cache"
         )
 
 
@@ -159,10 +180,19 @@ def validate_policy(policy: Mapping[str, Any]) -> None:
 
 
 def validate_plan(
-    plan: Mapping[str, Any], policy: Mapping[str, Any], plan_path: Path
+    plan: Mapping[str, Any],
+    policy: Mapping[str, Any],
+    plan_path: Path,
+    *,
+    require_complete: bool = True,
+    require_reference: bool = True,
+    require_cold_workspace: bool = True,
 ) -> tuple[Mapping[str, Any], ...]:
-    if plan.get("schema_version") != PLAN_SCHEMA:
-        raise GoldenConfigurationError("unsupported golden plan schema")
+    supported_plan_schemas = {PLAN_SCHEMA}
+    if not require_reference:
+        supported_plan_schemas.add(INTEGRATION_PLAN_SCHEMA)
+    if plan.get("schema_version") not in supported_plan_schemas:
+        raise GoldenConfigurationError("unsupported transcription plan schema")
     _text(plan.get("run_id"), "plan.run_id")
     runtime = _object(plan.get("runtime"), "plan.runtime")
     _text(runtime.get("device"), "plan.runtime.device")
@@ -212,12 +242,19 @@ def validate_plan(
         _require_file(
             workspace / canonical_filename(ArtifactType.SOURCE_VIDEO), "source video"
         )
-        reference_path = _resolve_path(
-            plan_path,
-            _text(sample.get("reference_path"), f"{prefix}.reference_path"),
-        )
-        reference = load_json(reference_path)
-        validate_reference(reference, sample_id)
+        if require_reference:
+            reference_path = _resolve_path(
+                plan_path,
+                _text(sample.get("reference_path"), f"{prefix}.reference_path"),
+            )
+            reference = load_json(reference_path)
+            validate_reference(
+                reference,
+                sample_id,
+                minimum_word_timings=int(
+                    policy["thresholds"]["minimum_annotated_word_timings_per_sample"]
+                ),
+            )
         chapters_sha256 = sample.get("chapters_sha256")
         chapters_path = workspace / canonical_filename(ArtifactType.CHAPTERS)
         if chapters_sha256 is None:
@@ -228,40 +265,52 @@ def validate_plan(
         else:
             _text(chapters_sha256, f"{prefix}.chapters_sha256")
             _require_file(chapters_path, "chapters")
-        for artifact_type in (
-            ArtifactType.SOURCE_AUDIO,
-            ArtifactType.VAD,
-            ArtifactType.RAW_ASR,
-            ArtifactType.ALIGNED_ASR,
-            ArtifactType.TRANSCRIPT_FUSION,
-            ArtifactType.SOURCE_ALIGNMENT,
-            ArtifactType.TRANSCRIPTION_MANIFEST,
-        ):
-            path = workspace / canonical_filename(artifact_type)
-            if path.exists():
-                raise GoldenConfigurationError(
-                    f"{sample_id}: golden runs require a cold workspace; found {path}"
-                )
-    missing_kinds = REQUIRED_SAMPLE_KINDS - kinds
-    if missing_kinds:
-        raise GoldenConfigurationError(
-            f"golden plan is missing sample kinds: {sorted(missing_kinds)}"
-        )
-    required_tags = set(policy["required_coverage_tags"])
-    missing_tags = required_tags - tags
-    if missing_tags:
-        raise GoldenConfigurationError(
-            f"golden plan is missing coverage tags: {sorted(missing_tags)}"
-        )
+        if require_cold_workspace:
+            for artifact_type in (
+                ArtifactType.SOURCE_AUDIO,
+                ArtifactType.VAD,
+                ArtifactType.RAW_ASR,
+                ArtifactType.ALIGNED_ASR,
+                ArtifactType.TRANSCRIPT_FUSION,
+                ArtifactType.SOURCE_ALIGNMENT,
+                ArtifactType.TRANSCRIPTION_MANIFEST,
+            ):
+                path = workspace / canonical_filename(artifact_type)
+                if path.exists():
+                    raise GoldenConfigurationError(
+                        f"{sample_id}: golden runs require a cold workspace; found {path}"
+                    )
+    if require_complete:
+        missing_kinds = REQUIRED_SAMPLE_KINDS - kinds
+        if missing_kinds:
+            raise GoldenConfigurationError(
+                f"golden plan is missing sample kinds: {sorted(missing_kinds)}"
+            )
+        required_tags = set(policy["required_coverage_tags"])
+        missing_tags = required_tags - tags
+        if missing_tags:
+            raise GoldenConfigurationError(
+                f"golden plan is missing coverage tags: {sorted(missing_tags)}"
+            )
     return samples
 
 
-def validate_reference(reference: Mapping[str, Any], sample_id: str) -> None:
+def validate_reference(
+    reference: Mapping[str, Any],
+    sample_id: str,
+    *,
+    minimum_word_timings: int = 1,
+) -> None:
     if reference.get("schema_version") != REFERENCE_SCHEMA:
         raise GoldenConfigurationError(f"{sample_id}: unsupported reference schema")
     if reference.get("sample_id") != sample_id:
         raise GoldenConfigurationError(f"{sample_id}: reference sample_id mismatch")
     timings = _array(reference.get("word_timings"), "reference.word_timings")
+    if len(timings) < minimum_word_timings:
+        raise GoldenConfigurationError(
+            f"{sample_id}: reference requires at least "
+            f"{minimum_word_timings} annotated word timings"
+        )
     for index, item in enumerate(timings):
         timing = _object(item, f"reference.word_timings[{index}]")
         _text(timing.get("word_id"), f"reference.word_timings[{index}].word_id")
@@ -324,6 +373,15 @@ def runtime_inventory(ffmpeg_path: str) -> dict[str, Any]:
         ).stdout.splitlines()[0]
     except (OSError, subprocess.CalledProcessError, IndexError) as error:
         raise GoldenConfigurationError(f"ffmpeg is not executable: {ffmpeg_path}") from error
+    try:
+        from nltk.data import find as find_nltk_data
+
+        find_nltk_data("tokenizers/punkt_tab/english/")
+    except (ImportError, LookupError) as error:
+        raise GoldenConfigurationError(
+            "WhisperX alignment requires NLTK punkt_tab; install it with "
+            "`.venv/bin/python -m nltk.downloader punkt_tab`"
+        ) from error
     return {
         "python": platform.python_version(),
         "platform": platform.platform(),
@@ -331,6 +389,7 @@ def runtime_inventory(ffmpeg_path: str) -> dict[str, Any]:
         "processor": platform.processor() or None,
         "packages": package_versions,
         "ffmpeg": ffmpeg_line,
+        "nltk_punkt_tab": "available",
         "sentence_detector": "local-rule-sentence-detector/1",
     }
 
@@ -377,7 +436,9 @@ def _workflow_config(runtime: Mapping[str, Any]) -> TranscriptionWorkflowConfig:
         ),
         alignment=alignment,
         normalization=NormalizationPolicy(),
-        matching=MatchingPolicy(),
+        matching=MatchingPolicy(
+            anchor_ngram_size=runtime.get("matching_anchor_ngram_size", 2)
+        ),
         official_alignment=OfficialAlignmentConfig.from_dict(
             {
                 "model": runtime["alignment_model"],
@@ -402,6 +463,7 @@ def _workflow(
     output_root: Path,
     runtime: Mapping[str, Any],
     inventory: Mapping[str, Any],
+    auth_token: str | None,
 ) -> tuple[
     TranscriptionWorkflow,
     TranscriptionWorkflowEventRecorder,
@@ -431,10 +493,7 @@ def _workflow(
             ),
             vad_detector=PyannoteVadDetector(
                 pyannote_version=packages["pyannote.audio"],
-                auth_token=next(
-                    (os.environ[name] for name in TOKEN_ENV_NAMES if os.environ.get(name)),
-                    None,
-                ),
+                auth_token=auth_token,
             ),
             asr_engine=WhisperXAsrEngine(whisperx_version=packages["whisperx"]),
             media_probe=FfprobeMediaProbe(ffprobe_path=ffprobe_path),
@@ -591,6 +650,7 @@ def run_plan(
     plan_path: Path,
     record_dir: Path,
     inventory: Mapping[str, Any],
+    auth_token: str | None,
 ) -> int:
     output_root = _resolve_path(plan_path, plan["output_root"])
     runtime = _object(plan["runtime"], "plan.runtime")
@@ -608,7 +668,7 @@ def run_plan(
         reference_path = _resolve_path(plan_path, sample["reference_path"])
         reference = load_json(reference_path)
         workflow, events, workflow_config = _workflow(
-            asset_id, output_root, runtime, inventory
+            asset_id, output_root, runtime, inventory, auth_token
         )
         started = datetime.now(timezone.utc)
         started_clock = perf_counter()
@@ -634,7 +694,7 @@ def run_plan(
                 "workflow_qa": workflow_config.qa.to_dict(),
             },
             "auth": {
-                "hugging_face_token_present": any(os.environ.get(name) for name in TOKEN_ENV_NAMES),
+                "hugging_face_token_present": auth_token is not None,
                 "hugging_face_offline": os.environ.get("HF_HUB_OFFLINE") == "1",
             },
         }
@@ -704,6 +764,55 @@ def run_plan(
     return 1 if failures else 0
 
 
+def run_integration_plan(
+    plan: Mapping[str, Any],
+    plan_path: Path,
+    inventory: Mapping[str, Any],
+    auth_token: str | None,
+) -> int:
+    output_root = _resolve_path(plan_path, plan["output_root"])
+    runtime = _object(plan["runtime"], "plan.runtime")
+    results: list[dict[str, Any]] = []
+    for sample_value in plan["samples"]:
+        sample = _object(sample_value, "sample")
+        asset_data = _object(sample["asset"], "sample.asset")
+        asset_id = AssetId(
+            source=asset_data["source"],
+            group=asset_data.get("group", ""),
+            item=asset_data["item"],
+        )
+        workspace = build_asset_workspace(asset_id, output_root)
+        workflow, events, _ = _workflow(
+            asset_id, output_root, runtime, inventory, auth_token
+        )
+        outcome = workflow.execute(
+            TranscriptionWorkflowInput(
+                asset_id=asset_id,
+                download_manifest_path=str(workspace / "download_manifest.json"),
+                chapters_sha256=sample.get("chapters_sha256"),
+                overwrite=False,
+            )
+        )
+        results.append(
+            {
+                "sample_id": sample["id"],
+                "source_alignment": outcome.source_alignment_path,
+                "manifest": outcome.manifest_path,
+                "report": outcome.report_path,
+                "cache_hits": list(outcome.cache_hits),
+                "event_count": len(events.events),
+            }
+        )
+    print(
+        json.dumps(
+            {"status": "integration_completed", "samples": results},
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -727,6 +836,24 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="validate local inputs and versions without loading models",
     )
+    parser.add_argument(
+        "--allow-partial-plan",
+        action="store_true",
+        help=(
+            "run an explicitly incomplete sample set for incremental validation; "
+            "it cannot complete the TR-06 golden acceptance"
+        ),
+    )
+    parser.add_argument(
+        "--integration-only",
+        "--calibration-only",
+        dest="integration_only",
+        action="store_true",
+        help=(
+            "run or resume the real transcription pipeline without reference-based "
+            "accuracy evaluation"
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -741,14 +868,33 @@ def main(argv: Sequence[str] | None = None) -> int:
     policy = load_json(policy_path)
     validate_policy(policy)
     plan = load_json(plan_path)
-    validate_plan(plan, policy, plan_path)
+    validate_plan(
+        plan,
+        policy,
+        plan_path,
+        require_complete=not args.allow_partial_plan,
+        require_reference=not args.integration_only,
+        require_cold_workspace=not args.integration_only,
+    )
     runtime = _object(plan["runtime"], "plan.runtime")
     inventory = runtime_inventory(runtime["ffmpeg_path"])
     verify_runtime(policy, inventory)
     if args.preflight_only:
         print(json.dumps({"status": "preflight_passed", "runtime": inventory}, indent=2))
         return 0
-    require_live_gate(os.environ)
+    auth_token = hugging_face_token(os.environ)
+    require_live_gate(
+        os.environ,
+        cached_token_present=auth_token is not None,
+        gate_env=(INTEGRATION_LIVE_GATE_ENV if args.integration_only else LIVE_GATE_ENV),
+    )
+    if args.integration_only:
+        return run_integration_plan(
+            plan,
+            plan_path,
+            inventory,
+            auth_token,
+        )
     if args.record_dir is None:
         raise GoldenConfigurationError("real execution requires --record-dir")
     return run_plan(
@@ -757,6 +903,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         plan_path,
         args.record_dir.expanduser().resolve(),
         inventory,
+        auth_token,
     )
 
 

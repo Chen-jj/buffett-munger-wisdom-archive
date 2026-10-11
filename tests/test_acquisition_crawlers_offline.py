@@ -12,6 +12,7 @@ from acquisition.application import AcquireUseCase, CrawlerRegistry
 from acquisition.domain import (
     AcquisitionRequest,
     AcquisitionResult,
+    AcquisitionTarget,
     TranscriptParagraph,
 )
 from acquisition.infrastructure import (
@@ -100,6 +101,35 @@ def test_cnbc_crawler_discovers_full_sessions_and_parses_transcript_metadata(
     assert json.loads((output_dir / "media_ref.json").read_text(encoding="utf-8"))[
         "kind"
     ] == "page_url"
+
+
+def test_cnbc_transcript_normalizes_page_mojibake_em_dash() -> None:
+    url = "https://buffett.cnbc.com/video/2000/morning.html"
+    http = StubHttpClient(
+        {
+            url: (
+                '<div class="Transcript-transcriptBody">'
+                '<div class="Chapter-chapter">'
+                '<div class="Chapter-chapterTitle">3. Investing</div>'
+                '<div class="ChapterParagraph-chapterParagraph"><p>'
+                "WARREN BUFFETT: A bird in the hand \u00e2\u0080\u0094 you know."
+                "</p></div></div></div>"
+            )
+        }
+    )
+    crawler = CnbcCrawler(http_client=http, delay_seconds=0)
+
+    result = crawler.fetch(
+        AcquisitionTarget(
+            asset_id=AssetId("cnbc", "2000", "morning"),
+            fetch_url=url,
+        )
+    )
+
+    assert result.transcript is not None
+    assert result.transcript.chapters[0].paragraphs[0].text == (
+        "A bird in the hand \u2014 you know."
+    )
 
 
 def test_cnbc_crawler_accepts_supported_locators_and_hints() -> None:

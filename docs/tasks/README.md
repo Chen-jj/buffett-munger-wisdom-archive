@@ -30,7 +30,7 @@ AC-01 archive_core 公共契约 ─┬─▶ AQ-01 结构化逐字稿           
                                                │               │
 MD-01 ─────────────────────────────────────────┴───────────────┤
                                                                ▼
-                                               TR-06 工作流/缓存/golden
+                                               TR-06 工作流/缓存/integration
 ```
 
 ## 任务清单
@@ -45,7 +45,7 @@ MD-01 ────────────────────────�
 | `TR-03` | P1 | [transcription WhisperX forced alignment](transcription-forced-alignment.md) | `TR-02` |
 | `TR-04` | P2 | [transcription 官网逐字稿融合](transcription-official-transcript-fusion.md) | `TR-03`、`AQ-01` |
 | `TR-05` | P2 | [transcription 本地句界与 canonical 输出](transcription-sentence-boundaries.md) | `TR-03`、`TR-04` |
-| `TR-06` | P3 | [transcription 工作流、缓存与 golden 验收](transcription-workflow-manifest-golden.md) | `MD-01`、`AQ-01`、`TR-01`～`TR-05` |
+| `TR-06` | P3 | [transcription 工作流、缓存与 integration 验收](transcription-workflow-manifest-integration.md) | `MD-01`、`AQ-01`、`TR-01`～`TR-05` |
 
 `MD-01` 可与 `AC-01` 并行。`AQ-01` 与 `TR-01` 可在 `AC-01` 后并行。每个任务只实现自己的
 切片；不得为了提前跑通整条管线把后续任务的业务规则塞进当前任务。

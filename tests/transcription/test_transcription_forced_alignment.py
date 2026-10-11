@@ -821,3 +821,44 @@ def test_whisperx_adapter_rejects_provider_word_coverage_mismatch() -> None:
 
     with pytest.raises(RuntimeError, match="coverage"):
         adapter.align("audio.wav", raw, build_raw_asr_tokens(raw), _config())
+
+
+def test_whisperx_adapter_splits_compound_words_and_ignores_punctuation_only() -> None:
+    class Backend:
+        def load_audio(self, path: str):
+            return "audio"
+
+        def load_align_model(self, **kwargs):
+            return "model", {}
+
+        def align(self, *args, **kwargs):
+            return {
+                "word_segments": [
+                    {"word": "B.C.", "start": 0.1, "end": 0.5, "score": 0.8},
+                    {"word": "works.?", "start": 0.6, "end": 0.9, "score": 0.9},
+                    {"word": "?"},
+                ]
+            }
+
+    raw = RawAsrArtifact(
+        audio_sha256="hash",
+        audio_duration_ms=1_000,
+        vad_cache_key="vad-key",
+        provider=ProviderIdentity("whisperx", "3.8.5"),
+        config=AsrConfig.development(model="tiny.en"),
+        segments=(RawAsrSegment("seg1", "B. C. works.?", 0, 1_000),),
+        cache_key="raw-key",
+    )
+    adapter = WhisperXForcedAligner(
+        whisperx_version="3.8.5",
+        backend=Backend(),
+        model_resolver=lambda model, version: f"/models/{model}/{version}",
+    )
+
+    assert adapter.align(
+        "audio.wav", raw, build_raw_asr_tokens(raw), _config()
+    ) == (
+        AlignmentCandidate("rw1", "seg1", "B.", 100, 300, 0.8),
+        AlignmentCandidate("rw2", "seg1", "C.", 300, 500, 0.8),
+        AlignmentCandidate("rw3", "seg1", "works.?", 600, 900, 0.9),
+    )

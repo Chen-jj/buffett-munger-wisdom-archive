@@ -63,7 +63,7 @@
 验证结果（2026-10-08）：
 
 ```text
-python -m pytest tests/test_transcription_sentence_boundaries.py -q
+python -m pytest tests/transcription/test_transcription_sentence_boundaries.py -q
 13 passed
 
 python -m pytest tests/ -q -m "not live"

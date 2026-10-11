@@ -129,6 +129,7 @@ def _parse_chapter_title(title_text: str) -> tuple[int, str]:
 
 
 def _parse_cnbc_paragraph(text: str) -> TranscriptParagraph:
+    text = text.replace("\u00e2\u0080\u0094", "\u2014")
     speaker_label, spoken_text = _split_cnbc_speaker(text)
     spoken_text, stage_directions = _extract_stage_directions(spoken_text)
     return TranscriptParagraph(

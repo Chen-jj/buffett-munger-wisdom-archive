@@ -368,6 +368,7 @@ def test_ffprobe_adapter_parses_duration_without_real_process() -> None:
 
 def test_pyannote_adapter_loads_lazily_and_returns_integer_source_regions() -> None:
     loads: list[tuple[str, dict[str, Any]]] = []
+    audio = {"waveform": "preloaded", "sample_rate": 16_000}
 
     class Pipeline:
         parameters: dict[str, float] | None = None
@@ -375,8 +376,8 @@ def test_pyannote_adapter_loads_lazily_and_returns_integer_source_regions() -> N
         def instantiate(self, parameters: dict[str, float]) -> None:
             self.parameters = parameters
 
-        def __call__(self, audio_path: str):
-            assert audio_path == "audio.wav"
+        def __call__(self, loaded_audio):
+            assert loaded_audio == audio
             timeline = [
                 SimpleNamespace(start=1.001, end=2.009),
                 SimpleNamespace(start=3.0, end=3.5),
@@ -392,7 +393,10 @@ def test_pyannote_adapter_loads_lazily_and_returns_integer_source_regions() -> N
         return pipeline
 
     detector = PyannoteVadDetector(
-        pyannote_version="4.0", auth_token="not-logged", pipeline_loader=loader
+        pyannote_version="4.0",
+        auth_token="not-logged",
+        pipeline_loader=loader,
+        audio_loader=lambda path: audio if path == "audio.wav" else {},
     )
     config = _vad_config(onset=0.6, offset=0.4)
 
@@ -407,7 +411,12 @@ def test_pyannote_adapter_loads_lazily_and_returns_integer_source_regions() -> N
             {"model_version": "2026.1", "auth_token": "not-logged"},
         )
     ]
-    assert pipeline.parameters == {"onset": 0.6, "offset": 0.4}
+    assert pipeline.parameters == {
+        "onset": 0.6,
+        "offset": 0.4,
+        "min_duration_on": 0.0,
+        "min_duration_off": 0.0,
+    }
 
 
 def test_whisperx_adapter_uses_fixed_english_transcribe_and_pyannote() -> None:
