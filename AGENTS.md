@@ -6,23 +6,25 @@
 
 仓库正处于迁移中期。动手前先核实现实，不要假设某个模块能用。
 
-> 状态最后核对：2026-08-29 21:35 CST。**每次完成编码任务后，若实现状态或本文件中的事实发生变化，必须在同一次提交中更新本节（含核对时间）。**
+> 状态最后核对：2026-10-08 21:27 CST。**每次完成编码任务后，若实现状态或本文件中的事实发生变化，必须在同一次提交中更新本节（含核对时间）。**
 
 | 状态 | 模块 |
 |---|---|
 | 已实现 + 离线测试 | `archive_core`、`acquisition`、`media_download`、`infrastructure` |
-| 仅脚手架（分层目录 + AGENTS.md，无代码） | `cli`、`orchestration`、`transcription`、`srt_processing`、`translation`、`subtitle_rendering`、`webui` |
+| 已实现 + 离线测试；真实 golden 待运行 | `transcription` |
+| 仅脚手架（分层目录 + AGENTS.md，无代码） | `cli`、`orchestration`、`srt_processing`、`translation`、`subtitle_rendering`、`webui` |
 
-- 遗留管线（`run.py` step0–4 + Web 评审应用）已在提交 `cc9df50` 中删除。目前**没有 CLI 入口，管线无法端到端运行**。按路线图逐模块重建功能。
-- 路线图与规划文档（大型任务前必读）：
-  - `docs/ai-workflow-refactor-plan.md` —— 模块重建路线图（阶段、验收标准）
-  - `docs/agentic-workflow-plan.md` —— 本仓库的 agent 工作流约定
-- 尚无 lint/typecheck/CI。离线 pytest 套件是唯一的验证门槛；另有少量 `live` 标记的真实网络测试，包括 acquisition→media_download 跨模块集成测试（`RUN_REAL_NETWORK=1` 门控，downloader 打桩，不真下载视频）。
+- 遗留管线（`run.py` step0–4 + Web 评审应用）已在提交 `cc9df50` 中删除。目前**没有 CLI 入口，管线无法端到端运行**。按 `docs/tasks/README.md` 的任务依赖图逐模块重建功能。
+- 当前技术入口：`docs/tasks/README.md`（任务依赖）和 `docs/decisions/`（已接受 ADR）。此前两份
+  路线图已由用户删除，不得恢复或继续把它们当作现行文档。
+- 尚无 lint/typecheck/CI。离线 pytest 套件是唯一的验证门槛；另有少量 `live` 标记测试，包括
+  acquisition→media_download 真实网络测试，以及 `RUN_TRANSCRIPTION_GOLDEN=1` 门控的真实
+  WhisperX golden。后者尚未运行：当前缺获准使用的媒体样本、HF token 和本地模型缓存。
 - `webapp/app.db` 是已被 gitignore 的遗留残留，忽略它。
 
 ## 开工规则
 
-1. 动某个模块前，先读该模块的 `src/<module>/AGENTS.md`；大型任务前再读 `docs/` 路线图。
+1. 动某个模块前，先读该模块的 `src/<module>/AGENTS.md`；大型任务前再读相关 ADR 与任务文档。
 2. 说"做完了"之前必须跑质检（见「构建、测试与验证」），离线测试套件全绿才算完成；没跑测试不得声称完成。
 3. 一次只做一小块可验证的改动，不同时大范围修改多个模块，不顺手重构无关代码。
 
@@ -58,14 +60,16 @@ archive_core：资产身份、路径、公共 schema、manifest、溯源
 orchestration：可恢复任务计划 · cli/webui：薄接口 · infrastructure：共享适配器
 ```
 
-各阶段状态：实现到 `media_download` 为止；其下游全部是脚手架。
+各阶段状态：实现到 `transcription` 为止；transcription 已通过离线测试但真实 golden 尚待，
+因此不能视为完全验收。其下游仍是脚手架。
 
 ## 模块地图
 
 - `src/archive_core/` —— 共享领域原语：资产身份、规范文件名、路径策略、`manifest.v1`、溯源。
 - `src/acquisition/` —— 网页分析、爬虫、逐字稿提取、元数据规范化、抓取礼貌性规则。
 - `src/media_download/` —— 媒体 URL 解析、yt-dlp 下载编排、校验和/溯源采集。
-- `src/transcription/` —— 音频提取、VAD、ASR、词级对齐、逐字稿融合、英文句界。*（脚手架）*
+- `src/transcription/` —— 音频提取、VAD、ASR、词级对齐、逐字稿融合、英文句界。*（已实现 +
+  离线测试；真实 golden 待运行）*
 - `src/srt_processing/` —— 结构化句子到 cue 的规划、SRT 投影/解析、双语合成与 QA。*（脚手架）*
 - `src/translation/` —— 完整英文句子翻译、分批、术语/风格策略、服务适配器与结果校验。*（脚手架）*
 - `src/subtitle_rendering/` —— SRT/ASS 样式、烧录渲染、ffmpeg 命令规划、渲染元数据。*（脚手架）*
@@ -126,6 +130,6 @@ fd '^AGENTS\.md$' src --max-depth 3 | sort
 ## 补充文档
 
 - 模块指南：`src/<module>/AGENTS.md`（11 份）—— 动某个模块前先读对应那份。
-- 路线图：`docs/ai-workflow-refactor-plan.md`、`docs/agentic-workflow-plan.md`。
+- 技术任务入口：`docs/tasks/README.md`；已接受决策：`docs/decisions/`。
 - `README.md` 是面向人的快速上手（安装、工具链设置）；架构规则在本文件和各模块指南中。
 - 规则冲突时的优先级：`src/<module>/AGENTS.md` > 本文件 > `docs/` 规划文档。但本文件「关键约束」中的安全规则始终有效，模块指南不得覆盖。

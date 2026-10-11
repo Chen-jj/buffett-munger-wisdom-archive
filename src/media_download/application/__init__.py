@@ -3,6 +3,7 @@ from .download import (
     MEDIA_REF_FILENAME,
     DownloadAssetVideoService,
     DownloadExecutionResult,
+    ExistingDownloadConflict,
 )
 from .ports import (
     ChecksumCalculator,
@@ -19,6 +20,7 @@ __all__ = [
     "DownloadArtifactStore",
     "DownloadAssetVideoService",
     "DownloadExecutionResult",
+    "ExistingDownloadConflict",
     "MediaDownloader",
     "MediaUrlResolver",
     "ResolverRegistry",

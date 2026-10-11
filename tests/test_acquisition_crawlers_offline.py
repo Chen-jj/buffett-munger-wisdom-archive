@@ -9,7 +9,11 @@ from archive_core.application import build_asset_workspace
 from archive_core.domain import AssetId
 
 from acquisition.application import AcquireUseCase, CrawlerRegistry
-from acquisition.domain import AcquisitionRequest, AcquisitionResult
+from acquisition.domain import (
+    AcquisitionRequest,
+    AcquisitionResult,
+    TranscriptParagraph,
+)
 from acquisition.infrastructure import (
     CnbcCrawler,
     LocalAcquisitionArtifactWriter,
@@ -78,6 +82,16 @@ def test_cnbc_crawler_discovers_full_sessions_and_parses_transcript_metadata(
     assert morning.metadata.title == "1994 Berkshire Hathaway Annual Meeting Morning Session"
     assert morning.transcript is not None
     assert len(morning.transcript.chapters) == 2
+    assert morning.transcript.chapters[0].paragraphs[:2] == (
+        TranscriptParagraph(
+            text="Good morning. We welcome shareholders to the annual meeting.",
+            speaker_label="WARREN BUFFETT",
+        ),
+        TranscriptParagraph(
+            text="We will answer questions as clearly as possible.",
+            speaker_label="CHARLIE MUNGER",
+        ),
+    )
     assert "capital allocation" in morning.transcript.full_text
     assert morning.provenance.transcript_available is True
 
@@ -264,6 +278,7 @@ def test_youtube_crawler_returns_media_reference_without_transcript(
     output_dir = build_asset_workspace(result.asset_id, tmp_path / "output")
     assert output_dir.name == "youtube_abc123xyz"
     assert not (output_dir / "transcript.txt").exists()
+    assert not (output_dir / "chapters.json").exists()
     assert json.loads((output_dir / "media_ref.json").read_text(encoding="utf-8")) == {
         "kind": "embed_id",
         "value": "abc123XYZ",

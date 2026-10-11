@@ -32,7 +32,7 @@
 
 - `meta.json`：规范化后的来源元数据、`asset_id`、`source_ref`、`provenance`。
 - `media_ref.json`：序列化的 `MediaReference`。
-- `transcript.txt` 与 `chapters.json`：仅当 transcript 可用时写入。
+- `transcript.txt` 与 `chapters.json`：仅当 transcript 可用时写入。`chapters.json` 必须使用 `archive_core` 的 `acquisition.transcript.v2` 公共 DTO，paragraph 分离 `speaker_label`、spoken `text` 与 `stage_directions`；无法可靠识别 speaker 的来源写 `null`。`transcript.txt` 保留 speaker 与舞台说明，继续只作为人读归档格式。
 
 写入必须按文件原子化；`overwrite=False` 时必须预检所有计划产出。
 

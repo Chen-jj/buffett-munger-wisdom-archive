@@ -6,7 +6,7 @@
 - 依赖：无
 - 被依赖：`TR-02` 的真实输入集成、`TR-06` 的端到端 transcription 验收
 - 对应决策：[ADR-0001](../decisions/0001-transcription-sentence-level-alignment.md) §4、§13
-- 状态：待实现
+- 状态：已实现
 
 ## 背景
 

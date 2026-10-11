@@ -7,7 +7,30 @@ import json
 import re
 from typing import Any
 
-from acquisition.domain import Chapter, SourceMetadata, Transcript
+from acquisition.domain import (
+    Chapter,
+    SourceMetadata,
+    Transcript,
+    TranscriptParagraph,
+)
+
+
+_STAGE_DIRECTION_RE = re.compile(r"\[([^\[\]]+)\]|\(([^()]+)\)")
+_RELIABLE_STAGE_DIRECTIONS = {
+    "applause",
+    "audience applauds",
+    "audience laughs",
+    "break",
+    "cheering",
+    "crosstalk",
+    "inaudible",
+    "laughter",
+    "music",
+    "pause",
+    "recess",
+    "recording plays",
+    "video plays",
+}
 
 
 @dataclass(frozen=True)
@@ -47,7 +70,7 @@ class TranscriptNormalizer:
                     continue
                 text = paragraph.get_text(" ", strip=True)
                 if text:
-                    paragraphs.append(text)
+                    paragraphs.append(_parse_cnbc_paragraph(text))
             chapters.append(
                 Chapter(number=number, title=title, paragraphs=tuple(paragraphs))
             )
@@ -103,6 +126,56 @@ def _parse_chapter_title(title_text: str) -> tuple[int, str]:
     if not match:
         return 0, title_text
     return int(match.group(1)), match.group(2).strip()
+
+
+def _parse_cnbc_paragraph(text: str) -> TranscriptParagraph:
+    speaker_label, spoken_text = _split_cnbc_speaker(text)
+    spoken_text, stage_directions = _extract_stage_directions(spoken_text)
+    return TranscriptParagraph(
+        text=spoken_text,
+        speaker_label=speaker_label,
+        stage_directions=stage_directions,
+    )
+
+
+def _split_cnbc_speaker(text: str) -> tuple[str | None, str]:
+    candidate, separator, remainder = text.partition(":")
+    label = candidate.strip()
+    if not separator or not _is_reliable_cnbc_speaker_label(label):
+        return None, text
+    return label, remainder.strip()
+
+
+def _is_reliable_cnbc_speaker_label(value: str) -> bool:
+    if not value or len(value) > 80 or value != value.upper():
+        return False
+    if not any(character.isalpha() for character in value):
+        return False
+    return all(
+        character.isalnum() or character in " .,'’-&/"
+        for character in value
+    )
+
+
+def _extract_stage_directions(text: str) -> tuple[str, tuple[str, ...]]:
+    directions: list[str] = []
+
+    def record_direction(match: re.Match[str]) -> str:
+        direction = (match.group(1) or match.group(2)).strip()
+        if not _is_reliable_stage_direction(direction):
+            return match.group(0)
+        directions.append(direction)
+        return " "
+
+    spoken_text = _STAGE_DIRECTION_RE.sub(record_direction, text)
+    return " ".join(spoken_text.split()), tuple(directions)
+
+
+def _is_reliable_stage_direction(value: str) -> bool:
+    # CNBC flattens annotations into paragraph text, so extraction stays
+    # deliberately narrow rather than treating every spoken aside as metadata.
+    normalized = value.casefold().strip().rstrip(".!?").strip()
+    return normalized in _RELIABLE_STAGE_DIRECTIONS
 
 
 def _string_or_none(value: object) -> str | None:

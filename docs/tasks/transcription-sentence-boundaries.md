@@ -6,7 +6,7 @@
 - 依赖：`TR-03`、`TR-04`
 - 被依赖：`TR-06`、translation、srt_processing 后续任务
 - 对应决策：[ADR-0001](../decisions/0001-transcription-sentence-level-alignment.md) §9、§10
-- 状态：待实现
+- 状态：已实现 + 离线测试（2026-10-08）
 
 ## 目标
 
@@ -43,3 +43,29 @@
 - fallback 超过 policy 门禁时失败并保留诊断，但不发布 canonical。
 - `source_alignment.json` 是本任务唯一 canonical 内容输出；无 SRT 产物。
 - `python -m pytest tests/ -q -m "not live"` 全绿。
+
+## 实现结果
+
+- `transcription.domain.sentences` 固定 `sentence-boundary.v1` policy、标点例外与 fallback
+  publication gate；缩写、小数和姓名首字母不会被误判为官网句末。
+- `SentenceBoundaryService` 严格验证 official fusion 或 aligned-ASR identity 两条输入路径，综合
+  speaker、paragraph、ASR punctuation、本地 detector、pause 与 ASR segment 弱信号，并为每句
+  写入枚举式 boundary provenance。
+- `RuleBasedSentenceBoundaryDetector` 是默认纯本地、无网络、无模型下载的 detector adapter；端口
+  可由后续 golden 评测替换，但 provider identity 和完整 policy 都进入 sentence cache key。
+- canonical 写入前构造并反序列化 `SourceAlignmentDTO`，由公共 DTO 执行全部硬不变量；fallback
+  超门禁会发出逐句诊断与失败事件，不写 `source_alignment.json`。
+- 成功 cache record 名为 `source_alignment`；命中必须同时验证 cache key、canonical path、size、
+  SHA-256 与可解析公共 DTO。规则变化只使句界与 canonical 输出 stale，替换需要显式 overwrite。
+- 离线测试覆盖官网标点例外、speaker 强制边界、paragraph 弱信号、ASR 标点+pause、detector、
+  fallback 门禁、跨 segment 单句、单 segment 多句、official/identity 消费、DTO 发布、事件与缓存。
+
+验证结果（2026-10-08）：
+
+```text
+python -m pytest tests/test_transcription_sentence_boundaries.py -q
+13 passed
+
+python -m pytest tests/ -q -m "not live"
+311 passed, 3 deselected
+```

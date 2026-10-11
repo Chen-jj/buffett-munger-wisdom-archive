@@ -9,8 +9,13 @@ from tempfile import NamedTemporaryFile
 from typing import Any
 
 from archive_core.application import build_asset_workspace
+from archive_core.interfaces import (
+    StructuredTranscriptDTO,
+    TranscriptChapterDTO,
+    TranscriptParagraphDTO,
+)
 
-from acquisition.domain import AcquisitionResult
+from acquisition.domain import AcquisitionResult, Transcript
 
 
 @dataclass(frozen=True)
@@ -22,11 +27,16 @@ class LocalAcquisitionArtifactWriter:
 
     def save(self, result: AcquisitionResult) -> str:
         output_dir = build_asset_workspace(result.asset_id, self.root)
+        structured_transcript = (
+            _structured_transcript(result.transcript)
+            if result.transcript is not None
+            else None
+        )
         paths = _planned_paths(output_dir, result)
         _ensure_can_write_all(tuple(paths.values()), overwrite=self.overwrite)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        if result.transcript is not None:
+        if result.transcript is not None and structured_transcript is not None:
             _write_text(
                 paths["transcript"],
                 result.transcript.full_text,
@@ -34,7 +44,7 @@ class LocalAcquisitionArtifactWriter:
             )
             _write_json(
                 paths["chapters"],
-                [chapter.to_dict() for chapter in result.transcript.chapters],
+                structured_transcript.to_dict(),
                 overwrite=self.overwrite,
             )
 
@@ -69,6 +79,27 @@ def _planned_paths(output_dir: Path, result: AcquisitionResult) -> dict[str, Pat
         paths["transcript"] = output_dir / "transcript.txt"
         paths["chapters"] = output_dir / "chapters.json"
     return paths
+
+
+def _structured_transcript(transcript: Transcript) -> StructuredTranscriptDTO:
+    return StructuredTranscriptDTO(
+        language="en",
+        chapters=tuple(
+            TranscriptChapterDTO(
+                number=chapter.number,
+                title=chapter.title,
+                paragraphs=tuple(
+                    TranscriptParagraphDTO(
+                        text=paragraph.text,
+                        speaker_label=paragraph.speaker_label,
+                        stage_directions=paragraph.stage_directions,
+                    )
+                    for paragraph in chapter.paragraphs
+                ),
+            )
+            for chapter in transcript.chapters
+        ),
+    )
 
 
 def _write_json(path: Path, data: Any, *, overwrite: bool) -> Path:

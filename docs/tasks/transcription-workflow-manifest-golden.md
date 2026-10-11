@@ -6,7 +6,11 @@
 - 依赖：`MD-01`、`AQ-01`、`TR-01`、`TR-02`、`TR-03`、`TR-04`、`TR-05`
 - 被依赖：translation、srt_processing、orchestration 后续阶段
 - 对应决策：[ADR-0001](../decisions/0001-transcription-sentence-level-alignment.md) §13～§15
-- 状态：待实现
+- 状态：进行中——工作流/缓存/manifest 与离线验收已实现；真实 WhisperX golden 待运行
+
+> Golden 阻塞（2026-10-08）：仓库没有获准使用的 CNBC/YouTube 音视频样本，本机没有 HF
+> token，默认 Hugging Face/Torch/Whisper 模型缓存也不存在。已提供显式 `live` 门控入口、候选
+> 版本化 QA policy、人工 reference 和运行记录模板；未联网、未下载模型、未伪造评测结果。
 
 ## 目标
 

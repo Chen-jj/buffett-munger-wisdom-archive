@@ -56,5 +56,6 @@ def test_crawl_year_1994_generates_normalized_artifacts(tmp_path: Path) -> None:
     assert morning_meta["schema_version"] == "acquisition.source-metadata.v1"
     assert morning_meta["provenance"]["crawler"] == "cnbc"
     assert morning_meta["provenance"]["transcript_available"] is True
-    assert len(chapters) > 0
+    assert chapters["schema_version"] == "acquisition.transcript.v2"
+    assert len(chapters["chapters"]) > 0
     assert "=== Chapter" in transcript

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -12,6 +14,7 @@ from archive_core.domain import AssetId
 from infrastructure.infrastructure.process import ProcessResult
 from media_download.application import (
     DownloadAssetVideoService,
+    ExistingDownloadConflict,
     ResolverRegistry,
 )
 from media_download.domain import (
@@ -186,6 +189,43 @@ class FakeDownloader:
         )
 
 
+class FakeChecksumCalculator:
+    def __init__(self, values: dict[str, str]) -> None:
+        self.values = values
+        self.paths: list[str] = []
+
+    def sha256(self, path: str) -> str:
+        self.paths.append(path)
+        return self.values[path]
+
+
+class FakeArtifactStore:
+    def __init__(self) -> None:
+        self.present: set[str] = set()
+        self.sizes: dict[str, int] = {}
+        self.manifests: dict[str, DownloadedArtifact | Exception] = {}
+
+    def exists(self, path: str) -> bool:
+        return path in self.present
+
+    def size(self, path: str) -> int:
+        return self.sizes[path]
+
+    def write_manifest(self, path: str, artifact: DownloadedArtifact) -> str:
+        self.present.add(path)
+        self.manifests[path] = artifact
+        return path
+
+    def read_manifest(self, path: str) -> DownloadedArtifact:
+        stored = self.manifests[path]
+        if isinstance(stored, Exception):
+            raise stored
+        return stored
+
+    def read_media_ref(self, path: str) -> MediaRef:
+        raise AssertionError("read_media_ref is not expected in this test")
+
+
 @pytest.mark.parametrize(
     ("kind", "value"),
     [
@@ -341,19 +381,24 @@ def test_cnbc_playback_url_preserves_absolute_url() -> None:
     assert resolved == "https://cdn.example.com/video.m3u8"
 
 
-def test_plan_skips_existing_output_unless_overwrite_is_explicit(tmp_path: Path) -> None:
+def test_plan_skips_only_when_existing_output_is_verified(tmp_path: Path) -> None:
     input = _input(MediaRef("direct_url", "https://media.example/video.m3u8"))
     service = _service(tmp_path, FakeResolver())
     workspace = build_asset_workspace(input.asset_id, tmp_path / "output")
     video_path = workspace / "video.mp4"
     video_path.parent.mkdir(parents=True)
     video_path.write_bytes(b"existing")
+    artifact = _valid_existing_artifact(input, video_path)
+    LocalDownloadArtifactStore().write_manifest(
+        str(workspace / "download_manifest.json"), artifact
+    )
 
     skipped = service.plan(input)
     overwrite = service.plan(input, DownloadPolicy(overwrite=True))
 
     assert skipped.action == DownloadAction.SKIP
-    assert skipped.reason == "output already exists"
+    assert skipped.reason == "existing output verified"
+    assert skipped.media_url == artifact.media_url
     assert overwrite.action == DownloadAction.DOWNLOAD
 
 
@@ -385,19 +430,151 @@ def test_plan_paths_stay_inside_asset_workspace(tmp_path: Path) -> None:
     assert plan.should_download is True
 
 
-def test_execute_skip_without_manifest_does_not_create_artifact(tmp_path: Path) -> None:
+def test_existing_output_without_manifest_is_a_conflict_and_is_preserved(
+    tmp_path: Path,
+) -> None:
     input = _input(MediaRef("direct_url", "https://media.example/video.m3u8"))
-    service = _service(tmp_path, FakeResolver())
+    downloader = FakeDownloader()
+    service = _service(tmp_path, FakeResolver(), downloader=downloader)
     workspace = build_asset_workspace(input.asset_id, tmp_path / "output")
     video_path = workspace / "video.mp4"
     video_path.parent.mkdir(parents=True)
     video_path.write_bytes(b"existing")
 
+    with pytest.raises(ExistingDownloadConflict) as error:
+        service.execute(input)
+
+    assert error.value.category == "manifest_missing"
+    assert video_path.read_bytes() == b"existing"
+    assert downloader.plans == []
+
+
+@pytest.mark.parametrize(
+    ("artifact_change", "category"),
+    [
+        ({"asset_id": AssetId("youtube", "", "other")}, "asset_mismatch"),
+        (
+            {"media_ref_value": "https://media.example/other.m3u8"},
+            "media_ref_mismatch",
+        ),
+        ({"status": "failed"}, "status_not_successful"),
+        ({"output_path": "output/other/video.mp4"}, "artifact_path_mismatch"),
+        ({"size_bytes": 124}, "size_mismatch"),
+        ({"checksum_algorithm": "md5"}, "checksum_algorithm_mismatch"),
+        ({"checksum_value": "different"}, "checksum_mismatch"),
+    ],
+)
+def test_plan_rejects_unverified_existing_artifact_with_stable_category(
+    tmp_path: Path,
+    artifact_change: dict[str, object],
+    category: str,
+) -> None:
+    input = _input(MediaRef("direct_url", "https://media.example/video.m3u8"))
+    output_path = str(
+        build_asset_workspace(input.asset_id, tmp_path / "output") / "video.mp4"
+    )
+    manifest_path = str(Path(output_path).with_name("download_manifest.json"))
+    artifact = replace(
+        _artifact(tmp_path, output_path=output_path),
+        **artifact_change,
+    )
+    artifacts = FakeArtifactStore()
+    artifacts.present.update({output_path, manifest_path})
+    artifacts.sizes[output_path] = 123
+    artifacts.manifests[manifest_path] = artifact
+    checksum = FakeChecksumCalculator({output_path: "abc123"})
+    service = _service(
+        tmp_path,
+        FakeResolver(),
+        artifacts=artifacts,
+        checksum=checksum,
+    )
+
+    with pytest.raises(ExistingDownloadConflict) as error:
+        service.plan(input)
+
+    assert error.value.category == category
+
+
+def test_plan_rejects_unreadable_existing_manifest(tmp_path: Path) -> None:
+    input = _input(MediaRef("direct_url", "https://media.example/video.m3u8"))
+    output_path = str(
+        build_asset_workspace(input.asset_id, tmp_path / "output") / "video.mp4"
+    )
+    manifest_path = str(Path(output_path).with_name("download_manifest.json"))
+    artifacts = FakeArtifactStore()
+    artifacts.present.update({output_path, manifest_path})
+    artifacts.manifests[manifest_path] = ValueError("corrupt manifest details")
+    service = _service(
+        tmp_path,
+        FakeResolver(),
+        artifacts=artifacts,
+        checksum=FakeChecksumCalculator({}),
+    )
+
+    with pytest.raises(ExistingDownloadConflict) as error:
+        service.plan(input)
+
+    assert error.value.category == "manifest_invalid"
+    assert "corrupt manifest details" not in str(error.value)
+
+
+def test_checksum_mismatch_preserves_existing_output(tmp_path: Path) -> None:
+    input = _input(MediaRef("direct_url", "https://media.example/video.m3u8"))
+    downloader = FakeDownloader()
+    service = _service(tmp_path, FakeResolver(), downloader=downloader)
+    workspace = build_asset_workspace(input.asset_id, tmp_path / "output")
+    video_path = workspace / "video.mp4"
+    video_path.parent.mkdir(parents=True)
+    video_path.write_bytes(b"existing")
+    artifact = replace(
+        _valid_existing_artifact(input, video_path),
+        checksum_value="different",
+    )
+    LocalDownloadArtifactStore().write_manifest(
+        str(workspace / "download_manifest.json"), artifact
+    )
+
+    with pytest.raises(ExistingDownloadConflict) as error:
+        service.execute(input)
+
+    assert error.value.category == "checksum_mismatch"
+    assert video_path.read_bytes() == b"existing"
+    assert downloader.plans == []
+
+
+def test_explicit_overwrite_replaces_unverified_existing_output(tmp_path: Path) -> None:
+    input = _input(MediaRef("direct_url", "https://media.example/video.m3u8"))
+    downloader = FakeDownloader(payload=b"replacement")
+    service = _service(tmp_path, FakeResolver(), downloader=downloader)
+    workspace = build_asset_workspace(input.asset_id, tmp_path / "output")
+    video_path = workspace / "video.mp4"
+    video_path.parent.mkdir(parents=True)
+    video_path.write_bytes(b"existing")
+
+    result = service.execute(input, DownloadPolicy(overwrite=True))
+
+    assert result.plan.action == DownloadAction.DOWNLOAD
+    assert video_path.read_bytes() == b"replacement"
+    assert len(downloader.plans) == 1
+
+
+def test_stale_manifest_without_video_does_not_block_download(tmp_path: Path) -> None:
+    input = _input(MediaRef("direct_url", "https://media.example/video.m3u8"))
+    service = _service(tmp_path, FakeResolver())
+    workspace = build_asset_workspace(input.asset_id, tmp_path / "output")
+    manifest_path = workspace / "download_manifest.json"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text("not valid json", encoding="utf-8")
+
     result = service.execute(input)
 
-    assert result.plan.action == DownloadAction.SKIP
-    assert result.artifact is None
-    assert result.manifest_path is None
+    assert result.plan.action == DownloadAction.DOWNLOAD
+    assert result.artifact is not None
+    assert (workspace / "video.mp4").exists()
+    assert json.loads(manifest_path.read_text(encoding="utf-8"))["download"][
+        "status"
+    ] == "downloaded"
 
 
 def test_execute_with_yt_dlp_runner_retries_fallback_and_writes_manifest(
@@ -489,7 +666,7 @@ def test_manifest_round_trip_and_schema_rejection(tmp_path: Path) -> None:
         DownloadedArtifact.from_manifest_dict(data)
 
 
-def test_execute_skip_rereads_existing_manifest_without_downloading(tmp_path: Path) -> None:
+def test_execute_skip_returns_verified_manifest_without_downloading(tmp_path: Path) -> None:
     input = _input(MediaRef("direct_url", "https://media.example/video.m3u8"))
     service = _service(tmp_path, FakeResolver())
     workspace = build_asset_workspace(input.asset_id, tmp_path / "output")
@@ -497,7 +674,7 @@ def test_execute_skip_rereads_existing_manifest_without_downloading(tmp_path: Pa
     manifest_path = workspace / "download_manifest.json"
     video_path.parent.mkdir(parents=True)
     video_path.write_bytes(b"existing")
-    artifact = _artifact(tmp_path, output_path=str(video_path))
+    artifact = _valid_existing_artifact(input, video_path)
     LocalDownloadArtifactStore().write_manifest(str(manifest_path), artifact)
     downloader = FakeDownloader()
     service = _service(tmp_path, FakeResolver(), downloader=downloader)
@@ -608,14 +785,16 @@ def _service(
     resolver: FakeResolver,
     *,
     downloader=None,
+    checksum=None,
+    artifacts=None,
 ) -> DownloadAssetVideoService:
     registry = ResolverRegistry()
     registry.register(resolver)
     return DownloadAssetVideoService(
         resolver_registry=registry,
         downloader=downloader or FakeDownloader(),
-        checksum=Sha256ChecksumCalculator(),
-        artifacts=LocalDownloadArtifactStore(),
+        checksum=checksum or Sha256ChecksumCalculator(),
+        artifacts=artifacts or LocalDownloadArtifactStore(),
         output_root=str(tmp_path / "output"),
     )
 
@@ -631,6 +810,28 @@ def _artifact(tmp_path: Path, *, output_path: str | None = None) -> DownloadedAr
         size_bytes=123,
         checksum_algorithm="sha256",
         checksum_value="abc123",
+        downloader_name="yt-dlp",
+        downloader_version="2026.01.01",
+        downloaded_at="2026-07-26T00:00:00+00:00",
+        status="downloaded",
+    )
+
+
+def _valid_existing_artifact(
+    input: DownloadInput,
+    video_path: Path,
+) -> DownloadedArtifact:
+    payload = video_path.read_bytes()
+    return DownloadedArtifact(
+        asset_id=input.asset_id,
+        media_kind=input.media_ref.kind,
+        media_ref_value=input.media_ref.value,
+        media_url="https://media.example/resolved-video.m3u8",
+        output_path=str(video_path),
+        format_selector="best",
+        size_bytes=len(payload),
+        checksum_algorithm="sha256",
+        checksum_value=hashlib.sha256(payload).hexdigest(),
         downloader_name="yt-dlp",
         downloader_version="2026.01.01",
         downloaded_at="2026-07-26T00:00:00+00:00",

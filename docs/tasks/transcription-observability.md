@@ -6,7 +6,7 @@
 - 依赖：`AC-01`
 - 被依赖：`TR-02`～`TR-06`
 - 对应决策：[ADR-0001](../decisions/0001-transcription-sentence-level-alignment.md) §11
-- 状态：待实现
+- 状态：已实现
 
 ## 目标
 

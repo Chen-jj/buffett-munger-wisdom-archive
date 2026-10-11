@@ -18,6 +18,7 @@ from acquisition.domain import (
     MediaReference,
     Provenance,
     Transcript,
+    TranscriptParagraph,
 )
 
 from .http import RequestsHttpClient
@@ -76,7 +77,9 @@ def _extract_transcript(soup, hints: dict[str, object]) -> Transcript | None:
         return None
     nodes = soup.select(selector)
     paragraphs = tuple(
-        text for node in nodes if (text := node.get_text(" ", strip=True))
+        TranscriptParagraph(text=text, speaker_label=None)
+        for node in nodes
+        if (text := node.get_text(" ", strip=True))
     )
     if not paragraphs:
         return None

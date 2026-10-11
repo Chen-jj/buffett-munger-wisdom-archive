@@ -14,6 +14,14 @@ class ArtifactType(str, Enum):
     SOURCE_META = "source_meta"
     SOURCE_VIDEO = "source_video"
     SOURCE_AUDIO = "source_audio"
+    VAD = "vad"
+    RAW_ASR = "raw_asr"
+    ALIGNED_ASR = "aligned_asr"
+    TRANSCRIPT_FUSION = "transcript_fusion"
+    SOURCE_ALIGNMENT = "source_alignment"
+    TRANSCRIPTION_LOG = "transcription_log"
+    TRANSCRIPTION_REPORT = "transcription_report"
+    TRANSCRIPTION_MANIFEST = "transcription_manifest"
     ENGLISH_SRT = "english_srt"
     CHINESE_SRT = "chinese_srt"
     RENDERED_VIDEO = "rendered_video"
@@ -27,6 +35,14 @@ CANONICAL_FILENAMES: dict[ArtifactType, str] = {
     ArtifactType.SOURCE_META: "meta.json",
     ArtifactType.SOURCE_VIDEO: "video.mp4",
     ArtifactType.SOURCE_AUDIO: "audio.wav",
+    ArtifactType.VAD: "vad.json",
+    ArtifactType.RAW_ASR: "raw_asr.json",
+    ArtifactType.ALIGNED_ASR: "aligned_asr.json",
+    ArtifactType.TRANSCRIPT_FUSION: "transcript_fusion.json",
+    ArtifactType.SOURCE_ALIGNMENT: "source_alignment.json",
+    ArtifactType.TRANSCRIPTION_LOG: "transcription.log",
+    ArtifactType.TRANSCRIPTION_REPORT: "transcription_report.json",
+    ArtifactType.TRANSCRIPTION_MANIFEST: "transcription_manifest.json",
     ArtifactType.ENGLISH_SRT: "english.srt",
     ArtifactType.CHINESE_SRT: "chinese.srt",
     ArtifactType.RENDERED_VIDEO: "video_中文字幕.mp4",

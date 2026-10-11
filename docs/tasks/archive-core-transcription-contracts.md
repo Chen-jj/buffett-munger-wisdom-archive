@@ -6,7 +6,7 @@
 - 依赖：无
 - 被依赖：`AQ-01`、`TR-01`、`TR-02`
 - 对应决策：[ADR-0001](../decisions/0001-transcription-sentence-level-alignment.md) §4、§5、§10
-- 状态：待实现
+- 状态：已实现
 
 ## 目标
 
@@ -20,7 +20,8 @@
   `source_alignment.json`、`transcription.log`、`transcription_report.json` 和
   `transcription_manifest.json`；复用已有 `audio.wav`。
 - 定义版本化的结构化英文逐字稿公共 DTO/schema，至少覆盖 chapter、paragraph、可选
-  `speaker_label` 和 language。
+  `speaker_label`、有序 `stage_directions` 和 language；舞台说明不得混入 spoken `text`，
+  纯舞台说明 paragraph 允许空 `text`。
 - 定义 `source_alignment.json` 的公共 DTO/schema：timed words、sentences、来源枚举、边界
   枚举和硬不变量。
 - 固定稳定 ID 的格式和序列化规则；时间统一为非负整数毫秒。
@@ -37,6 +38,8 @@
 - 所有新增工件都能通过 `canonical_filename()` 和资产工作区解析。
 - DTO 可显式往返序列化并拒绝未知 schema version。
 - `speaker_label=null` 合法，非字符串非空值被拒绝。
+- `stage_directions` 显式往返且默认空；元素必须是非空字符串，paragraph 的 spoken `text`
+  和 `stage_directions` 不得同时为空。
 - word/sentence ID、时间范围、连续覆盖、重叠、文本非空和 sentence 首尾时间不变量有单测。
 - sentence text 无法从引用 words 按契约重建时被拒绝。
 - 无跨模块内部 import 或外部工具依赖。

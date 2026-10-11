@@ -7,7 +7,7 @@
 - 集成依赖：`MD-01` 完成后才能把真实 `media_download` 工件作为已验证输入
 - 被依赖：`TR-03`、`TR-06`
 - 对应决策：[ADR-0001](../decisions/0001-transcription-sentence-level-alignment.md) §6
-- 状态：待实现
+- 状态：已实现
 
 ## 目标
 

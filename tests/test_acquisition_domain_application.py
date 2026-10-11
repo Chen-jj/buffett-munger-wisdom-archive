@@ -17,6 +17,7 @@ from acquisition.domain import (
     Provenance,
     SourceMetadata,
     Transcript,
+    TranscriptParagraph,
 )
 
 
@@ -27,7 +28,11 @@ def _result(asset_id: AssetId, source_ref: str) -> AcquisitionResult:
         media_ref=MediaReference(kind="page_url", value=source_ref),
         transcript=Transcript(
             chapters=(
-                Chapter(number=1, title="Opening", paragraphs=("hello",)),
+                Chapter(
+                    number=1,
+                    title="Opening",
+                    paragraphs=(TranscriptParagraph(text="hello"),),
+                ),
             )
         ),
         metadata=SourceMetadata(
@@ -137,10 +142,24 @@ def test_domain_value_objects_validate_required_fields() -> None:
 
 def test_transcript_full_text_and_length_are_computed() -> None:
     transcript = Transcript(
-        chapters=(Chapter(number=1, title="Opening", paragraphs=("hello", "world")),)
+        chapters=(
+            Chapter(
+                number=1,
+                title="Opening",
+                paragraphs=(
+                    TranscriptParagraph(
+                        text="hello",
+                        speaker_label="WARREN BUFFETT",
+                        stage_directions=("APPLAUSE",),
+                    ),
+                    TranscriptParagraph(text="world"),
+                ),
+            ),
+        )
     )
 
     assert "=== Chapter 1: Opening ===" in transcript.full_text
+    assert "WARREN BUFFETT: [APPLAUSE] hello" in transcript.full_text
     assert transcript.length == len(transcript.full_text)
 
 
@@ -159,11 +178,18 @@ def test_domain_value_objects_reject_wrong_field_types() -> None:
         SourceMetadata(schema_version=1, title=None, video_id=None)  # type: ignore[arg-type]
 
 
-def test_chapter_and_transcript_reject_non_string_and_non_chapter_entries() -> None:
-    with pytest.raises(ValueError, match="paragraphs must contain strings"):
+def test_transcript_models_reject_invalid_paragraphs_and_chapters() -> None:
+    with pytest.raises(ValueError, match="TranscriptParagraph"):
         Chapter(number=1, title="t", paragraphs=("ok", 5))  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="chapters must contain Chapter values"):
         Transcript(chapters=("not-a-chapter",))  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match="text or stage_directions"):
+        TranscriptParagraph(text="")
+    with pytest.raises(ValueError, match="speaker_label"):
+        TranscriptParagraph(text="hello", speaker_label="")
+    with pytest.raises(ValueError, match="stage_directions"):
+        TranscriptParagraph(text="", stage_directions=("",))
 
 
 def test_provenance_rejects_non_bool_transcript_flag() -> None:

@@ -7,6 +7,7 @@ from .models import (
     Provenance,
     SourceMetadata,
     Transcript,
+    TranscriptParagraph,
 )
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "Provenance",
     "SourceMetadata",
     "Transcript",
+    "TranscriptParagraph",
 ]

@@ -1,0 +1,16 @@
+{
+  "annotation_notes": "<who annotated, how boundaries were checked, and any ambiguity>",
+  "sample_id": "<must equal the plan sample id>",
+  "schema_version": "transcription.golden-reference.v1",
+  "sentence_end_word_ids": [
+    "w10",
+    "w24"
+  ],
+  "word_timings": [
+    {
+      "end_ms": 1420,
+      "start_ms": 1080,
+      "word_id": "w1"
+    }
+  ]
+}

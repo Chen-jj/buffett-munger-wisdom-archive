@@ -70,26 +70,71 @@ class MediaReference:
 
 
 @dataclass(frozen=True)
+class TranscriptParagraph:
+    """One source-neutral transcript paragraph and its explicit metadata."""
+
+    text: str
+    speaker_label: str | None = None
+    stage_directions: tuple[str, ...] = field(default_factory=tuple)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.text, str) or (self.text and not self.text.strip()):
+            raise ValueError("text must contain spoken text or be empty")
+        if self.speaker_label is not None:
+            if (
+                not isinstance(self.speaker_label, str)
+                or not self.speaker_label.strip()
+            ):
+                raise ValueError("speaker_label must be a non-empty string or None")
+        object.__setattr__(self, "stage_directions", tuple(self.stage_directions))
+        if not all(
+            isinstance(direction, str) and direction.strip()
+            for direction in self.stage_directions
+        ):
+            raise ValueError("stage_directions must contain non-empty strings")
+        if not self.text.strip() and not self.stage_directions:
+            raise ValueError("text or stage_directions must not be empty")
+
+    @property
+    def human_text(self) -> str:
+        parts = [f"[{direction}]" for direction in self.stage_directions]
+        if self.text:
+            parts.append(self.text)
+        body = " ".join(parts)
+        return f"{self.speaker_label}: {body}" if self.speaker_label else body
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "speaker_label": self.speaker_label,
+            "text": self.text,
+            "stage_directions": list(self.stage_directions),
+        }
+
+
+@dataclass(frozen=True)
 class Chapter:
     """Transcript chapter independent of any page structure."""
 
     number: int
     title: str
-    paragraphs: tuple[str, ...] = field(default_factory=tuple)
+    paragraphs: tuple[TranscriptParagraph, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
         if not isinstance(self.number, int) or self.number < 0:
             raise ValueError("number must be a non-negative integer")
         _validate_text(self.title, "title", allow_empty=True)
         object.__setattr__(self, "paragraphs", tuple(self.paragraphs))
-        if not all(isinstance(paragraph, str) for paragraph in self.paragraphs):
-            raise ValueError("paragraphs must contain strings")
+        if not all(
+            isinstance(paragraph, TranscriptParagraph)
+            for paragraph in self.paragraphs
+        ):
+            raise ValueError("paragraphs must contain TranscriptParagraph values")
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "number": self.number,
             "title": self.title,
-            "paragraphs": list(self.paragraphs),
+            "paragraphs": [paragraph.to_dict() for paragraph in self.paragraphs],
         }
 
 
@@ -109,7 +154,7 @@ class Transcript:
         lines: list[str] = []
         for chapter in self.chapters:
             lines.append(f"=== Chapter {chapter.number}: {chapter.title} ===")
-            lines.extend(chapter.paragraphs)
+            lines.extend(paragraph.human_text for paragraph in chapter.paragraphs)
             lines.append("")
         return "\n".join(lines).strip()
 

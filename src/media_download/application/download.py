@@ -27,6 +27,17 @@ from .ports import (
 
 DOWNLOAD_MANIFEST_FILENAME = "download_manifest.json"
 MEDIA_REF_FILENAME = "media_ref.json"
+SUCCESSFUL_DOWNLOAD_STATUS = "downloaded"
+
+
+class ExistingDownloadConflict(RuntimeError):
+    """Raised when an existing video cannot be verified for safe reuse."""
+
+    def __init__(self, category: str) -> None:
+        self.category = category
+        super().__init__(
+            f"existing download artifact validation failed: {category}"
+        )
 
 
 @dataclass(frozen=True)
@@ -53,32 +64,53 @@ class DownloadAssetVideoService:
         input: DownloadInput,
         policy: DownloadPolicy | None = None,
     ) -> DownloadPlan:
-        selected_policy = policy or DownloadPolicy()
+        plan, _ = self._plan_with_existing_artifact(
+            input,
+            policy or DownloadPolicy(),
+        )
+        return plan
+
+    def _plan_with_existing_artifact(
+        self,
+        input: DownloadInput,
+        selected_policy: DownloadPolicy,
+    ) -> tuple[DownloadPlan, DownloadedArtifact | None]:
         output_path, manifest_path = self._paths_for(input.asset_id)
 
         if self.artifacts.exists(output_path) and not selected_policy.overwrite:
-            return DownloadPlan(
-                asset_id=input.asset_id,
-                media_ref=input.media_ref,
-                media_url=input.media_ref.value,
-                output_path=output_path,
-                manifest_path=manifest_path,
-                policy=selected_policy,
-                action=DownloadAction.SKIP,
-                reason="output already exists",
+            artifact = self._validate_existing_artifact(
+                input,
+                output_path,
+                manifest_path,
+            )
+            return (
+                DownloadPlan(
+                    asset_id=input.asset_id,
+                    media_ref=input.media_ref,
+                    media_url=artifact.media_url,
+                    output_path=output_path,
+                    manifest_path=manifest_path,
+                    policy=selected_policy,
+                    action=DownloadAction.SKIP,
+                    reason="existing output verified",
+                ),
+                artifact,
             )
 
         media_url = self.resolver_registry.select(input).resolve(input)
         reason = "dry-run" if selected_policy.dry_run else "download required"
-        return DownloadPlan(
-            asset_id=input.asset_id,
-            media_ref=input.media_ref,
-            media_url=media_url,
-            output_path=output_path,
-            manifest_path=manifest_path,
-            policy=selected_policy,
-            action=DownloadAction.DOWNLOAD,
-            reason=reason,
+        return (
+            DownloadPlan(
+                asset_id=input.asset_id,
+                media_ref=input.media_ref,
+                media_url=media_url,
+                output_path=output_path,
+                manifest_path=manifest_path,
+                policy=selected_policy,
+                action=DownloadAction.DOWNLOAD,
+                reason=reason,
+            ),
+            None,
         )
 
     def execute(
@@ -86,17 +118,19 @@ class DownloadAssetVideoService:
         input: DownloadInput,
         policy: DownloadPolicy | None = None,
     ) -> DownloadExecutionResult:
-        plan = self.plan(input, policy)
+        plan, existing_artifact = self._plan_with_existing_artifact(
+            input,
+            policy or DownloadPolicy(),
+        )
         if plan.policy.dry_run:
             return DownloadExecutionResult(plan=plan)
 
         if plan.action == DownloadAction.SKIP:
-            if not self.artifacts.exists(plan.manifest_path):
-                return DownloadExecutionResult(plan=plan)
-            artifact = self.artifacts.read_manifest(plan.manifest_path)
+            if existing_artifact is None:
+                raise RuntimeError("verified existing artifact is missing")
             return DownloadExecutionResult(
                 plan=plan,
-                artifact=artifact,
+                artifact=existing_artifact,
                 manifest_path=plan.manifest_path,
             )
 
@@ -141,6 +175,50 @@ class DownloadAssetVideoService:
     def _workspace_for(self, asset_id: AssetId) -> Path:
         return build_asset_workspace(asset_id, self.output_root)
 
+    def _validate_existing_artifact(
+        self,
+        input: DownloadInput,
+        output_path: str,
+        manifest_path: str,
+    ) -> DownloadedArtifact:
+        if not self.artifacts.exists(manifest_path):
+            raise ExistingDownloadConflict("manifest_missing")
+
+        try:
+            artifact = self.artifacts.read_manifest(manifest_path)
+        except Exception:
+            raise ExistingDownloadConflict("manifest_invalid") from None
+
+        if artifact.asset_id != input.asset_id:
+            raise ExistingDownloadConflict("asset_mismatch")
+        if (
+            artifact.media_kind != input.media_ref.kind
+            or artifact.media_ref_value != input.media_ref.value
+        ):
+            raise ExistingDownloadConflict("media_ref_mismatch")
+        if artifact.status != SUCCESSFUL_DOWNLOAD_STATUS:
+            raise ExistingDownloadConflict("status_not_successful")
+        if Path(artifact.output_path) != Path(output_path):
+            raise ExistingDownloadConflict("artifact_path_mismatch")
+
+        try:
+            actual_size = self.artifacts.size(output_path)
+        except Exception:
+            raise ExistingDownloadConflict("artifact_unreadable") from None
+        if artifact.size_bytes != actual_size:
+            raise ExistingDownloadConflict("size_mismatch")
+        if artifact.checksum_algorithm != "sha256":
+            raise ExistingDownloadConflict("checksum_algorithm_mismatch")
+
+        try:
+            actual_checksum = self.checksum.sha256(output_path)
+        except Exception:
+            raise ExistingDownloadConflict("checksum_unavailable") from None
+        if artifact.checksum_value != actual_checksum:
+            raise ExistingDownloadConflict("checksum_mismatch")
+
+        return artifact
+
     def _artifact_from_download(
         self,
         plan: DownloadPlan,
@@ -159,7 +237,7 @@ class DownloadAssetVideoService:
             downloader_name=downloader_result.downloader_name,
             downloader_version=downloader_result.downloader_version,
             downloaded_at=_utc_now(),
-            status="downloaded",
+            status=SUCCESSFUL_DOWNLOAD_STATUS,
         )
 
 

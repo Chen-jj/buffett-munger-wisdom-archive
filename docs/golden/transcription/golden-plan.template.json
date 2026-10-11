@@ -1,0 +1,91 @@
+{
+  "output_root": "<absolute path to a dedicated cold output root>",
+  "run_id": "<YYYYMMDD-hardware-policy>",
+  "runtime": {
+    "alignment_model": "<Hugging Face alignment model repo>",
+    "alignment_model_version": "<immutable tag or commit>",
+    "batch_size": 8,
+    "beam_size": 5,
+    "compute_type": "int8",
+    "device": "cpu",
+    "ffmpeg_path": "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg",
+    "ffprobe_path": "/opt/homebrew/opt/ffmpeg-full/bin/ffprobe",
+    "interpolation": {
+      "allowed_reasons": [
+        "alignment_model_no_timing",
+        "numeric_or_symbol",
+        "out_of_vocabulary"
+      ],
+      "max_consecutive_words": 1,
+      "max_window_ms": 1500,
+      "min_anchor_alignment_score": 0.5,
+      "min_word_duration_ms": 80,
+      "version": "interpolation.v1"
+    },
+    "official_min_alignment_score": 0.5,
+    "official_min_anchor_alignment_score": 0.5,
+    "vad_merge_gap_ms": 500,
+    "vad_model": "<Hugging Face pyannote VAD pipeline repo>",
+    "vad_model_version": "<immutable tag or commit>",
+    "vad_offset": 0.5,
+    "vad_onset": 0.5,
+    "vad_padding_ms": 250
+  },
+  "samples": [
+    {
+      "asset": {
+        "group": "<CNBC group/year>",
+        "item": "<asset item>",
+        "source": "cnbc"
+      },
+      "chapters_sha256": "<sha256 of canonical chapters.json>",
+      "coverage_tags": [
+        "person_name",
+        "company_name",
+        "number",
+        "percentage",
+        "currency",
+        "official_filler_omission",
+        "cross_segment_sentence"
+      ],
+      "id": "cnbc-clear-single",
+      "kind": "cnbc_single_speaker",
+      "reference_path": "<path to completed reference JSON>"
+    },
+    {
+      "asset": {
+        "group": "<CNBC group/year>",
+        "item": "<asset item>",
+        "source": "cnbc"
+      },
+      "chapters_sha256": "<sha256 of canonical chapters.json>",
+      "coverage_tags": [
+        "asr_omission",
+        "official_addition_or_edit",
+        "multiple_sentences_one_segment"
+      ],
+      "id": "cnbc-multi-speaker",
+      "kind": "cnbc_multi_speaker",
+      "reference_path": "<path to completed reference JSON>"
+    },
+    {
+      "asset": {
+        "group": "<optional group>",
+        "item": "<asset item>",
+        "source": "youtube"
+      },
+      "chapters_sha256": null,
+      "coverage_tags": [
+        "person_name",
+        "company_name",
+        "number",
+        "cross_segment_sentence",
+        "multiple_sentences_one_segment"
+      ],
+      "id": "youtube-noisy-archive",
+      "kind": "youtube_noisy_archive",
+      "reference_path": "<path to completed reference JSON>"
+    }
+  ],
+  "schema_version": "transcription.golden-plan.v1"
+}

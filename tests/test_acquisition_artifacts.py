@@ -8,6 +8,7 @@ import pytest
 
 from archive_core.application import build_asset_workspace
 from archive_core.domain import AssetId
+from archive_core.interfaces import StructuredTranscriptDTO
 
 from acquisition.domain import (
     AcquisitionResult,
@@ -16,6 +17,7 @@ from acquisition.domain import (
     Provenance,
     SourceMetadata,
     Transcript,
+    TranscriptParagraph,
 )
 from acquisition.infrastructure import LocalAcquisitionArtifactWriter
 
@@ -33,7 +35,17 @@ def _sample_result(
                 Chapter(
                     number=1,
                     title="Opening",
-                    paragraphs=("Welcome to the meeting.",),
+                    paragraphs=(
+                        TranscriptParagraph(
+                            text="Welcome to the meeting.",
+                            speaker_label="WARREN BUFFETT",
+                            stage_directions=("APPLAUSE",),
+                        ),
+                        TranscriptParagraph(
+                            text="",
+                            stage_directions=("BREAK",),
+                        ),
+                    ),
                 ),
             )
         )
@@ -74,13 +86,35 @@ def test_writer_uses_archive_core_flat_workspace_and_writes_contract_files(
     assert output_dir == build_asset_workspace(result.asset_id, tmp_path / "output")
     assert output_dir.name == "cnbc_1994_morning"
     assert (output_dir / "transcript.txt").read_text(encoding="utf-8")
-    assert json.loads((output_dir / "chapters.json").read_text(encoding="utf-8")) == [
-        {
-            "number": 1,
-            "title": "Opening",
-            "paragraphs": ["Welcome to the meeting."],
-        }
-    ]
+    chapters_data = json.loads(
+        (output_dir / "chapters.json").read_text(encoding="utf-8")
+    )
+    assert chapters_data == {
+        "schema_version": "acquisition.transcript.v2",
+        "language": "en",
+        "chapters": [
+            {
+                "number": 1,
+                "title": "Opening",
+                "paragraphs": [
+                    {
+                        "speaker_label": "WARREN BUFFETT",
+                        "text": "Welcome to the meeting.",
+                        "stage_directions": ["APPLAUSE"],
+                    },
+                    {
+                        "speaker_label": None,
+                        "text": "",
+                        "stage_directions": ["BREAK"],
+                    },
+                ],
+            }
+        ],
+    }
+    assert StructuredTranscriptDTO.from_dict(chapters_data).to_dict() == chapters_data
+    transcript_text = (output_dir / "transcript.txt").read_text(encoding="utf-8")
+    assert "WARREN BUFFETT: [APPLAUSE] Welcome to the meeting." in transcript_text
+    assert "[BREAK]" in transcript_text
 
     meta = json.loads((output_dir / "meta.json").read_text(encoding="utf-8"))
     assert meta["schema_version"] == "acquisition.source-metadata.v1"
@@ -93,6 +127,21 @@ def test_writer_uses_archive_core_flat_workspace_and_writes_contract_files(
         "value": "https://buffett.cnbc.com/video/morning-session.html",
         "extra": {"video_id": "123"},
     }
+
+
+def test_unversioned_transcript_shape_is_not_accepted_as_current_schema() -> None:
+    with pytest.raises(ValueError, match="unsupported structured transcript schema"):
+        StructuredTranscriptDTO.from_dict(
+            {
+                "chapters": [
+                    {
+                        "number": 1,
+                        "title": "Opening",
+                        "paragraphs": ["legacy paragraph"],
+                    }
+                ]
+            }
+        )
 
 
 def test_writer_skips_transcript_files_when_transcript_is_unavailable(

@@ -12,6 +12,7 @@ import acquisition.infrastructure.generic as generic_module
 from acquisition.domain import (
     AcquisitionRequest,
     MediaReference,
+    TranscriptParagraph,
 )
 from acquisition.infrastructure import (
     GenericCrawler,
@@ -94,8 +95,8 @@ def test_generic_crawler_fetch_extracts_transcript_with_selector() -> None:
     assert result.media_ref == MediaReference(kind="page_url", value=locator)
     assert result.transcript is not None
     assert result.transcript.chapters[0].paragraphs == (
-        "First paragraph.",
-        "Second paragraph.",
+        TranscriptParagraph(text="First paragraph.", speaker_label=None),
+        TranscriptParagraph(text="Second paragraph.", speaker_label=None),
     )
     assert result.provenance.transcript_available is True
 
@@ -166,7 +167,7 @@ def test_transcript_normalizer_skips_paragraph_nodes_without_p_tags() -> None:
     assert len(transcript.chapters) == 1
     chapter = transcript.chapters[0]
     assert (chapter.number, chapter.title) == (1, "Intro")
-    assert chapter.paragraphs == ("real text",)
+    assert chapter.paragraphs == (TranscriptParagraph(text="real text"),)
 
 
 def test_transcript_normalizer_defaults_chapter_number_when_unnumbered() -> None:
@@ -182,6 +183,58 @@ def test_transcript_normalizer_defaults_chapter_number_when_unnumbered() -> None
 
     assert transcript.chapters[0].number == 0
     assert transcript.chapters[0].title == "Opening Remarks"
+
+
+def test_transcript_normalizer_separates_speakers_colons_and_stage_directions() -> None:
+    paragraph_texts = [
+        "WARREN BUFFETT: Good morning.",
+        "A paragraph without a speaker.",
+        "UNKNOWN SPEAKER: Can you hear me?",
+        "WARREN BUFFETT: Berkshire: then and now.",
+        "WALTER E. SCOTT, JR.: Thank you.",
+        "WARREN BUFFETT: We agree. [APPLAUSE] Thank you again. (LAUGHTER)",
+        "[MUSIC]",
+        "Question: What makes a durable moat?",
+        "WARREN BUFFETT: We own (through subsidiaries) several businesses.",
+    ]
+    paragraphs_html = "".join(
+        '<div class="ChapterParagraph-chapterParagraph">'
+        f"<p>{text}</p></div>"
+        for text in paragraph_texts
+    )
+    html = (
+        '<div class="Transcript-transcriptBody">'
+        '<div class="Chapter-chapter">'
+        '<div class="Chapter-chapterTitle">1. Opening</div>'
+        f"{paragraphs_html}</div></div>"
+    )
+
+    paragraphs = TranscriptNormalizer().from_cnbc_soup(_soup(html)).chapters[
+        0
+    ].paragraphs
+
+    assert paragraphs == (
+        TranscriptParagraph(text="Good morning.", speaker_label="WARREN BUFFETT"),
+        TranscriptParagraph(text="A paragraph without a speaker."),
+        TranscriptParagraph(
+            text="Can you hear me?", speaker_label="UNKNOWN SPEAKER"
+        ),
+        TranscriptParagraph(
+            text="Berkshire: then and now.", speaker_label="WARREN BUFFETT"
+        ),
+        TranscriptParagraph(text="Thank you.", speaker_label="WALTER E. SCOTT, JR."),
+        TranscriptParagraph(
+            text="We agree. Thank you again.",
+            speaker_label="WARREN BUFFETT",
+            stage_directions=("APPLAUSE", "LAUGHTER"),
+        ),
+        TranscriptParagraph(text="", stage_directions=("MUSIC",)),
+        TranscriptParagraph(text="Question: What makes a durable moat?"),
+        TranscriptParagraph(
+            text="We own (through subsidiaries) several businesses.",
+            speaker_label="WARREN BUFFETT",
+        ),
+    )
 
 
 def test_metadata_extractor_cnbc_handles_absent_payload() -> None:
