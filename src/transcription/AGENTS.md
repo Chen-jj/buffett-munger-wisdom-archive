@@ -13,6 +13,8 @@
 - 持久化 VAD、raw ASR、aligned ASR、逐字稿融合、日志、报告和阶段 manifest。
 - 有结构化官网英文逐字稿时，本地融合其拼写、标点、句界和可靠 speaker metadata。
 - 无官网覆盖时，使用 Whisper 标点、本地 sentence detector 和停顿规则恢复完整句界。
+- 从可靠 chapter 映射派生来源无关的 sections，并在 document section 变化处强制完整句界；无法
+  可靠派生时发布 `sections=[]`，不阻断有效 words/sentences。
 - 校验时间轴、word/sentence 覆盖、溯源、缓存和发布门禁。
 
 ## 非职责
@@ -26,7 +28,7 @@
 ## 分层规则
 
 - `domain/`：VAD region、ASR segment、aligned word、transcript match、timed word、source
-  sentence、finding 和纯校验规则。禁止 provider、文件系统、subprocess 和 UI。
+  sentence、document section、finding 和纯校验规则。禁止 provider、文件系统、subprocess 和 UI。
 - `application/`：验证输入、提取/复用音频、编排 ASR/alignment/fusion/sentence、缓存键、QA、
   阶段状态和结构化事件。只依赖端口，不直接依赖具体工具。
 - `infrastructure/`：ffmpeg、WhisperX/pyannote、本地 sentence detector、JSON/file store 和日志
@@ -147,8 +149,12 @@
   校验稳定 ID、整数毫秒、时间单调、连续且恰好一次的 sentence 覆盖、冗余首尾时间和可重建文字。
   `speaker_label` 只来自映射后的结构化官网 token；identity/YouTube 路径保持 `null`。
 - sentence cache key 包含 fused/aligned 输入 SHA-256、official/identity mode、detector identity 和
-  完整 boundary policy。cache hit 仍须验证 canonical path/size/SHA-256 与公共 DTO；stale canonical
-  只有 `SentenceBoundaryPublicationPolicy(overwrite=True)` 时才可替换。
+  完整 boundary/section policy 及 chapter 输入 checksum。cache hit 仍须验证 canonical
+  path/size/SHA-256 与公共 DTO；stale canonical 只有
+  `SentenceBoundaryPublicationPolicy(overwrite=True)` 时才可替换。
+- timed word 的 effective document section 由 OT chapter 映射和显式 ASR-only fallback 规则产生；
+  section 变化是独立 verified 句界信号。非空 sections 必须使用 `sec1..secN` 连续、无重叠且恰好
+  一次覆盖全部 sentences，并保留 chapter 标题；任一 section-only 门禁失败时整体回退空数组。
 - 本阶段唯一内容输出是 `source_alignment.json`，同时更新 transcription manifest 的
   `source_alignment` record；不生成任何 SRT 或 cue plan。
 
@@ -172,7 +178,7 @@
 - 真实模型测试必须显式门控；当前模块只维护 CNBC live integration，完整跨模块管线由未来
   orchestration 集成测试覆盖。
 
-## 当前实现与 integration 状态（2026-10-12）
+## 当前实现与 integration 状态（2026-10-15）
 
 - TR-01～TR-06 的 application workflow、分层 cache、manifest、失败保留与 provider-neutral
   command/result 已实现，并由 fake provider 离线测试覆盖；`source_alignment.json` 可作为
@@ -183,9 +189,13 @@
 - 所有输入和 transcription 工件统一保存在
   `output/transcription-integration/cnbc_2000_morning/`；第二次运行必须通过 manifest 命中 audio、
   VAD、raw ASR、alignment、fusion 和 source alignment 六层缓存。
-- CNBC integration 已真实完成：gitignore 的 2000 上午场第 3 节 `11:48`～`21:40` 样本从
-  `video.mp4` 跑到 `source_alignment.json`，产出 1,544 words、94 sentences、97.28% 官网词覆盖，
-  时间轴单调且 report succeeded。实跑同时验证了固定 revision 模型、本地 HF 登录、NLTK 数据和
-  断点 cache；`tests/transcription/test_integration_live.py` 验证所有 canonical 中间产物可解析。
+- ADR-0004 的 CNBC integration 已从空 workspace 真实完成：2000 上午场连续第 6、7 节
+  `35:01`～`45:24` 从 `video.mp4` 跑到 `source_alignment.json`，产出 1,564 words、97 sentences
+  和两个连续完整 section（`s1..s52`、`s53..s97`），标题与 chapter 6/7 一致；report succeeded
+  且 error 为 0，canonical SHA-256 为
+  `99f36287d28d0581ae039f64eeea55c14bef044dbb87fdca2f9c8d26ad7fbf91`。
+- 同一次 live 测试的第二次运行通过 manifest 命中 audio、VAD、raw ASR、alignment、fusion 和
+  source alignment 六层缓存，canonical checksum 保持不变；测试同时验证所有 canonical 中间
+  产物可解析、section 覆盖及 chapter 6→7 的 verified 句界。
 - 当前 CNBC-only 连通性验收已完成。transcription 的 reference-based Golden Live 入口已移除；
   integration 输出不是人工真值，未来全管线连通性由 orchestration 集成测试负责。

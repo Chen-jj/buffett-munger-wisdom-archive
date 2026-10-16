@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -9,7 +10,11 @@ import pytest
 
 from archive_core.application import build_asset_workspace
 from archive_core.domain import AssetId, ArtifactType, canonical_filename
-from archive_core.interfaces import SourceAlignmentDTO
+from archive_core.interfaces import (
+    BoundarySource,
+    BoundaryStatus,
+    SourceAlignmentDTO,
+)
 from tests.transcription.live_fixture import (
     DEFAULT_OUTPUT_ROOT,
     INTEGRATION_PLAN_FILENAME,
@@ -25,6 +30,23 @@ from transcription.domain import (
     TranscriptFusionArtifact,
     VadArtifact,
 )
+
+
+EXPECTED_CHAPTER_TITLES = (
+    '"There\'s nothing magic about a one-year period"',
+    'We want a "mathematical edge in every transaction"',
+)
+
+
+def _captured_result(capsys: pytest.CaptureFixture[str]) -> dict[str, object]:
+    captured_stdout = capsys.readouterr().out
+    result_start = captured_stdout.rfind('{\n  "status": "integration_completed"')
+    assert result_start >= 0
+    return json.loads(captured_stdout[result_start:])
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 @pytest.mark.live
@@ -65,7 +87,6 @@ def test_real_cnbc_transcription_pipeline_produces_every_artifact(
     if not output_root.is_absolute():
         output_root = (plan_path.parent / output_root).resolve()
     workspaces = []
-    had_complete_cache = []
     for sample_value in plan["samples"]:
         asset = dict(sample_value["asset"])
         workspace = build_asset_workspace(
@@ -73,12 +94,6 @@ def test_real_cnbc_transcription_pipeline_produces_every_artifact(
             output_root,
         )
         workspaces.append(workspace)
-        manifest_path = workspace / "transcription_manifest.json"
-        if manifest_path.is_file():
-            manifest = AudioVadAsrCacheManifest.from_dict(load_json(manifest_path))
-            had_complete_cache.append(expected_records <= set(manifest.records))
-        else:
-            had_complete_cache.append(False)
 
     assert main(
         [
@@ -86,12 +101,10 @@ def test_real_cnbc_transcription_pipeline_produces_every_artifact(
             str(plan_path),
         ]
     ) == 0
-    captured_stdout = capsys.readouterr().out
-    result_start = captured_stdout.rfind('{\n  "status": "integration_completed"')
-    assert result_start >= 0
-    result = json.loads(captured_stdout[result_start:])
+    result = _captured_result(capsys)
     assert result["status"] == "integration_completed"
     assert len(result["samples"]) == len(workspaces)
+    first_checksums = []
 
     for index, sample_value in enumerate(plan["samples"]):
         workspace = workspaces[index]
@@ -136,20 +149,61 @@ def test_real_cnbc_transcription_pipeline_produces_every_artifact(
         TranscriptFusionArtifact.from_dict(
             load_json(workspace / "transcript_fusion.json")
         )
-        SourceAlignmentDTO.from_dict(load_json(workspace / "source_alignment.json"))
+        alignment = SourceAlignmentDTO.from_dict(
+            load_json(workspace / "source_alignment.json")
+        )
+        assert [section.id for section in alignment.sections] == ["sec1", "sec2"]
+        assert tuple(section.title for section in alignment.sections) == (
+            EXPECTED_CHAPTER_TITLES
+        )
+        sentence_positions = {
+            sentence.id: position
+            for position, sentence in enumerate(alignment.sentences)
+        }
+        first_section, second_section = alignment.sections
+        assert sentence_positions[first_section.first_sentence_id] == 0
+        transition_position = sentence_positions[first_section.last_sentence_id]
+        assert sentence_positions[second_section.first_sentence_id] == (
+            transition_position + 1
+        )
+        assert sentence_positions[second_section.last_sentence_id] == (
+            len(alignment.sentences) - 1
+        )
+        transition_sentence = alignment.sentences[transition_position]
+        assert transition_sentence.boundary_status is BoundaryStatus.VERIFIED
+        assert transition_sentence.boundary_source in {
+            BoundarySource.OFFICIAL_PUNCTUATION,
+            BoundarySource.SPEAKER_CHANGE,
+            BoundarySource.DOCUMENT_SECTION_CHANGE,
+        }
         manifest = AudioVadAsrCacheManifest.from_dict(
             load_json(workspace / "transcription_manifest.json")
         )
         assert expected_records <= set(manifest.records)
         cache_hits = set(result["samples"][index]["cache_hits"])
-        if had_complete_cache[index]:
-            assert cache_hits == expected_records
-        else:
-            assert not cache_hits
+        assert not cache_hits
         report = load_json(workspace / "transcription_report.json")
         assert report["status"] == "succeeded"
         assert report["counts"]["error"] == 0
+        first_checksums.append(_sha256(workspace / "source_alignment.json"))
+        if uses_default_preparation:
+            sample_metadata = load_json(workspace / INTEGRATION_SAMPLE_FILENAME)
+            assert sample_metadata["selection"] == {
+                "source_start_seconds": 2101,
+                "source_end_seconds": 2724,
+                "duration_seconds": 623,
+                "chapter_numbers": [6, 7],
+                "chapter_titles": list(EXPECTED_CHAPTER_TITLES),
+            }
         for line in (workspace / "transcription.log").read_text(
             encoding="utf-8"
         ).splitlines():
             json.loads(line)
+
+    assert main(["--plan", str(plan_path)]) == 0
+    rerun_result = _captured_result(capsys)
+    assert rerun_result["status"] == "integration_completed"
+    assert len(rerun_result["samples"]) == len(workspaces)
+    for index, workspace in enumerate(workspaces):
+        assert set(rerun_result["samples"][index]["cache_hits"]) == expected_records
+        assert _sha256(workspace / "source_alignment.json") == first_checksums[index]

@@ -22,3 +22,11 @@
 - 依赖保持轻量且显式。
 - subprocess 执行可注入，使 ffmpeg/yt-dlp 调用无需运行真实二进制即可测试。
 - 集中配置解析，但功能特定配置的含义归各功能模块所有。
+
+## 当前实现状态（2026-10-16）
+
+- 共享 YAML loader 只返回原始 mapping，不解释 `translation` 字段；严格 provider 配置解析与
+  production composition 归 `translation.infrastructure` 所有。
+- 共享 process adapter 支持可注入的 stdin 文本，Codex CLI adapter 的命令与 prompt 可离线测试。
+- TA-16 已通过共享 process adapter 真实运行两次 `codex exec`，并验证第二次正式工件复用没有新增
+  provider/process call。

@@ -24,7 +24,7 @@ if str(SOURCE_ROOT) not in sys.path:
 
 from archive_core.application import build_asset_workspace
 from archive_core.domain import AssetId
-from acquisition.domain import AcquisitionTarget, Transcript
+from acquisition.domain import AcquisitionTarget, Chapter, Transcript
 from acquisition.infrastructure import CnbcCrawler, LocalAcquisitionArtifactWriter
 from media_download.domain import DownloadInput, DownloadedArtifact, MediaRef
 from media_download.infrastructure import (
@@ -40,7 +40,7 @@ DEFAULT_URL = (
 )
 DEFAULT_OUTPUT_ROOT = REPOSITORY_ROOT / "output" / "transcription-integration"
 USER_AGENT = "buffett-munger-wisdom-archive/1.0"
-SAMPLE_METADATA_SCHEMA = "transcription.integration-sample-input.v1"
+SAMPLE_METADATA_SCHEMA = "transcription.integration-sample-input.v2"
 INTEGRATION_PLAN_FILENAME = "integration-plan.json"
 INTEGRATION_SAMPLE_FILENAME = "integration_sample.json"
 
@@ -152,6 +152,22 @@ def select_hls_segments(
     if selected[0][0] > start_seconds or selected[-1][1] < end_seconds:
         raise PreparationError("requested time range exceeds the HLS playlist")
     return selected[0][0], tuple(segment[2] for segment in selected)
+
+
+def select_transcript_chapters(
+    transcript: Transcript,
+    chapter_numbers: Sequence[int],
+) -> tuple[Chapter, ...]:
+    requested = tuple(chapter_numbers)
+    selected = tuple(
+        chapter for chapter in transcript.chapters if chapter.number in requested
+    )
+    if tuple(chapter.number for chapter in selected) != requested:
+        raise PreparationError(
+            "expected exact ordered transcript chapters "
+            + ", ".join(str(number) for number in requested)
+        )
+    return selected
 
 
 def _http_text(url: str) -> str:
@@ -271,11 +287,7 @@ def prepare(args: argparse.Namespace) -> Path:
     result = CnbcCrawler(delay_seconds=0).fetch(target)
     if result.transcript is None:
         raise PreparationError("CNBC page did not provide a transcript")
-    chapters = [
-        chapter for chapter in result.transcript.chapters if chapter.number == args.chapter
-    ]
-    if len(chapters) != 1:
-        raise PreparationError(f"expected exactly one transcript chapter {args.chapter}")
+    chapters = select_transcript_chapters(result.transcript, args.chapters)
 
     media_input = DownloadInput(
         asset_id=asset_id,
@@ -338,11 +350,13 @@ def prepare(args: argparse.Namespace) -> Path:
             "source_url": args.url,
             "resolved_media_url": media_url,
             "variant_url": variant_url,
-            "source_start_seconds": args.start,
-            "source_end_seconds": args.end,
-            "duration_seconds": args.end - args.start,
-            "chapter_number": chapters[0].number,
-            "chapter_title": chapters[0].title,
+            "selection": {
+                "source_start_seconds": args.start,
+                "source_end_seconds": args.end,
+                "duration_seconds": args.end - args.start,
+                "chapter_numbers": [chapter.number for chapter in chapters],
+                "chapter_titles": [chapter.title for chapter in chapters],
+            },
             "ffmpeg_command": list(ffmpeg_command),
             "video_sha256": checksum,
         },
@@ -363,7 +377,7 @@ def prepare(args: argparse.Namespace) -> Path:
             },
             "samples": [
                 {
-                    "id": "cnbc-2000-morning-chapter-03",
+                    "id": "cnbc-2000-morning-chapters-06-07",
                     "kind": "cnbc_multi_speaker",
                     "asset": {
                         "source": asset_id.source,
@@ -378,6 +392,7 @@ def prepare(args: argparse.Namespace) -> Path:
                         "currency",
                         "cross_segment_sentence",
                         "multiple_sentences_one_segment",
+                        "document_section_change",
                     ],
                     "chapters_sha256": chapters_checksum,
                 }
@@ -393,9 +408,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output-root", type=Path, default=DEFAULT_OUTPUT_ROOT)
     parser.add_argument("--group", default="2000")
     parser.add_argument("--item", default="morning")
-    parser.add_argument("--chapter", type=int, default=3)
-    parser.add_argument("--start", type=parse_timestamp, default=parse_timestamp("11:48"))
-    parser.add_argument("--end", type=parse_timestamp, default=parse_timestamp("21:40"))
+    parser.add_argument("--chapters", type=int, nargs=2, default=(6, 7))
+    parser.add_argument("--start", type=parse_timestamp, default=parse_timestamp("35:01"))
+    parser.add_argument("--end", type=parse_timestamp, default=parse_timestamp("45:24"))
     parser.add_argument("--max-height", type=int, default=360)
     parser.add_argument(
         "--ffmpeg-path",

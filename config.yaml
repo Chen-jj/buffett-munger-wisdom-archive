@@ -1,11 +1,17 @@
 # CNBC Buffett Archive 抓取 + 翻译 + 字幕烧录
 translation:
+  provider: "codex-cli-chatgpt"
+  codex_cli:
+    executable: "codex"
+    model: "gpt-5.6-sol"
+    reasoning_effort: "high"
+    timeout_seconds: 1800
   openai:
-    api_key: "sk-xxx"         # ← 必填：你的 OpenAI API Key
-    base_url: null            # 自定义 API endpoint（如 Ollama: http://localhost:11434/v1）
-    model: "gpt-4o"
-    temperature: 0.1
-    batch_size: 15            # 每批翻译的字幕条数
+    api_key_env: "OPENAI_API_KEY"
+    model: "gpt-5.6-sol"
+    reasoning_effort: "high"
+    max_output_tokens: 128000
+    timeout_seconds: 1800
 
 # yt-dlp 视频下载选项
 download:

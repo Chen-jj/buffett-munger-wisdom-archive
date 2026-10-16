@@ -86,6 +86,15 @@ class EventCode(str, Enum):
     BOUNDARY_FALLBACK_USED = "boundary.fallback_used"
     BOUNDARY_COMPLETED = "boundary.completed"
     BOUNDARY_CACHE_HIT = "boundary.cache_hit"
+    SECTION_DIRECT_ASSIGNED = "section.direct_assigned"
+    SECTION_ASR_ONLY_ASSIGNED_TO_FIRST = "section.asr_only_assigned_to_first"
+    SECTION_ASR_ONLY_ASSIGNED_TO_PREVIOUS = "section.asr_only_assigned_to_previous"
+    SECTION_DOCUMENT_CHANGE_BOUNDARY = "section.document_change_boundary"
+    SECTION_CHAPTER_UNMAPPED = "section.chapter_unmapped"
+    SECTION_NON_MONOTONIC = "section.non_monotonic"
+    SECTION_SENTENCE_CROSSES_SECTIONS = "section.sentence_crosses_sections"
+    SECTION_PUBLICATION_SKIPPED = "section.publication_skipped"
+    SECTION_PUBLISHED = "section.published"
 
 
 class ReportStatus(str, Enum):

@@ -43,6 +43,7 @@ def normalize_process_error(result: ProcessResult) -> str:
 def run_process(
     command: Sequence[str | Path],
     *,
+    stdin_text: str | None = None,
     dry_run: bool = False,
     check: bool = False,
     cwd: str | Path | None = None,
@@ -66,14 +67,16 @@ def run_process(
         )
 
     try:
-        completed = runner(
-            list(normalized),
-            cwd=str(cwd) if cwd is not None else None,
-            env=dict(env) if env is not None else None,
-            timeout=timeout,
-            capture_output=True,
-            text=True,
-        )
+        runner_options = {
+            "cwd": str(cwd) if cwd is not None else None,
+            "env": dict(env) if env is not None else None,
+            "timeout": timeout,
+            "capture_output": True,
+            "text": True,
+        }
+        if stdin_text is not None:
+            runner_options["input"] = stdin_text
+        completed = runner(list(normalized), **runner_options)
         result = ProcessResult(
             command=normalized,
             returncode=int(completed.returncode),

@@ -34,9 +34,30 @@
   说明 paragraph 使用空 `text`，但 paragraph 的 `text` 和 `stage_directions` 不得同时为空。
   当前语言固定为 `en`。
 - 同一入口发布 `transcription.source-alignment.v1` 的 `SourceAlignmentDTO`、
-  `TimedWordDTO`、`SourceSentenceDTO` 及其来源/边界枚举。schema 记录
+  `TimedWordDTO`、`SourceSentenceDTO`、`SourceSectionDTO` 及其来源/边界枚举。schema 记录
   `audio_duration_ms`，所有时间为原音频时间轴上的非负整数毫秒。
 - timed word 与 sentence 的稳定 ID 分别严格使用文档顺序的一基格式 `w1..wN`、
   `s1..sN`。sentence 必须连续且恰好覆盖所有 words，冗余首尾时间必须匹配引用 word，
   文本按公共空格/标点规范可从引用 words 重建。
+- source alignment 必须显式提供 `sections`；空列表表示没有可靠分组，非空时使用
+  `sec1..secN`，连续且恰好一次覆盖全部 sentences。文档结构强制形成的句界使用
+  `document_section_change` provenance。
 - 版本化 DTO 只通过显式 `to_dict()` / `from_dict()` 进行 JSON 形状往返，未知版本必须失败。
+
+## Translation 公共契约
+
+- `ArtifactType` 统一定义 `translation_result.json` 与 `translation_manifest.json`。
+- `archive_core.interfaces` 发布 provider-neutral 的 `translation.result.v1`：只保存 source
+  alignment checksum、固定语言、按源顺序排列的 section 标题译文和 sentence 译文；完整覆盖需
+  通过 `SourceAlignmentDTO` 校验。
+- 同一入口发布严格审计用的 `translation.manifest.v1`：只描述成功工件，并记录输入/输出证据、
+  prompt/glossary/provider/model/生成参数及本次执行计数和可空 token usage。生成参数是
+  provider-neutral 的有限 JSON object，完整绑定 manifest provenance 与 checkpoint identity。
+
+## 当前实现状态（2026-10-16）
+
+- transcription 的 source section 扩展及 translation result/manifest 公共契约均已实现，并由离线
+  schema、round-trip、覆盖和交叉校验测试验证。
+- translation provider-neutral manifest 已由 OpenAI 与 Codex CLI 两种 identity 的离线测试验证；
+  公共契约不负责 provider 选择。TA-10 已被取代且未运行；TA-16 已验证真实 Codex identity、
+  输入/输出 checksum、可空 usage 与 byte-identical 正式工件复用。

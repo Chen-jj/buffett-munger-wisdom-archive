@@ -276,6 +276,7 @@ class TranscriptionWorkflow:
             sentence = self.sentence_boundaries.execute(
                 aligned,
                 fusion,
+                official=official,
                 boundary_policy=self.config.sentence_boundary,
                 publication_policy=SentenceBoundaryPublicationPolicy(
                     overwrite=request.overwrite,

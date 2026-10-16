@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any, Mapping
+import unicodedata
 import wave
 
 from infrastructure.infrastructure.filesystem import write_json_file
@@ -40,6 +41,21 @@ from transcription.domain import (
 ProcessRunner = Callable[..., ProcessResult]
 AlignmentModelResolver = Callable[[str, str], str]
 AudioLoader = Callable[[str], Mapping[str, Any]]
+
+
+def _restore_raw_trailing_punctuation(
+    provider_surface: str,
+    raw_surface: str,
+) -> str:
+    if provider_surface == raw_surface or not raw_surface.startswith(provider_surface):
+        return provider_surface
+    suffix = raw_surface[len(provider_surface) :]
+    if suffix and all(
+        character != "_" and unicodedata.category(character).startswith("P")
+        for character in suffix
+    ):
+        return raw_surface
+    return provider_surface
 
 
 @dataclass(frozen=True)
@@ -409,12 +425,13 @@ class WhisperXForcedAligner:
             )
         candidates: list[AlignmentCandidate] = []
         for token, (text, start_ms, end_ms, score) in zip(tokens, provider_words):
+            surface = _restore_raw_trailing_punctuation(text.strip(), token.text)
             if start_ms is None:
                 candidates.append(
                     AlignmentCandidate(
                         raw_word_id=token.id,
                         segment_id=token.segment_id,
-                        text=text.strip(),
+                        text=surface,
                         start_ms=None,
                         end_ms=None,
                         alignment_score=None,
@@ -426,7 +443,7 @@ class WhisperXForcedAligner:
                 AlignmentCandidate(
                     raw_word_id=token.id,
                     segment_id=token.segment_id,
-                    text=text.strip(),
+                    text=surface,
                     start_ms=start_ms,
                     end_ms=end_ms,
                     alignment_score=score,

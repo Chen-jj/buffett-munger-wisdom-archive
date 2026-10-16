@@ -862,3 +862,148 @@ def test_whisperx_adapter_splits_compound_words_and_ignores_punctuation_only() -
         AlignmentCandidate("rw2", "seg1", "C.", 300, 500, 0.8),
         AlignmentCandidate("rw3", "seg1", "works.?", 600, 900, 0.9),
     )
+
+
+def _run_whisperx_adapter(
+    raw_text: str,
+    provider_words: list[Mapping[str, object]],
+) -> tuple[
+    RawAsrArtifact,
+    tuple[Any, ...],
+    tuple[AlignmentCandidate, ...],
+]:
+    class Backend:
+        def load_audio(self, path: str):
+            return "audio"
+
+        def load_align_model(self, **kwargs):
+            return "model", {}
+
+        def align(self, *args, **kwargs):
+            return {"word_segments": provider_words}
+
+    raw = RawAsrArtifact(
+        audio_sha256="hash",
+        audio_duration_ms=1_000,
+        vad_cache_key="vad-key",
+        provider=ProviderIdentity("whisperx", "3.8.5"),
+        config=AsrConfig.development(model="tiny.en"),
+        segments=(RawAsrSegment("seg1", raw_text, 0, 1_000),),
+        cache_key="raw-key",
+    )
+    tokens = build_raw_asr_tokens(raw)
+    adapter = WhisperXForcedAligner(
+        whisperx_version="3.8.5",
+        backend=Backend(),
+        model_resolver=lambda model, version: f"/models/{model}/{version}",
+    )
+    return raw, tokens, adapter.align("audio.wav", raw, tokens, _config())
+
+
+@pytest.mark.parametrize(
+    ("raw_surface", "provider_surface"),
+    [
+        ("returns,", "returns"),
+        ("figures—", "figures"),
+        ("outlook…”", "outlook"),
+    ],
+)
+def test_whisperx_adapter_restores_exact_raw_trailing_punctuation(
+    raw_surface: str,
+    provider_surface: str,
+) -> None:
+    raw, tokens, candidates = _run_whisperx_adapter(
+        raw_surface,
+        [
+            {
+                "word": provider_surface,
+                "start": 0.12,
+                "end": 0.34,
+                "score": 0.73,
+            }
+        ],
+    )
+
+    assert candidates == (
+        AlignmentCandidate("rw1", "seg1", raw_surface, 120, 340, 0.73),
+    )
+    resolved = resolve_alignment_candidates(raw, tokens, candidates, _config())
+    assert resolved[0].text == raw_surface
+    assert resolved[0].start_ms == 120
+    assert resolved[0].end_ms == 340
+    assert resolved[0].alignment_score == 0.73
+    assert resolved[0].timing_source is AlignmentTimingSource.ACOUSTIC_ALIGNMENT
+
+
+def test_whisperx_adapter_restores_surface_without_changing_unaligned_state() -> None:
+    _, _, candidates = _run_whisperx_adapter(
+        "figures—",
+        [{"word": "figures"}],
+    )
+
+    assert candidates == (
+        AlignmentCandidate(
+            "rw1",
+            "seg1",
+            "figures—",
+            None,
+            None,
+            None,
+            "alignment_model_no_timing",
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    ("raw_surface", "provider_surface"),
+    [
+        ('"figures', "figures"),
+        ("re-enter", "reenter"),
+        ("figures", "figure"),
+        ("figures2", "figures"),
+        ("Figures—", "figures"),
+        ("figures_", "figures"),
+    ],
+)
+def test_whisperx_adapter_does_not_fuzzy_match_non_trailing_punctuation_changes(
+    raw_surface: str,
+    provider_surface: str,
+) -> None:
+    raw, tokens, candidates = _run_whisperx_adapter(
+        raw_surface,
+        [
+            {
+                "word": provider_surface,
+                "start": 0.12,
+                "end": 0.34,
+                "score": 0.73,
+            }
+        ],
+    )
+
+    assert candidates[0].text == provider_surface
+    with pytest.raises(AlignmentFailure, match="surface text does not match"):
+        resolve_alignment_candidates(raw, tokens, candidates, _config())
+
+
+@pytest.mark.parametrize("mutation", ["missing", "extra", "reordered"])
+def test_alignment_gate_still_rejects_candidate_coverage_and_order(
+    mutation: str,
+) -> None:
+    raw = _raw_artifact("audio-hash", text="Good morning.")
+    tokens = build_raw_asr_tokens(raw)
+    candidates = (
+        AlignmentCandidate("rw1", "seg1", "Good", 120, 250, 0.9),
+        AlignmentCandidate("rw2", "seg1", "morning.", 300, 450, 0.8),
+    )
+    if mutation == "missing":
+        changed = candidates[:-1]
+    elif mutation == "extra":
+        changed = candidates + (
+            AlignmentCandidate("rw3", "seg1", "extra", 500, 600, 0.7),
+        )
+    else:
+        changed = tuple(reversed(candidates))
+
+    with pytest.raises(AlignmentFailure, match="coverage|identity"):
+        resolve_alignment_candidates(raw, tokens, changed, _config())

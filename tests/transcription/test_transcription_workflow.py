@@ -41,7 +41,10 @@ from transcription.domain import (
     VadRegion,
 )
 from transcription.application import TranscriptFusionService
-from transcription.infrastructure import RuleBasedSentenceBoundaryDetector
+from transcription.infrastructure import (
+    RuleBasedSentenceBoundaryDetector,
+    WhisperXForcedAligner,
+)
 
 
 ASSET = AssetId("cnbc", "1994", "morning")
@@ -197,7 +200,39 @@ def _official() -> StructuredTranscriptDTO:
     )
 
 
-def _make(tmp_path: Path, *, source: AssetId = ASSET, official: bool = True):
+def _two_chapter_official() -> StructuredTranscriptDTO:
+    return StructuredTranscriptDTO(
+        language="en",
+        chapters=(
+            TranscriptChapterDTO(
+                number=6,
+                title="Opening exchange",
+                paragraphs=(
+                    TranscriptParagraphDTO(
+                        speaker_label="WARREN BUFFETT", text="Good morning"
+                    ),
+                ),
+            ),
+            TranscriptChapterDTO(
+                number=7,
+                title="Welcome",
+                paragraphs=(
+                    TranscriptParagraphDTO(
+                        speaker_label="WARREN BUFFETT", text="Welcome."
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
+def _make(
+    tmp_path: Path,
+    *,
+    source: AssetId = ASSET,
+    official: bool = True,
+    transcript: StructuredTranscriptDTO | None = None,
+):
     store = MemoryStore()
     workspace = build_asset_workspace(source, tmp_path / "output")
     video = str(workspace / canonical_filename(ArtifactType.SOURCE_VIDEO))
@@ -222,7 +257,11 @@ def _make(tmp_path: Path, *, source: AssetId = ASSET, official: bool = True):
     chapters_path = str(workspace / canonical_filename(ArtifactType.CHAPTERS))
     chapters_hash = None
     if official:
-        store.write_json(chapters_path, _official().to_dict(), overwrite=False)
+        store.write_json(
+            chapters_path,
+            (transcript or _official()).to_dict(),
+            overwrite=False,
+        )
         chapters_hash = store.sha256(chapters_path)
 
     extractor, vad, asr, aligner, detector = (
@@ -286,12 +325,144 @@ def test_cnbc_and_youtube_workflow_order_and_public_outputs(tmp_path: Path) -> N
     dto = SourceAlignmentDTO.from_dict(store.read_json(outcome.source_alignment_path))
     assert [word.text for word in dto.words] == ["Good", "morning.", "Welcome."]
     assert dto.words[0].official_token_ids
+    assert [section.title for section in dto.sections] == ["Meeting"]
 
     yt, yt_store, yt_request, _ = _make(tmp_path / "yt", source=AssetId("youtube", "", "dQw4w9WgXcQ"), official=False)
     yt_outcome = yt.execute(yt_request)
     yt_dto = SourceAlignmentDTO.from_dict(yt_store.read_json(yt_outcome.source_alignment_path))
     assert all(not word.official_token_ids for word in yt_dto.words)
+    assert yt_dto.sections == ()
     assert "transcript_fusion" not in yt_store.read_json(yt_outcome.manifest_path)["records"]
+
+
+def test_workflow_persists_provider_restored_trailing_punctuation(
+    tmp_path: Path,
+) -> None:
+    class Backend:
+        def load_audio(self, path: str):
+            return "audio"
+
+        def load_align_model(self, **kwargs):
+            return "model", {}
+
+        def align(self, *args, **kwargs):
+            return {
+                "word_segments": [
+                    {"word": "Good", "start": 0.1, "end": 0.25, "score": 0.91},
+                    {
+                        "word": "morning",
+                        "start": 0.35,
+                        "end": 0.5,
+                        "score": 0.82,
+                    },
+                    {
+                        "word": "Welcome",
+                        "start": 0.6,
+                        "end": 0.75,
+                        "score": 0.73,
+                    },
+                ]
+            }
+
+    workflow, store, request, _ = _make(tmp_path, official=False)
+    workflow.forced_alignment.aligner = WhisperXForcedAligner(
+        whisperx_version="3.8.5",
+        backend=Backend(),
+        model_resolver=lambda model, version: f"/models/{model}/{version}",
+    )
+
+    outcome = workflow.execute(request)
+
+    workspace = build_asset_workspace(request.asset_id, tmp_path / "output")
+    aligned = store.read_json(str(workspace / "aligned_asr.json"))
+    assert [word["text"] for word in aligned["words"]] == [
+        "Good",
+        "morning.",
+        "Welcome.",
+    ]
+    assert [word["alignment_score"] for word in aligned["words"]] == [
+        0.91,
+        0.82,
+        0.73,
+    ]
+    assert all(
+        word["timing_source"] == "acoustic_alignment"
+        for word in aligned["words"]
+    )
+    canonical = SourceAlignmentDTO.from_dict(
+        store.read_json(outcome.source_alignment_path)
+    )
+    assert [word.text for word in canonical.words] == [
+        "Good",
+        "morning.",
+        "Welcome.",
+    ]
+    assert outcome.report.counts["interpolated"] == 0
+
+
+def test_two_chapter_workflow_publishes_sections_and_reuses_new_cache(
+    tmp_path: Path,
+) -> None:
+    workflow, store, request, providers = _make(
+        tmp_path, transcript=_two_chapter_official()
+    )
+
+    first = workflow.execute(request)
+    alignment = SourceAlignmentDTO.from_dict(
+        store.read_json(first.source_alignment_path)
+    )
+
+    assert [section.to_dict() for section in alignment.sections] == [
+        {
+            "id": "sec1",
+            "title": "Opening exchange",
+            "first_sentence_id": "s1",
+            "last_sentence_id": "s1",
+        },
+        {
+            "id": "sec2",
+            "title": "Welcome",
+            "first_sentence_id": "s2",
+            "last_sentence_id": "s2",
+        },
+    ]
+    assert (
+        alignment.sentences[0].boundary_source.value
+        == "document_section_change"
+    )
+    assert any(
+        event.code.value == "section.published" for event in workflow.events.events
+    )
+    manifest = store.read_json(first.manifest_path)
+    provenance = manifest["records"]["source_alignment"]["provenance"]
+    assert provenance["section_policy"] == {"version": "document-sections.v1"}
+    assert provenance["chapter_input_sha256"] == request.chapters_sha256
+
+    second = workflow.execute(request)
+    assert second.cache_hits == (
+        "audio",
+        "vad",
+        "raw_asr",
+        "aligned_asr",
+        "transcript_fusion",
+        "source_alignment",
+    )
+    assert [provider.calls for provider in providers] == [1, 1, 1, 1, 1]
+
+    stale_manifest = store.read_json(second.manifest_path)
+    stale_manifest["records"]["source_alignment"]["cache_key"] = (
+        "pre-document-section-cache-key"
+    )
+    store.write_json(second.manifest_path, stale_manifest, overwrite=True)
+    replaced = workflow.execute(replace(request, overwrite=True))
+    assert set(replaced.cache_hits) == {
+        "audio",
+        "vad",
+        "raw_asr",
+        "aligned_asr",
+        "transcript_fusion",
+    }
+    assert [provider.calls for provider in providers] == [1, 1, 1, 1, 2]
 
 
 def test_verified_cache_hit_skips_providers_and_rejects_bad_checksum(tmp_path: Path) -> None:

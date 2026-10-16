@@ -13,16 +13,21 @@ from archive_core.interfaces import (
     BoundarySource,
     BoundaryStatus,
     MatchType,
+    StructuredTranscriptDTO,
     TextSource,
     TimedWordDTO,
     TimingSource,
+    TranscriptChapterDTO,
+    TranscriptParagraphDTO,
 )
 from transcription.application import (
     AudioVadAsrCacheManifest,
     CacheRecord,
     EventCode,
     ForcedAlignmentResult,
+    OfficialTranscriptInput,
     SentenceBoundaryFailure,
+    SentenceBoundaryInputValidationError,
     SentenceBoundaryPublicationPolicy,
     SentenceBoundaryService,
     TranscriptFusionResult,
@@ -192,17 +197,19 @@ def _timed_words(
 def _official_tokens(
     texts: tuple[str, ...],
     *,
+    chapters: tuple[int, ...] | None = None,
     paragraphs: tuple[int, ...] | None = None,
     speakers: tuple[str | None, ...] | None = None,
 ) -> tuple[OfficialTranscriptToken, ...]:
     selected_paragraphs = paragraphs or tuple(1 for _ in texts)
     selected_speakers = speakers or tuple("WARREN BUFFETT" for _ in texts)
+    selected_chapters = chapters or tuple(1 for _ in texts)
     return tuple(
         OfficialTranscriptToken(
             id=f"ot{index}",
             text=text,
             normalized=(text.lower().strip(".?!"),),
-            chapter_index=1,
+            chapter_index=selected_chapters[index - 1],
             chapter_number=1,
             paragraph_index=selected_paragraphs[index - 1],
             speaker_label=selected_speakers[index - 1],
@@ -218,6 +225,7 @@ def _plan(
     segments: tuple[str, ...] | None = None,
     starts: tuple[int, ...] | None = None,
     paragraphs: tuple[int, ...] | None = None,
+    chapters: tuple[int, ...] | None = None,
     speakers: tuple[str | None, ...] | None = None,
     detected: tuple[int, ...] | None = None,
     policy: SentenceBoundaryPolicy | None = None,
@@ -225,7 +233,12 @@ def _plan(
     aligned = _aligned_words(texts, segments=segments, starts=starts)
     words = _timed_words(aligned, official=official)
     tokens = (
-        _official_tokens(texts, paragraphs=paragraphs, speakers=speakers)
+        _official_tokens(
+            texts,
+            chapters=chapters,
+            paragraphs=paragraphs,
+            speakers=speakers,
+        )
         if official
         else ()
     )
@@ -358,6 +371,21 @@ def test_speaker_change_forces_boundary_without_guessing_missing_speaker() -> No
 
     identity = _plan(("Good", "morning."))
     assert identity.sentences[0].speaker_label is None
+
+
+def test_document_section_change_forces_verified_boundary_without_punctuation() -> None:
+    plan = _plan(
+        ("First", "chapter", "Second", "chapter."),
+        official=True,
+        chapters=(1, 1, 2, 2),
+    )
+
+    assert [sentence.text for sentence in plan.sentences] == [
+        "First chapter",
+        "Second chapter.",
+    ]
+    assert plan.sentences[0].boundary_source is BoundarySource.DOCUMENT_SECTION_CHANGE
+    assert plan.sentences[0].boundary_status is BoundaryStatus.VERIFIED
 
 
 def test_paragraph_change_is_weak_and_requires_another_signal() -> None:
@@ -498,24 +526,50 @@ def _alignment_fixture(
 def _official_fusion_fixture(
     store: MemoryArtifactStore,
     output_root: Path,
-) -> tuple[ForcedAlignmentResult, TranscriptFusionResult]:
-    aligned, _ = _alignment_fixture(store, output_root, texts=("Welcome.",))
+    *,
+    texts: tuple[str, ...] = ("Welcome.",),
+    chapters: tuple[int, ...] | None = None,
+    transcript: StructuredTranscriptDTO | None = None,
+) -> tuple[
+    ForcedAlignmentResult,
+    TranscriptFusionResult,
+    OfficialTranscriptInput,
+]:
+    aligned, _ = _alignment_fixture(store, output_root, texts=texts)
     workspace = build_asset_workspace(ASSET_ID, output_root)
     fusion_path = str(
         workspace / canonical_filename(ArtifactType.TRANSCRIPT_FUSION)
     )
     words = _timed_words(aligned.artifact.words, official=True)
     tokens = _official_tokens(
-        ("Welcome.",),
-        speakers=("WARREN BUFFETT",),
+        texts,
+        chapters=chapters,
+        speakers=tuple("WARREN BUFFETT" for _ in texts),
     )
     manifest = AudioVadAsrCacheManifest.from_dict(
         store.read_json(aligned.manifest_path)
     )
+    transcript = transcript or StructuredTranscriptDTO(
+        language="en",
+        chapters=(
+            TranscriptChapterDTO(
+                number=1,
+                title="Opening",
+                paragraphs=(
+                    TranscriptParagraphDTO(
+                        speaker_label="WARREN BUFFETT", text="Welcome."
+                    ),
+                ),
+            ),
+        ),
+    )
+    chapters_path = str(workspace / canonical_filename(ArtifactType.CHAPTERS))
+    store.write_json(chapters_path, transcript.to_dict(), overwrite=False)
+    chapters_sha256 = store.sha256(chapters_path)
     artifact = TranscriptFusionArtifact(
         audio_duration_ms=aligned.artifact.audio_duration_ms,
         aligned_asr_sha256=manifest.records["aligned_asr"].sha256,
-        chapters_sha256="chapters-sha",
+        chapters_sha256=chapters_sha256,
         mode=FusionMode.OFFICIAL,
         normalization=NormalizationPolicy(),
         matching=MatchingPolicy(),
@@ -536,13 +590,21 @@ def _official_fusion_fixture(
         cache_key=artifact.cache_key,
     )
     store.write_json(aligned.manifest_path, manifest.to_dict(), overwrite=True)
-    return aligned, TranscriptFusionResult(
-        path=fusion_path,
-        manifest_path=aligned.manifest_path,
-        words=words,
-        artifact=artifact,
-        used_official=True,
-        cache_hit=False,
+    return (
+        aligned,
+        TranscriptFusionResult(
+            path=fusion_path,
+            manifest_path=aligned.manifest_path,
+            words=words,
+            artifact=artifact,
+            used_official=True,
+            cache_hit=False,
+        ),
+        OfficialTranscriptInput(
+            path=chapters_path,
+            sha256=chapters_sha256,
+            transcript=transcript,
+        ),
     )
 
 
@@ -574,7 +636,7 @@ def test_service_publishes_public_dto_then_reuses_sentence_cache(tmp_path: Path)
 
 def test_service_consumes_validated_official_fusion_metadata(tmp_path: Path) -> None:
     store = MemoryArtifactStore()
-    aligned, fusion = _official_fusion_fixture(store, tmp_path)
+    aligned, fusion, official = _official_fusion_fixture(store, tmp_path)
     service = SentenceBoundaryService(
         detector=CountingDetector(),
         checksum=MemoryChecksum(store),
@@ -583,13 +645,96 @@ def test_service_consumes_validated_official_fusion_metadata(tmp_path: Path) -> 
         output_root=str(tmp_path),
     )
 
-    result = service.execute(aligned, fusion, boundary_policy=_policy())
+    result = service.execute(
+        aligned, fusion, official=official, boundary_policy=_policy()
+    )
 
     assert result.alignment.sentences[0].speaker_label == "WARREN BUFFETT"
     assert (
         result.alignment.sentences[0].boundary_source
         is BoundarySource.OFFICIAL_PUNCTUATION
     )
+    assert [section.title for section in result.alignment.sections] == ["Opening"]
+
+
+def test_official_checksum_chain_is_required_for_section_publication(
+    tmp_path: Path,
+) -> None:
+    store = MemoryArtifactStore()
+    aligned, fusion, official = _official_fusion_fixture(store, tmp_path)
+    service = SentenceBoundaryService(
+        detector=CountingDetector(),
+        checksum=MemoryChecksum(store),
+        artifacts=store,
+        events=EventSink(),
+        output_root=str(tmp_path),
+    )
+
+    with pytest.raises(
+        SentenceBoundaryInputValidationError,
+        match="official transcript checksum chain",
+    ):
+        service.execute(
+            aligned,
+            fusion,
+            official=OfficialTranscriptInput(
+                path=official.path,
+                sha256="wrong-sha256",
+                transcript=official.transcript,
+            ),
+            boundary_policy=_policy(),
+        )
+
+
+def test_section_fallback_preserves_document_boundary_and_emits_finding(
+    tmp_path: Path,
+) -> None:
+    transcript = StructuredTranscriptDTO(
+        language="en",
+        chapters=tuple(
+            TranscriptChapterDTO(
+                number=index,
+                title=title,
+                paragraphs=(TranscriptParagraphDTO(text=text),),
+            )
+            for index, title, text in (
+                (1, "First", "First"),
+                (2, "Missing", "Missing"),
+                (3, "Third", "Third."),
+            )
+        ),
+    )
+    store = MemoryArtifactStore()
+    aligned, fusion, official = _official_fusion_fixture(
+        store,
+        tmp_path,
+        texts=("First", "Third."),
+        chapters=(1, 3),
+        transcript=transcript,
+    )
+    events = EventSink()
+    service = SentenceBoundaryService(
+        detector=CountingDetector(),
+        checksum=MemoryChecksum(store),
+        artifacts=store,
+        events=events,
+        output_root=str(tmp_path),
+    )
+
+    result = service.execute(
+        aligned, fusion, official=official, boundary_policy=_policy()
+    )
+
+    assert result.alignment.sections == ()
+    assert len(result.alignment.sentences) == 2
+    assert (
+        result.alignment.sentences[0].boundary_source
+        is BoundarySource.DOCUMENT_SECTION_CHANGE
+    )
+    by_code = {event.code: event for event in events.events}
+    assert by_code[EventCode.SECTION_NON_MONOTONIC].severity.value == "WARNING"
+    assert EventCode.SECTION_PUBLICATION_SKIPPED in by_code
+    assert EventCode.SECTION_DOCUMENT_CHANGE_BOUNDARY in by_code
 
 
 def test_gate_failure_keeps_events_and_does_not_publish_canonical(tmp_path: Path) -> None:

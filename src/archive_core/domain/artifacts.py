@@ -22,6 +22,8 @@ class ArtifactType(str, Enum):
     TRANSCRIPTION_LOG = "transcription_log"
     TRANSCRIPTION_REPORT = "transcription_report"
     TRANSCRIPTION_MANIFEST = "transcription_manifest"
+    TRANSLATION_RESULT = "translation_result"
+    TRANSLATION_MANIFEST = "translation_manifest"
     ENGLISH_SRT = "english_srt"
     CHINESE_SRT = "chinese_srt"
     RENDERED_VIDEO = "rendered_video"
@@ -43,6 +45,8 @@ CANONICAL_FILENAMES: dict[ArtifactType, str] = {
     ArtifactType.TRANSCRIPTION_LOG: "transcription.log",
     ArtifactType.TRANSCRIPTION_REPORT: "transcription_report.json",
     ArtifactType.TRANSCRIPTION_MANIFEST: "transcription_manifest.json",
+    ArtifactType.TRANSLATION_RESULT: "translation_result.json",
+    ArtifactType.TRANSLATION_MANIFEST: "translation_manifest.json",
     ArtifactType.ENGLISH_SRT: "english.srt",
     ArtifactType.CHINESE_SRT: "chinese.srt",
     ArtifactType.RENDERED_VIDEO: "video_中文字幕.mp4",

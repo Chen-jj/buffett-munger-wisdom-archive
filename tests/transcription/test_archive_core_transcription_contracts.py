@@ -9,6 +9,7 @@ from archive_core.interfaces import (
     BoundaryStatus,
     MatchType,
     SourceAlignmentDTO,
+    SourceSectionDTO,
     SourceSentenceDTO,
     StructuredTranscriptDTO,
     TextSource,
@@ -98,6 +99,38 @@ def _valid_alignment() -> SourceAlignmentDTO:
                 3_050,
                 "Good morning, everyone.",
                 speaker_label="WARREN BUFFETT",
+            ),
+        ),
+        sections=(),
+    )
+
+
+def _valid_sectioned_alignment() -> SourceAlignmentDTO:
+    return SourceAlignmentDTO(
+        language="en",
+        audio_duration_ms=1_000,
+        words=(
+            _word(1, "One.", 100, 200),
+            _word(2, "Two.", 300, 400),
+            _word(3, "Three.", 500, 600),
+        ),
+        sentences=(
+            _sentence(1, 1, 1, 100, 200, "One."),
+            _sentence(2, 2, 2, 300, 400, "Two."),
+            _sentence(3, 3, 3, 500, 600, "Three."),
+        ),
+        sections=(
+            SourceSectionDTO(
+                id="sec1",
+                title="",
+                first_sentence_id="s1",
+                last_sentence_id="s2",
+            ),
+            SourceSectionDTO(
+                id="sec2",
+                title="Closing",
+                first_sentence_id="s3",
+                last_sentence_id="s3",
             ),
         ),
     )
@@ -251,7 +284,7 @@ def test_structured_transcript_rejects_paragraph_without_content(text: str) -> N
 def test_versioned_transcription_contracts_reject_unknown_versions() -> None:
     transcript_data = StructuredTranscriptDTO(language="en").to_dict()
     alignment_data = SourceAlignmentDTO(
-        language="en", audio_duration_ms=0, words=(), sentences=()
+        language="en", audio_duration_ms=0, words=(), sentences=(), sections=()
     ).to_dict()
 
     with pytest.raises(ValueError, match="unsupported structured transcript schema"):
@@ -278,6 +311,7 @@ def test_source_alignment_round_trips_with_null_and_string_speakers() -> None:
                 2, 2, 2, 1_000, 1_500, "Welcome.", speaker_label="CHARLIE MUNGER"
             ),
         ),
+        sections=(),
     )
 
     data = alignment.to_dict()
@@ -287,7 +321,170 @@ def test_source_alignment_round_trips_with_null_and_string_speakers() -> None:
     assert data["audio_duration_ms"] == 2_000
     assert data["sentences"][0]["speaker_label"] is None
     assert data["sentences"][1]["speaker_label"] == "CHARLIE MUNGER"
+    assert data["sections"] == []
     assert restored.to_dict() == data
+
+
+def test_source_alignment_round_trips_multi_section_shape_with_empty_title() -> None:
+    alignment = _valid_sectioned_alignment()
+
+    data = alignment.to_dict()
+
+    assert data["sections"] == [
+        {
+            "id": "sec1",
+            "title": "",
+            "first_sentence_id": "s1",
+            "last_sentence_id": "s2",
+        },
+        {
+            "id": "sec2",
+            "title": "Closing",
+            "first_sentence_id": "s3",
+            "last_sentence_id": "s3",
+        },
+    ]
+    assert SourceAlignmentDTO.from_dict(data) == alignment
+
+
+def test_source_alignment_rejects_missing_sections() -> None:
+    data = _valid_alignment().to_dict()
+    del data["sections"]
+
+    with pytest.raises(ValueError, match="sections must be an array"):
+        SourceAlignmentDTO.from_dict(data)
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value"),
+    [
+        ("id", 1),
+        ("title", None),
+        ("first_sentence_id", False),
+        ("last_sentence_id", []),
+    ],
+)
+def test_source_section_rejects_invalid_field_types(
+    field_name: str, value: object
+) -> None:
+    data = {
+        "id": "sec1",
+        "title": "Opening",
+        "first_sentence_id": "s1",
+        "last_sentence_id": "s1",
+    }
+    data[field_name] = value
+
+    with pytest.raises(ValueError, match=field_name):
+        SourceSectionDTO.from_dict(data)
+
+
+@pytest.mark.parametrize("sections", [None, {}, "sections", ["sec1"]])
+def test_source_alignment_rejects_invalid_sections_shape(sections: object) -> None:
+    data = _valid_alignment().to_dict()
+    data["sections"] = sections
+
+    with pytest.raises(ValueError, match="sections"):
+        SourceAlignmentDTO.from_dict(data)
+
+
+@pytest.mark.parametrize(
+    ("sections", "message"),
+    [
+        (
+            [
+                {
+                    "id": "sec1",
+                    "title": "First",
+                    "first_sentence_id": "s1",
+                    "last_sentence_id": "s1",
+                },
+                {
+                    "id": "sec1",
+                    "title": "Rest",
+                    "first_sentence_id": "s2",
+                    "last_sentence_id": "s3",
+                },
+            ],
+            "sec1..secN",
+        ),
+        (
+            [
+                {
+                    "id": "sec1",
+                    "title": "All",
+                    "first_sentence_id": "s1",
+                    "last_sentence_id": "s4",
+                }
+            ],
+            "reference existing sentences",
+        ),
+        (
+            [
+                {
+                    "id": "sec1",
+                    "title": "First",
+                    "first_sentence_id": "s1",
+                    "last_sentence_id": "s1",
+                },
+                {
+                    "id": "sec2",
+                    "title": "Third",
+                    "first_sentence_id": "s3",
+                    "last_sentence_id": "s3",
+                },
+            ],
+            "consecutive sentences once",
+        ),
+        (
+            [
+                {
+                    "id": "sec1",
+                    "title": "First two",
+                    "first_sentence_id": "s1",
+                    "last_sentence_id": "s2",
+                },
+                {
+                    "id": "sec2",
+                    "title": "Overlap",
+                    "first_sentence_id": "s2",
+                    "last_sentence_id": "s3",
+                },
+            ],
+            "consecutive sentences once",
+        ),
+        (
+            [
+                {
+                    "id": "sec1",
+                    "title": "Backwards",
+                    "first_sentence_id": "s2",
+                    "last_sentence_id": "s1",
+                }
+            ],
+            "consecutive sentences once",
+        ),
+        (
+            [
+                {
+                    "id": "sec1",
+                    "title": "Incomplete",
+                    "first_sentence_id": "s1",
+                    "last_sentence_id": "s2",
+                }
+            ],
+            "cover every sentence",
+        ),
+    ],
+)
+def test_source_alignment_rejects_invalid_section_coverage(
+    sections: list[dict[str, object]], message: str
+) -> None:
+    data = _valid_sectioned_alignment().to_dict()
+    data["sections"] = sections
+
+    with pytest.raises(ValueError, match=message):
+        SourceAlignmentDTO.from_dict(data)
 
 
 @pytest.mark.parametrize("speaker_label", [1, False, [], {}])
@@ -313,6 +510,7 @@ def test_stable_ids_are_one_based_and_must_follow_document_order() -> None:
             audio_duration_ms=500,
             words=(invalid_word,),
             sentences=(valid_sentence,),
+            sections=(),
         )
 
     alignment = _valid_alignment()
@@ -325,6 +523,7 @@ def test_stable_ids_are_one_based_and_must_follow_document_order() -> None:
             audio_duration_ms=alignment.audio_duration_ms,
             words=alignment.words,
             sentences=(invalid_sentence,),
+            sections=(),
         )
 
 
@@ -368,6 +567,7 @@ def test_source_alignment_rejects_word_overlap_and_audio_overrun() -> None:
             audio_duration_ms=500,
             words=overlap_words,
             sentences=(sentence,),
+            sections=(),
         )
 
     with pytest.raises(ValueError, match="must not exceed audio_duration_ms"):
@@ -379,6 +579,7 @@ def test_source_alignment_rejects_word_overlap_and_audio_overrun() -> None:
                 _word(2, "two", 300, 400),
             ),
             sentences=(sentence,),
+            sections=(),
         )
 
 
@@ -395,6 +596,7 @@ def test_source_alignment_rejects_missing_duplicate_or_non_contiguous_coverage()
             audio_duration_ms=1_000,
             words=words,
             sentences=(_sentence(1, 1, 2, 100, 400, "one two"),),
+            sections=(),
         )
 
     with pytest.raises(ValueError, match="consecutive words once"):
@@ -406,6 +608,7 @@ def test_source_alignment_rejects_missing_duplicate_or_non_contiguous_coverage()
                 _sentence(1, 1, 2, 100, 400, "one two"),
                 _sentence(2, 2, 3, 300, 600, "two three"),
             ),
+            sections=(),
         )
 
     with pytest.raises(ValueError, match="consecutive words once"):
@@ -417,6 +620,7 @@ def test_source_alignment_rejects_missing_duplicate_or_non_contiguous_coverage()
                 _sentence(1, 1, 1, 100, 200, "one"),
                 _sentence(2, 3, 3, 500, 600, "three"),
             ),
+            sections=(),
         )
 
 
@@ -430,6 +634,7 @@ def test_source_alignment_rejects_missing_word_references() -> None:
             audio_duration_ms=500,
             words=words,
             sentences=(sentence,),
+            sections=(),
         )
 
 
@@ -454,6 +659,7 @@ def test_sentence_times_must_equal_referenced_edge_word_times(
             audio_duration_ms=4_000,
             words=alignment.words,
             sentences=(sentence,),
+            sections=(),
         )
 
 
@@ -469,6 +675,7 @@ def test_sentence_text_must_reconstruct_from_word_surface_text() -> None:
             audio_duration_ms=4_000,
             words=alignment.words,
             sentences=(sentence,),
+            sections=(),
         )
 
 
@@ -488,6 +695,7 @@ def test_sentence_text_reconstruction_normalizes_spaces_and_attached_punctuation
         sentences=(
             _sentence(1, 1, 3, 100, 800, "Good  morning,   everyone."),
         ),
+        sections=(),
     )
     assert alignment.sentences[0].text == "Good  morning,   everyone."
 
@@ -502,3 +710,9 @@ def test_source_alignment_round_trip_preserves_all_source_enums() -> None:
     assert data["sentences"][0]["boundary_source"] == "official_punctuation"
     assert data["sentences"][0]["boundary_status"] == "verified"
     assert SourceAlignmentDTO.from_dict(data) == alignment
+
+    data["sentences"][0]["boundary_source"] = "document_section_change"
+    assert (
+        SourceAlignmentDTO.from_dict(data).sentences[0].boundary_source
+        is BoundarySource.DOCUMENT_SECTION_CHANGE
+    )

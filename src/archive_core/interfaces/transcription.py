@@ -13,6 +13,7 @@ SOURCE_ALIGNMENT_SCHEMA_VERSION = "transcription.source-alignment.v1"
 
 _TIMED_WORD_ID_RE = re.compile(r"^w[1-9][0-9]*$")
 _SOURCE_SENTENCE_ID_RE = re.compile(r"^s[1-9][0-9]*$")
+_SOURCE_SECTION_ID_RE = re.compile(r"^sec[1-9][0-9]*$")
 _SPACE_BEFORE_PUNCTUATION_RE = re.compile(r"\s+([,.;:?!%\)\]\}])")
 _SPACE_AFTER_OPENING_PUNCTUATION_RE = re.compile(r"([\(\[\{])\s+")
 
@@ -228,6 +229,7 @@ class BoundarySource(str, Enum):
     ASR_PUNCTUATION = "asr_punctuation"
     PUNCTUATION_AND_PAUSE = "punctuation_and_pause"
     PAUSE_FALLBACK = "pause_fallback"
+    DOCUMENT_SECTION_CHANGE = "document_section_change"
 
 
 class BoundaryStatus(str, Enum):
@@ -381,11 +383,50 @@ def reconstruct_sentence_text(words: Sequence[TimedWordDTO]) -> str:
 
 
 @dataclass(frozen=True)
+class SourceSectionDTO:
+    id: str
+    title: str
+    first_sentence_id: str
+    last_sentence_id: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty_string(self.id, "id")
+        if _SOURCE_SECTION_ID_RE.fullmatch(self.id) is None:
+            raise ValueError("section id must use the format sec<one-based position>")
+        if not isinstance(self.title, str):
+            raise ValueError("title must be a string")
+        _require_non_empty_string(self.first_sentence_id, "first_sentence_id")
+        if _SOURCE_SENTENCE_ID_RE.fullmatch(self.first_sentence_id) is None:
+            raise ValueError("first_sentence_id must identify a source sentence")
+        _require_non_empty_string(self.last_sentence_id, "last_sentence_id")
+        if _SOURCE_SENTENCE_ID_RE.fullmatch(self.last_sentence_id) is None:
+            raise ValueError("last_sentence_id must identify a source sentence")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "title": self.title,
+            "first_sentence_id": self.first_sentence_id,
+            "last_sentence_id": self.last_sentence_id,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "SourceSectionDTO":
+        return cls(
+            id=data.get("id"),
+            title=data.get("title"),
+            first_sentence_id=data.get("first_sentence_id"),
+            last_sentence_id=data.get("last_sentence_id"),
+        )
+
+
+@dataclass(frozen=True)
 class SourceAlignmentDTO:
     language: str
     audio_duration_ms: int
     words: tuple[TimedWordDTO, ...]
     sentences: tuple[SourceSentenceDTO, ...]
+    sections: tuple[SourceSectionDTO, ...]
     schema_version: str = SOURCE_ALIGNMENT_SCHEMA_VERSION
 
     def __post_init__(self) -> None:
@@ -396,12 +437,16 @@ class SourceAlignmentDTO:
         _require_integer(self.audio_duration_ms, "audio_duration_ms", minimum=0)
         object.__setattr__(self, "words", tuple(self.words))
         object.__setattr__(self, "sentences", tuple(self.sentences))
+        object.__setattr__(self, "sections", tuple(self.sections))
         if not all(isinstance(word, TimedWordDTO) for word in self.words):
             raise ValueError("words must contain TimedWordDTO values")
         if not all(isinstance(sentence, SourceSentenceDTO) for sentence in self.sentences):
             raise ValueError("sentences must contain SourceSentenceDTO values")
+        if not all(isinstance(section, SourceSectionDTO) for section in self.sections):
+            raise ValueError("sections must contain SourceSectionDTO values")
         self._validate_timeline_and_ids()
         self._validate_sentence_coverage()
+        self._validate_section_coverage()
 
     def _validate_timeline_and_ids(self) -> None:
         previous_end_ms = 0
@@ -449,6 +494,33 @@ class SourceAlignmentDTO:
         if next_position != len(self.words):
             raise ValueError("every timed word must belong to exactly one sentence")
 
+    def _validate_section_coverage(self) -> None:
+        if not self.sections:
+            return
+
+        sentence_positions = {
+            sentence.id: position for position, sentence in enumerate(self.sentences)
+        }
+        next_position = 0
+        for position, section in enumerate(self.sections, start=1):
+            if section.id != f"sec{position}":
+                raise ValueError("section IDs must be sec1..secN in document order")
+            try:
+                first_position = sentence_positions[section.first_sentence_id]
+                last_position = sentence_positions[section.last_sentence_id]
+            except KeyError as error:
+                raise ValueError(
+                    "section sentence range must reference existing sentences"
+                ) from error
+            if first_position != next_position or last_position < first_position:
+                raise ValueError(
+                    "sections must cover consecutive sentences once in document order"
+                )
+            next_position = last_position + 1
+
+        if next_position != len(self.sentences):
+            raise ValueError("non-empty sections must cover every sentence exactly once")
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "schema_version": self.schema_version,
@@ -456,6 +528,7 @@ class SourceAlignmentDTO:
             "audio_duration_ms": self.audio_duration_ms,
             "words": [word.to_dict() for word in self.words],
             "sentences": [sentence.to_dict() for sentence in self.sentences],
+            "sections": [section.to_dict() for section in self.sections],
         }
 
     @classmethod
@@ -468,14 +541,18 @@ class SourceAlignmentDTO:
             raise ValueError("language must be en")
         words = _require_sequence(data.get("words", []), "words")
         sentences = _require_sequence(data.get("sentences", []), "sentences")
+        sections = _require_sequence(data.get("sections"), "sections")
         if not all(isinstance(item, Mapping) for item in words):
             raise ValueError("words must contain objects")
         if not all(isinstance(item, Mapping) for item in sentences):
             raise ValueError("sentences must contain objects")
+        if not all(isinstance(item, Mapping) for item in sections):
+            raise ValueError("sections must contain objects")
         return cls(
             schema_version=schema_version,
             language=language,
             audio_duration_ms=data.get("audio_duration_ms"),
             words=tuple(TimedWordDTO.from_dict(item) for item in words),
             sentences=tuple(SourceSentenceDTO.from_dict(item) for item in sentences),
+            sections=tuple(SourceSectionDTO.from_dict(item) for item in sections),
         )

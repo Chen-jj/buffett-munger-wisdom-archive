@@ -12,7 +12,9 @@ from archive_core.interfaces import (
     BoundarySource,
     BoundaryStatus,
     SourceAlignmentDTO,
+    SourceSectionDTO,
     SourceSentenceDTO,
+    StructuredTranscriptDTO,
     TextSource,
     TimedWordDTO,
     reconstruct_sentence_text,
@@ -20,10 +22,19 @@ from archive_core.interfaces import (
 from transcription.domain import (
     AlignedAsrArtifact,
     AlignedAsrWord,
+    BoundarySignal,
+    DocumentSectionPolicy,
+    EffectiveChapterPlan,
+    EffectiveChapterSource,
     FusionMode,
     OfficialTranscriptToken,
+    SectionFallbackReason,
     SentenceBoundaryPolicy,
+    aggregate_source_sections,
+    derive_effective_chapters,
+    document_section_boundaries,
     is_sentence_terminal,
+    select_boundary_signal,
 )
 
 from .alignment import ForcedAlignmentResult
@@ -34,7 +45,11 @@ from .audio_asr import (
     SUCCESSFUL_CACHE_STATUS,
     _cache_key,
 )
-from .fusion import TranscriptFusionResult, identity_fusion_words
+from .fusion import (
+    OfficialTranscriptInput,
+    TranscriptFusionResult,
+    identity_fusion_words,
+)
 from .observability import EventCode, EventSeverity, TranscriptionEvent, TranscriptionEventSink
 from .ports import ChecksumService, SentenceBoundaryDetector, TranscriptionArtifactStore
 
@@ -115,6 +130,7 @@ def recover_sentences(
     official_tokens: Sequence[OfficialTranscriptToken],
     detector_boundaries: Sequence[int],
     policy: SentenceBoundaryPolicy,
+    effective_chapters: EffectiveChapterPlan | None = None,
 ) -> SentenceBoundaryPlan:
     """Recover complete sentences without applying subtitle display constraints."""
 
@@ -123,6 +139,13 @@ def recover_sentences(
         raise SentenceBoundaryFailure("cannot publish an empty spoken timeline")
     detected = _validate_detector_boundaries(detector_boundaries, len(timed_words))
     contexts = _build_contexts(timed_words, aligned_words, official_tokens)
+    chapter_plan = effective_chapters or derive_effective_chapters(
+        timed_words, official_tokens
+    )
+    section_boundary_word_ids = {
+        boundary.preceding_word_id
+        for boundary in document_section_boundaries(chapter_plan)
+    }
     boundary_surfaces, boundary_tail_indices = _boundary_surface_context(
         timed_words, contexts
     )
@@ -200,6 +223,19 @@ def recover_sentences(
                 BoundarySource.PAUSE_FALLBACK,
                 BoundaryStatus.FALLBACK,
             )
+        signal = select_boundary_signal(
+            (
+                BoundarySignal(decision.source, decision.status)
+                if decision is not None
+                else None
+            ),
+            document_section_change=word.id in section_boundary_word_ids,
+        )
+        decision = (
+            _BoundaryDecision(signal.source, signal.status)
+            if signal is not None
+            else None
+        )
         if decision is None:
             next_speaker = contexts[next_index].speaker_label
             if known_speaker is None and next_speaker is not None:
@@ -377,14 +413,22 @@ class SentenceBoundaryService:
         aligned: ForcedAlignmentResult,
         fusion: TranscriptFusionResult,
         *,
+        official: OfficialTranscriptInput | None = None,
         boundary_policy: SentenceBoundaryPolicy | None = None,
+        section_policy: DocumentSectionPolicy | None = None,
         publication_policy: SentenceBoundaryPublicationPolicy | None = None,
     ) -> SentenceBoundaryResult:
         selected_boundary = boundary_policy or SentenceBoundaryPolicy()
+        selected_section = section_policy or DocumentSectionPolicy()
         selected_publication = publication_policy or SentenceBoundaryPublicationPolicy()
-        asset_id, manifest, input_sha256, official_tokens = self._validate_inputs(
-            aligned, fusion
-        )
+        (
+            asset_id,
+            manifest,
+            input_sha256,
+            official_tokens,
+            transcript,
+            chapters_sha256,
+        ) = self._validate_inputs(aligned, fusion, official)
         workspace = build_asset_workspace(asset_id, self.output_root)
         output_path = str(
             workspace / canonical_filename(ArtifactType.SOURCE_ALIGNMENT)
@@ -395,9 +439,19 @@ class SentenceBoundaryService:
                 "sentence_input_sha256": input_sha256,
                 "fusion_mode": "official" if fusion.used_official else "identity",
                 "detector": self.detector.identity.to_dict(),
-                "policy": selected_boundary.to_dict(),
+                "boundary_policy": selected_boundary.to_dict(),
+                "section_policy": selected_section.to_dict(),
+                "chapter_input_sha256": chapters_sha256,
             },
         )
+        provenance = {
+            "sentence_input_sha256": input_sha256,
+            "fusion_mode": "official" if fusion.used_official else "identity",
+            "detector": self.detector.identity.to_dict(),
+            "boundary_policy": selected_boundary.to_dict(),
+            "section_policy": selected_section.to_dict(),
+            "chapter_input_sha256": chapters_sha256,
+        }
         cached = self._validated_cache(manifest, output_path, cache_key)
         if cached is not None:
             self._emit(
@@ -414,12 +468,7 @@ class SentenceBoundaryService:
                 cached,
                 cache_hit=True,
                 cache_key=cache_key,
-                provenance={
-                    "sentence_input_sha256": input_sha256,
-                    "fusion_mode": "official" if fusion.used_official else "identity",
-                    "detector": self.detector.identity.to_dict(),
-                    "policy": selected_boundary.to_dict(),
-                },
+                provenance=provenance,
             )
         if self.artifacts.exists(output_path) and not selected_publication.overwrite:
             raise ExistingTranscriptionArtifactConflict(
@@ -428,6 +477,8 @@ class SentenceBoundaryService:
 
         surfaces = tuple(word.text for word in fusion.words)
         try:
+            chapter_plan = derive_effective_chapters(fusion.words, official_tokens)
+            self._emit_chapter_assignments(asset_id, chapter_plan)
             detector_boundaries = self.detector.detect(surfaces, selected_boundary)
             plan = recover_sentences(
                 fusion.words,
@@ -435,14 +486,36 @@ class SentenceBoundaryService:
                 official_tokens,
                 detector_boundaries,
                 selected_boundary,
+                chapter_plan,
             )
             for sentence in plan.sentences:
                 self._emit_boundary(asset_id, sentence)
+            sections = ()
+            if transcript is not None:
+                aggregation = aggregate_source_sections(
+                    plan.sentences, transcript, chapter_plan
+                )
+                sections = aggregation.sections
+                self._emit_section_publication(
+                    asset_id,
+                    aggregation.fallback_reason,
+                    sections,
+                    official_transcript=any(
+                        paragraph.text
+                        for chapter in transcript.chapters
+                        for paragraph in chapter.paragraphs
+                    ),
+                )
+            else:
+                self._emit_section_publication(
+                    asset_id, SectionFallbackReason.NO_DIRECT_CHAPTERS, ()
+                )
             alignment = SourceAlignmentDTO(
                 language="en",
                 audio_duration_ms=aligned.artifact.audio_duration_ms,
                 words=fusion.words,
                 sentences=plan.sentences,
+                sections=sections,
             )
             # Exercise the public deserializer as the final pre-publication gate.
             if SourceAlignmentDTO.from_dict(alignment.to_dict()) != alignment:
@@ -482,12 +555,7 @@ class SentenceBoundaryService:
                 size_bytes=size_bytes,
                 sha256=sha256,
                 cache_key=cache_key,
-                provenance={
-                    "sentence_input_sha256": input_sha256,
-                    "fusion_mode": "official" if fusion.used_official else "identity",
-                    "detector": self.detector.identity.to_dict(),
-                    "policy": selected_boundary.to_dict(),
-                },
+                provenance=provenance,
             )
             return candidate_manifest.to_dict()
 
@@ -530,6 +598,7 @@ class SentenceBoundaryService:
             details={
                 "sentence_count": len(alignment.sentences),
                 "fallback_count": plan.fallback_count,
+                "section_count": len(alignment.sections),
                 "cache_key": cache_key,
             },
         )
@@ -539,23 +608,21 @@ class SentenceBoundaryService:
             alignment,
             cache_hit=False,
             cache_key=cache_key,
-            provenance={
-                "sentence_input_sha256": input_sha256,
-                "fusion_mode": "official" if fusion.used_official else "identity",
-                "detector": self.detector.identity.to_dict(),
-                "policy": selected_boundary.to_dict(),
-            },
+            provenance=provenance,
         )
 
     def _validate_inputs(
         self,
         aligned: ForcedAlignmentResult,
         fusion: TranscriptFusionResult,
+        official: OfficialTranscriptInput | None,
     ) -> tuple[
         AssetId,
         AudioVadAsrCacheManifest,
         str,
         tuple[OfficialTranscriptToken, ...],
+        StructuredTranscriptDTO | None,
+        str | None,
     ]:
         try:
             manifest = AudioVadAsrCacheManifest.from_dict(
@@ -628,22 +695,50 @@ class SentenceBoundaryService:
                 raise SentenceBoundaryInputValidationError(
                     "official fusion checksum chain is invalid"
                 )
+            chapters_path = str(
+                workspace / canonical_filename(ArtifactType.CHAPTERS)
+            )
+            if (
+                official is None
+                or Path(official.path) != Path(chapters_path)
+                or not self.artifacts.exists(chapters_path)
+                or self.checksum.sha256(chapters_path) != official.sha256
+                or fusion.artifact.chapters_sha256 != official.sha256
+            ):
+                raise SentenceBoundaryInputValidationError(
+                    "official transcript checksum chain is invalid"
+                )
+            try:
+                persisted_transcript = StructuredTranscriptDTO.from_dict(
+                    self.artifacts.read_json(chapters_path)
+                )
+            except Exception as error:
+                raise SentenceBoundaryInputValidationError(
+                    "official transcript artifact is invalid"
+                ) from error
+            if persisted_transcript != official.transcript:
+                raise SentenceBoundaryInputValidationError(
+                    "official transcript result does not match persisted artifact"
+                )
             return (
                 asset_id,
                 manifest,
                 fusion_record.sha256,
                 fusion.artifact.official_tokens,
+                official.transcript,
+                official.sha256,
             )
 
         if (
-            fusion.path is not None
+            official is not None
+            or fusion.path is not None
             or fusion.artifact is not None
             or fusion.words != identity_fusion_words(aligned.artifact)
         ):
             raise SentenceBoundaryInputValidationError(
                 "no-official path must use aligned ASR identity words"
             )
-        return asset_id, manifest, aligned_record.sha256, ()
+        return asset_id, manifest, aligned_record.sha256, (), None, None
 
     def _validated_record(
         self,
@@ -688,6 +783,117 @@ class SentenceBoundaryService:
         except Exception:
             return None
 
+    def _emit_chapter_assignments(
+        self, asset_id: AssetId, plan: EffectiveChapterPlan
+    ) -> None:
+        for assignment in plan.assignments:
+            if assignment.source is EffectiveChapterSource.UNAVAILABLE:
+                continue
+            code, severity, action, reason = {
+                EffectiveChapterSource.DIRECT: (
+                    EventCode.SECTION_DIRECT_ASSIGNED,
+                    EventSeverity.INFO,
+                    "assign_direct_document_section",
+                    "official token mapping identifies the document section",
+                ),
+                EffectiveChapterSource.FIRST_LATER_CHAPTER: (
+                    EventCode.SECTION_ASR_ONLY_ASSIGNED_TO_FIRST,
+                    EventSeverity.WARNING,
+                    "assign_leading_asr_only_word",
+                    "leading ASR-only word assigned to the first later document section",
+                ),
+                EffectiveChapterSource.PREVIOUS_CHAPTER: (
+                    EventCode.SECTION_ASR_ONLY_ASSIGNED_TO_PREVIOUS,
+                    EventSeverity.WARNING,
+                    "assign_asr_only_word_to_previous_section",
+                    "ASR-only word assigned to the previous document section",
+                ),
+            }[assignment.source]
+            self._emit(
+                asset_id,
+                code,
+                severity,
+                action=action,
+                reason=reason,
+                related_ids={"word_id": assignment.word_id},
+                details={
+                    "direct_chapter_index": assignment.direct_chapter_index,
+                    "effective_chapter_index": assignment.effective_chapter_index,
+                },
+            )
+
+    def _emit_section_publication(
+        self,
+        asset_id: AssetId,
+        fallback_reason: SectionFallbackReason | None,
+        sections: Sequence[SourceSectionDTO],
+        *,
+        official_transcript: bool = False,
+    ) -> None:
+        if fallback_reason is None:
+            self._emit(
+                asset_id,
+                EventCode.SECTION_PUBLISHED,
+                EventSeverity.INFO,
+                action="publish_document_sections",
+                reason="document sections reliably cover all source sentences",
+                details={"section_count": len(sections)},
+            )
+            return
+
+        diagnostic_reason = (
+            SectionFallbackReason.CHAPTER_UNMAPPED
+            if official_transcript
+            and fallback_reason is SectionFallbackReason.NO_DIRECT_CHAPTERS
+            else fallback_reason
+        )
+        specific = {
+            SectionFallbackReason.CHAPTER_UNMAPPED: (
+                EventCode.SECTION_CHAPTER_UNMAPPED,
+                "skip_unmapped_document_section",
+            ),
+            SectionFallbackReason.NON_MONOTONIC_CHAPTER_ORDER: (
+                EventCode.SECTION_NON_MONOTONIC,
+                "skip_non_monotonic_document_sections",
+            ),
+            SectionFallbackReason.CHAPTER_ORDER_JUMP: (
+                EventCode.SECTION_NON_MONOTONIC,
+                "skip_unexplained_document_section_jump",
+            ),
+            SectionFallbackReason.SENTENCE_CROSSES_SECTIONS: (
+                EventCode.SECTION_SENTENCE_CROSSES_SECTIONS,
+                "skip_cross_section_sentence",
+            ),
+        }.get(diagnostic_reason)
+        expected_absence = (
+            diagnostic_reason is SectionFallbackReason.NO_DIRECT_CHAPTERS
+        )
+        if specific is not None:
+            self._emit(
+                asset_id,
+                specific[0],
+                EventSeverity.WARNING,
+                action=specific[1],
+                reason=diagnostic_reason.value,
+                details={"fallback_reason": diagnostic_reason.value},
+            )
+        self._emit(
+            asset_id,
+            EventCode.SECTION_PUBLICATION_SKIPPED,
+            (
+                EventSeverity.INFO
+                if expected_absence or specific is not None
+                else EventSeverity.WARNING
+            ),
+            action="publish_without_document_sections",
+            reason=(
+                "no reliable document grouping is available"
+                if expected_absence
+                else diagnostic_reason.value
+            ),
+            details={"fallback_reason": diagnostic_reason.value},
+        )
+
     def _emit_boundary(self, asset_id: AssetId, sentence: SourceSentenceDTO) -> None:
         code, severity, action, reason = {
             BoundarySource.OFFICIAL_PUNCTUATION: (
@@ -719,6 +925,12 @@ class SentenceBoundaryService:
                 EventSeverity.WARNING,
                 "apply_versioned_fallback",
                 "weak local signals or abnormal unpunctuated length required fallback",
+            ),
+            BoundarySource.DOCUMENT_SECTION_CHANGE: (
+                EventCode.SECTION_DOCUMENT_CHANGE_BOUNDARY,
+                EventSeverity.INFO,
+                "close_before_document_section_change",
+                "verified document structure changed before the next word",
             ),
         }[sentence.boundary_source]
         self._emit(

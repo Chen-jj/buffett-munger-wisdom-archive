@@ -2,18 +2,57 @@ from __future__ import annotations
 
 import pytest
 
+from acquisition.domain import Chapter, Transcript
 from tests.transcription.live_fixture import (
     PreparationError,
     parse_timestamp,
     select_hls_segments,
     select_hls_variant,
+    select_transcript_chapters,
 )
 
 
 def test_parse_timestamp_supports_requested_cnbc_range() -> None:
-    assert parse_timestamp("11:48") == 708
-    assert parse_timestamp("21:40") == 1300
+    assert parse_timestamp("35:01") == 2101
+    assert parse_timestamp("45:24") == 2724
     assert parse_timestamp("1:02:03.5") == 3723.5
+
+
+def test_select_transcript_chapters_returns_exact_requested_order() -> None:
+    transcript = Transcript(
+        chapters=(
+            Chapter(number=5, title="Before"),
+            Chapter(number=6, title='"There\'s nothing magic about a one-year period"'),
+            Chapter(
+                number=7,
+                title='We want a "mathematical edge in every transaction"',
+            ),
+            Chapter(number=8, title="After"),
+        )
+    )
+
+    selected = select_transcript_chapters(transcript, (6, 7))
+
+    assert [chapter.number for chapter in selected] == [6, 7]
+    assert [chapter.title for chapter in selected] == [
+        '"There\'s nothing magic about a one-year period"',
+        'We want a "mathematical edge in every transaction"',
+    ]
+
+
+@pytest.mark.parametrize("chapter_numbers", [(7, 6), (6, 8)])
+def test_select_transcript_chapters_rejects_non_exact_order_or_gap(
+    chapter_numbers: tuple[int, int],
+) -> None:
+    transcript = Transcript(
+        chapters=(
+            Chapter(number=6, title="Six"),
+            Chapter(number=7, title="Seven"),
+        )
+    )
+
+    with pytest.raises(PreparationError, match="exact ordered"):
+        select_transcript_chapters(transcript, chapter_numbers)
 
 
 def test_select_hls_variant_uses_highest_bandwidth_at_height_limit() -> None:

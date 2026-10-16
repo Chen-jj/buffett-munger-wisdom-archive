@@ -84,6 +84,33 @@ def test_event_serialization_contains_required_observability_fields() -> None:
     }
 
 
+def test_document_section_event_codes_are_stable() -> None:
+    assert {
+        code.value
+        for code in (
+            EventCode.SECTION_DIRECT_ASSIGNED,
+            EventCode.SECTION_ASR_ONLY_ASSIGNED_TO_FIRST,
+            EventCode.SECTION_ASR_ONLY_ASSIGNED_TO_PREVIOUS,
+            EventCode.SECTION_DOCUMENT_CHANGE_BOUNDARY,
+            EventCode.SECTION_CHAPTER_UNMAPPED,
+            EventCode.SECTION_NON_MONOTONIC,
+            EventCode.SECTION_SENTENCE_CROSSES_SECTIONS,
+            EventCode.SECTION_PUBLICATION_SKIPPED,
+            EventCode.SECTION_PUBLISHED,
+        )
+    } == {
+        "section.direct_assigned",
+        "section.asr_only_assigned_to_first",
+        "section.asr_only_assigned_to_previous",
+        "section.document_change_boundary",
+        "section.chapter_unmapped",
+        "section.non_monotonic",
+        "section.sentence_crosses_sections",
+        "section.publication_skipped",
+        "section.published",
+    }
+
+
 @pytest.mark.parametrize(
     "overrides",
     [
