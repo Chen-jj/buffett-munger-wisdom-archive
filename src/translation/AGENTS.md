@@ -59,11 +59,21 @@
 
 - domain、application、local infrastructure、两种 provider adapter 与显式 composition 均由离线
   fake/mock 测试覆盖；默认 pytest 不访问网络，也不调用 Codex 或 OpenAI。
-- TA-10 OpenAI live gate 已被 ADR-0005 取代且未运行。真实验收只通过
-  `RUN_CODEX_CLI_TRANSLATION_INTEGRATION=1` 显式开启。
+- TA-10 OpenAI live gate 已被 ADR-0005 取代且未运行。TA-16真实集成测试通过
+  `RUN_CODEX_CLI_TRANSLATION_INTEGRATION=1` 显式开启，不随默认pytest执行。
 - 截至 2026-10-16，离线实现与 TA-16 Codex CLI live integration 均已完成；真实运行验证了 ChatGPT
   登录、`gpt-5.6-sol` entitlement、两个 section 的标题/句子质量、完整 provenance/checksum 和
   第二次零 provider/process call 的 byte-identical 正式工件复用。
+- 2026-10-21 10:11 CST 核对：用户明确选择方案2，SP-08A通过未改动的既有生产composition
+  使用 `codex-cli-chatgpt` / `gpt-5.6-sol` / high / `codex-cli 0.154.0` 为CNBC持久补齐97句/
+  2 sections；2次provider/translation exec成功，第二次新增provider/process/exec均0，正式
+  result/manifest的bytes/mtime不变，17份原上游文件未变。未重跑ASR或其他模块live测试，
+  未改provider/auth/config、未fallback。详见
+  [SP-08A](../../docs/tasks/SP-08A-prepare-persistent-cnbc-translation.md)。
+- 该明确授权仅准备字幕样本的正式输入；后续srt_processing独立入口只验证并复用保留工件，
+  不调用translation/provider，完整离线pytest门槛不变。负责人/agent对97句的审读不是人类
+  签字、音画校正或出版级字幕质量通过；句内比例/应急拆分的已知限制见
+  [SP-08](../../docs/tasks/SP-08-real-sample-and-final-status.md)。
 - 2026-10-22 23:38 CST 核对：`translation.zh-hans.v1` prompt 已直接修正，明确要求按语义
   处理只打断连续表达的转写破折号；Codex CLI live fixture 已加入 `go— ahead` → “请继续”且
   不保留破折号的回归门禁。修改后离线测试已通过，真实 Codex CLI gate 尚未重跑；既有正式

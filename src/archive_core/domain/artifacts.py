@@ -26,6 +26,10 @@ class ArtifactType(str, Enum):
     TRANSLATION_MANIFEST = "translation_manifest"
     ENGLISH_SRT = "english_srt"
     CHINESE_SRT = "chinese_srt"
+    SUBTITLE_PLAN = "subtitle_plan"
+    BILINGUAL_SRT = "bilingual_srt"
+    SRT_PROCESSING_REPORT = "srt_processing_report"
+    SRT_PROCESSING_MANIFEST = "srt_processing_manifest"
     RENDERED_VIDEO = "rendered_video"
     MANIFEST = "manifest"
     PROVENANCE = "provenance"
@@ -49,6 +53,10 @@ CANONICAL_FILENAMES: dict[ArtifactType, str] = {
     ArtifactType.TRANSLATION_MANIFEST: "translation_manifest.json",
     ArtifactType.ENGLISH_SRT: "english.srt",
     ArtifactType.CHINESE_SRT: "chinese.srt",
+    ArtifactType.SUBTITLE_PLAN: "subtitle_plan.json",
+    ArtifactType.BILINGUAL_SRT: "bilingual.srt",
+    ArtifactType.SRT_PROCESSING_REPORT: "srt_processing_report.json",
+    ArtifactType.SRT_PROCESSING_MANIFEST: "srt_processing_manifest.json",
     ArtifactType.RENDERED_VIDEO: "video_中文字幕.mp4",
     ArtifactType.MANIFEST: "manifest.json",
     ArtifactType.PROVENANCE: "provenance.json",

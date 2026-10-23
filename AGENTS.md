@@ -6,14 +6,31 @@
 
 仓库正处于迁移中期。动手前先核实现实，不要假设某个模块能用。
 
-> 状态最后核对：2026-10-22 23:38 CST。**每次完成编码任务后，若实现状态或本文件中的事实发生变化，必须在同一次提交中更新本节（含核对时间）。**
+> 状态最后核对：2026-10-23 21:52 CST。**每次完成编码任务后，若实现状态或本文件中的事实发生变化，必须在同一次提交中更新本节（含核对时间）。**
+
+> 用户另要求简化阅读稿，已新增[全97句v3/agent两方对照](output/cue-evaluation/20261023-candidate-v3/two_way_v1/all_97_sentences.md)。
+> 仅投影已冻结正文/时间并标明跨句共用关系，不重切或新增质量评价；负责人独立重算MD/JSONL字节一致。
+> 两方展示回归9项，最新完整离线 **1404 passed / 5 deselected**；以下1395为此前v3实施验收时点结果。
+
+> 2026-10-23补记：当前默认已是候选v3，SP-13/14已通过负责人技术验收，完整离线
+> **1395 passed / 5 deselected**。中文只在停顿标点/句末切；16单位/7秒/9CPS均软目标，
+> 不另设10秒硬上限；英文实际2×42及覆盖/时间/溯源门禁保留。独立CNBC生成163 cues，
+> 负责人再次`reused → reused`，六输出bytes/mtime不变、复用0写；原正式33、SP-09 139、
+> v2 111及只读偏好测量15文件未变，没有重跑ASR/translation/provider。
+> 中文非停顿cut0、短cue0；中文长度/7秒/CPS告警81/9/18，不能把软目标告警当硬错误。
+> S17节奏/中英错位、S22未保留已认可切法及S48/S74/S88等残余仍在；SP-15全97句/33偏好
+> 对照已交付并由负责人独立复算、审读验收。中文偏好23满足/4允许变体/5部分/1未满足，
+> 双语节奏总体18/2/12/1；**不建议质量定版**，非音画/像素/出版签字通过。
+> [本轮报告](docs/reviews/2026-10-23-cue-candidate-v3.md)包含逐句入口、失败与成本原因。
+> 下文v1/v2数字是历史结果，旧资产不覆盖。
 
 | 状态 | 模块 |
 |---|---|
 | 已实现 + 离线测试 | `archive_core`、`acquisition`、`media_download`、`infrastructure` |
 | 已实现 + 离线测试 + CNBC 真实集成测试 | `transcription` |
 | 已实现 + 离线测试；Codex CLI 真实集成在本次 prompt 修正前已通过 | `translation` |
-| 仅脚手架（分层目录 + AGENTS.md，无代码） | `cli`、`orchestration`、`srt_processing`、`subtitle_rendering`、`webui` |
+| 已实现 + 离线跨层验收 + CNBC 真实技术集成（非出版级质量背书） | `srt_processing` |
+| 仅脚手架（分层目录 + AGENTS.md，无代码） | `cli`、`orchestration`、`subtitle_rendering`、`webui` |
 
 - 遗留管线（`run.py` step0–4 + Web 评审应用）已在提交 `cc9df50` 中删除。目前**没有 CLI 入口，管线无法端到端运行**。ADR-0001 与其实现任务已完成并归档到 `docs/archive/`。
 - 当前技术入口是 `docs/decisions/` 中仍生效的 ADR。归档任务仅记录已完成工作，不再作为现行路线图；此前两份路线图已由用户删除，不得恢复。
@@ -31,6 +48,34 @@
   SHA-256 与当前内容区分。
   transcription 不再提供 reference-based Golden Live 入口；未来全管线连通性由 orchestration
   集成测试负责。
+- ADR-0003 的公共字幕契约、确定性双语 planner、双链输入门禁、本地适配器、三份 SRT 投影、
+  manifest 驱动复用与 manifest-last 发布已实现，SP-01..08（含 SP-08A）已完成历史v1技术验收；当时完整离线套件为
+  **1220 passed / 5 deselected**。历史缺译文阻断已由用户明确授权的 SP-08A 解决：现有 Codex
+  CLI translation 流程完成97句/2 sections、2次生成调用，正式译文持久保留、第二次零调用；
+  未重跑 ASR。CNBC 字幕真实入口生成242 cues并立即复用，独立新进程再次复用；六输出
+  bytes/mtime 不变、0写入，19份上游文件未变。SRT 本身完全不调用 provider。
+- 负责人/agent 已完成 CNBC 文本内容审读，但**不是人类签字、语义对齐或出版级字幕质量通过**，
+  未观看音画或验证像素/烧录。c3/c4 人物地名错位、c183“风/险”语义提前、c142–147“认/为”
+  及破折号/专名拆分等已知比例/应急限制保留，详见 [SP-08](docs/tasks/SP-08-real-sample-and-final-status.md)。
+  在当时v1代码环境中，保留规范工件后可独立运行字幕样本入口复用，无需 ASR/translation 或其他模块 live 测试；当前候选路径/冲突说明见下文。
+  完整离线 pytest 仍是代码改动门槛。
+- 用户于2026-10-22授权先修一版再审阅，该轮规则为**历史候选v2，不是最终质量定版**（当前v3见上文）：
+  中文一逻辑行16单位、中文内Latin word计1；英文最多两行各42，真实按word排布而非仅总容量84。
+  固定`jieba==0.42.1`随包词典/HMM=False，词典hash进入profile；新边界/D39/codec身份均版本化，
+  旧v1 profile/codec仍可读但受控冲突，绝不静默复用或覆盖。完整离线已为**1329 passed / 5 deselected**。
+- 候选隔离工作区`output/cue-evaluation/20261022-candidate-v2/workspaces/cnbc_2000_morning/`
+  真实生成224 cues，194.410s；随后复用及负责人独立`reused → reused`均0写、bytes/mtime不变。
+  原正式33文件与SP-09的139份参考/证据文件未变，没有重跑ASR/translation/provider。
+  全97句三方对照见[SP-12](docs/tasks/SP-12-candidate-v2-comparison.md)；候选短cue从旧2增至9，
+  中文CPS按统一新口径从旧11增至17，且有s30/s32等新语义错位，**不得宣称质量全面改善**。
+- 旧CNBC规范目录保留v1字幕；当前v3代码对其直接运行原sample_runner应受控冲突，不再承诺
+  原地直接复用。候选复跑用`tests.srt_processing.candidate_runner --run`并指定从未存在的
+  `--result-name`；需要三方对照时加`--compare --comparison-name`唯一新目录。旧SP-09脚本动态
+  import当前rules，无v1代码环境隔离不能复现历史计数；历史工件原样保留，新比较显式按v2重审。
+- 当前v3独立工作区为`output/cue-evaluation/20261023-candidate-v3/workspaces/cnbc_2000_morning/`，
+  复跑用`tests.srt_processing.candidate_v3_runner --run --result-name <唯一新文件>`；四方比较按
+  v3硬/软政策明确重审，不能混用历史v1/v2容量指标或把153参考当合法golden。阶段本身仍只消费
+  已有正式alignment/译文，不依赖先跑其他模块集成测试。
 - `webapp/app.db` 是已被 gitignore 的遗留残留，忽略它。
 
 ## 开工规则
@@ -71,8 +116,9 @@ archive_core：资产身份、路径、公共 schema、manifest、溯源
 orchestration：可恢复任务计划 · cli/webui：薄接口 · infrastructure：共享适配器
 ```
 
-各阶段状态：实现到 `translation` 为止；transcription 已通过离线测试与当前 CNBC 真实集成
-验收，translation 已通过离线测试与 Codex CLI ChatGPT 真实集成验收。其下游仍是脚手架。
+各阶段状态：实现到 `srt_processing` 为止；transcription 已通过离线测试与当前 CNBC 真实集成
+验收，translation 已通过离线测试与 Codex CLI ChatGPT 真实集成验收。srt_processing 已通过
+离线跨层与 CNBC 真实技术集成，已知字幕内容质量限制见 SP-08；其下游仍是脚手架。
 
 ## 模块地图
 
@@ -81,7 +127,7 @@ orchestration：可恢复任务计划 · cli/webui：薄接口 · infrastructure
 - `src/media_download/` —— 媒体 URL 解析、yt-dlp 下载编排、校验和/溯源采集。
 - `src/transcription/` —— 音频提取、VAD、ASR、词级对齐、逐字稿融合、英文句界。*（已实现 +
   离线测试 + CNBC 真实集成测试）*
-- `src/srt_processing/` —— 结构化句子到 cue 的规划、SRT 投影/解析、双语合成与 QA。*（脚手架）*
+- `src/srt_processing/` —— 确定性双语 cue 规划、三份 SRT 投影/解析、QA 与可恢复发布。*（已实现 + 离线跨层验收 + CNBC 真实技术集成，非出版级质量背书）*
 - `src/translation/` —— 完整英文句子/section 翻译、checkpoint、术语/风格策略、服务适配器、结果
   校验与原子发布。*（已实现 + 离线测试 + Codex CLI 真实集成测试）*
 - `src/subtitle_rendering/` —— SRT/ASS 样式、烧录渲染、ffmpeg 命令规划、渲染元数据。*（脚手架）*
