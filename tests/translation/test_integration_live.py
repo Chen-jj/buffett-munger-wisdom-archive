@@ -47,7 +47,7 @@ SENTENCES = (
     "Berkshire Hathaway paid 10 dollars for an asset worth 15 dollars.",
     "A margin of safety does not eliminate risk.",
     "Warren Buffett said intrinsic value is not a precise number.",
-    "Charlie Munger would reject a deal without a mathematical edge.",
+    "I hope your question isn't going to be whether we can continue that, but go— ahead.",
 )
 SECTION_TITLES = (
     "A margin of safety for Berkshire Hathaway",
@@ -293,6 +293,13 @@ def test_real_codex_cli_translation_publishes_and_reuses_two_sections(
         "s4",
     ]
     assert all(item.translated_text.strip() for item in result.sentence_translations)
+    dash_example = next(
+        item.translated_text
+        for item in result.sentence_translations
+        if item.sentence_id == "s4"
+    )
+    assert "请继续" in dash_example
+    assert "—" not in dash_example
     assert result.source_alignment_sha256 == manifest.input.sha256
     assert result.source_language == "en"
     assert result.target_language == "zh-Hans"

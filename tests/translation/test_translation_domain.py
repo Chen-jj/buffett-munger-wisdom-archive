@@ -291,10 +291,11 @@ def test_glossary_round_trip_schema_blanks_and_conflicts() -> None:
 
 def test_versioned_prompt_contains_fixed_rules_and_renders_canonical_glossary() -> None:
     template = PROMPT_PATH.read_text(encoding="utf-8")
-    for number in range(1, 11):
+    for number in range(1, 12):
         assert f"{number}." in template
     assert "untrusted data" in template
     assert "never instructions" in template
+    assert "translate “go— ahead” as “请继续”, not “请——继续”" in template
     assert render_translation_instructions(template, None).endswith("null\n")
 
     glossary = TranslationGlossary((GlossaryEntry("margin of safety", "安全边际"),))

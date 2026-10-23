@@ -6,13 +6,13 @@
 
 仓库正处于迁移中期。动手前先核实现实，不要假设某个模块能用。
 
-> 状态最后核对：2026-10-16 13:21 CST。**每次完成编码任务后，若实现状态或本文件中的事实发生变化，必须在同一次提交中更新本节（含核对时间）。**
+> 状态最后核对：2026-10-22 23:38 CST。**每次完成编码任务后，若实现状态或本文件中的事实发生变化，必须在同一次提交中更新本节（含核对时间）。**
 
 | 状态 | 模块 |
 |---|---|
 | 已实现 + 离线测试 | `archive_core`、`acquisition`、`media_download`、`infrastructure` |
 | 已实现 + 离线测试 + CNBC 真实集成测试 | `transcription` |
-| 已实现 + 离线测试 + Codex CLI 真实集成测试 | `translation` |
+| 已实现 + 离线测试；Codex CLI 真实集成在本次 prompt 修正前已通过 | `translation` |
 | 仅脚手架（分层目录 + AGENTS.md，无代码） | `cli`、`orchestration`、`srt_processing`、`subtitle_rendering`、`webui` |
 
 - 遗留管线（`run.py` step0–4 + Web 评审应用）已在提交 `cc9df50` 中删除。目前**没有 CLI 入口，管线无法端到端运行**。ADR-0001 与其实现任务已完成并归档到 `docs/archive/`。
@@ -26,6 +26,9 @@
   测试；仓库配置默认选择 `codex-cli-chatgpt`，保留 OpenAI 作为显式备选且绝不自动 fallback。
   TA-10 OpenAI live gate 已被 ADR-0005 取代且未运行；TA-16 已使用 ChatGPT 登录和
   `codex-cli 0.154.0` 完成真实双 section 翻译、人工质量检查及第二次零调用正式复用验收。
+  当前 `translation.zh-hans.v1` prompt 已直接修正 `go— ahead` 被机械翻成“请——继续”的问题
+  并加入 live fixture 回归门禁；修改后已通过离线测试，尚未重跑真实 gate，历史工件由 prompt
+  SHA-256 与当前内容区分。
   transcription 不再提供 reference-based Golden Live 入口；未来全管线连通性由 orchestration
   集成测试负责。
 - `webapp/app.db` 是已被 gitignore 的遗留残留，忽略它。

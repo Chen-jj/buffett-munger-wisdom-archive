@@ -64,3 +64,7 @@
 - 截至 2026-10-16，离线实现与 TA-16 Codex CLI live integration 均已完成；真实运行验证了 ChatGPT
   登录、`gpt-5.6-sol` entitlement、两个 section 的标题/句子质量、完整 provenance/checksum 和
   第二次零 provider/process call 的 byte-identical 正式工件复用。
+- 2026-10-22 23:38 CST 核对：`translation.zh-hans.v1` prompt 已直接修正，明确要求按语义
+  处理只打断连续表达的转写破折号；Codex CLI live fixture 已加入 `go— ahead` → “请继续”且
+  不保留破折号的回归门禁。修改后离线测试已通过，真实 Codex CLI gate 尚未重跑；既有正式
+  工件继续由 prompt SHA-256 精确标识，不会因 version 相同而静默复用或覆盖。
