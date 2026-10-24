@@ -28,7 +28,7 @@
 
 ## 实施/验收记录
 
-已完成。精确证据与限制见[负责人报告](../reviews/2026-10-23-cue-candidate-v3.md)。
+已完成。精确证据与限制见[负责人报告](../../reviews/2026-10-23-cue-candidate-v3.md)。
 
 - 真实163 cues，succeeded→reused耗时4.231/0.696s；新进程0.727/0.724s，再由负责人独立
   reused→reused为0.725/0.686s。六输出bytes/mtime不变、复用0写；三SRT独立回读通过。

@@ -69,11 +69,11 @@
   2 sections；2次provider/translation exec成功，第二次新增provider/process/exec均0，正式
   result/manifest的bytes/mtime不变，17份原上游文件未变。未重跑ASR或其他模块live测试，
   未改provider/auth/config、未fallback。详见
-  [SP-08A](../../docs/tasks/SP-08A-prepare-persistent-cnbc-translation.md)。
+  [SP-08A](../../docs/archive/tasks/SP-08A-prepare-persistent-cnbc-translation.md)。
 - 该明确授权仅准备字幕样本的正式输入；后续srt_processing独立入口只验证并复用保留工件，
   不调用translation/provider，完整离线pytest门槛不变。负责人/agent对97句的审读不是人类
   签字、音画校正或出版级字幕质量通过；句内比例/应急拆分的已知限制见
-  [SP-08](../../docs/tasks/SP-08-real-sample-and-final-status.md)。
+  [SP-08](../../docs/archive/tasks/SP-08-real-sample-and-final-status.md)。
 - 2026-10-22 23:38 CST 核对：`translation.zh-hans.v1` prompt 已直接修正，明确要求按语义
   处理只打断连续表达的转写破折号；Codex CLI live fixture 已加入 `go— ahead` → “请继续”且
   不保留破折号的回归门禁。修改后离线测试已通过，真实 Codex CLI gate 尚未重跑；既有正式

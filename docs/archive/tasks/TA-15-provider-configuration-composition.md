@@ -61,8 +61,8 @@ python -m pytest tests/ -q -m "not live"
 git diff --check
 git diff -- config.yaml AGENTS.md src/archive_core/AGENTS.md \
   src/infrastructure/AGENTS.md src/translation/AGENTS.md \
-  docs/decisions/0002-translation-sentence-units.md \
-  docs/decisions/0005-translation-codex-cli-chatgpt-provider.md
+  docs/archive/decisions/0002-translation-sentence-units.md \
+  docs/archive/decisions/0005-translation-codex-cli-chatgpt-provider.md
 ```
 
 - **Full offline suite required:** yes

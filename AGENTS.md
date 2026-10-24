@@ -6,11 +6,26 @@
 
 仓库正处于迁移中期。动手前先核实现实，不要假设某个模块能用。
 
-> 状态最后核对：2026-10-23 21:52 CST。**每次完成编码任务后，若实现状态或本文件中的事实发生变化，必须在同一次提交中更新本节（含核对时间）。**
+> 状态最后核对：2026-10-24 21:02 CST。**每次完成编码任务后，若实现状态或本文件中的事实发生变化，必须在同一次提交中更新本节（含核对时间）。**
+
+> 文档已整理：[导航](docs/README.md)。ADR-0001..0005、TA/SP历史任务和已验收SR-01..06
+> 已归档；TA-10仍为superseded而非通过。归档不撤销未被替代的公共契约，也不把候选质量写成定版。
+> ADR-0006、SR-00及SR-07仍进行中。SR-01..06已accepted，渲染公共契约、纯布局、字体/ASS/
+> 像素/媒体适配器、工作流与独立对抗测试均已实现。完整离线最近验收为2580 passed / 6 skipped。
+> 同源623秒/163-cue双语样片已持久交付，succeeded→reused→reused、逐cue像素、媒体QA与零写/
+> 上游不变通过；负责人另独立复用和20帧审图，**不是完整听音或人类质量签字**。
+> 用户实际播放发现中文与英语讲话的语义不同步，故SR-07最终验收未通过，ADR-0006不归档为完成。
+> 用户进一步确认其观察中音轨/英文单词时间准确，当前重点是中文优先切分+比例分配的语义错位；
+> 保留transcription与全部旧资产，先探索新方案，不重跑ASR、不直接调DP权重或改时间掩盖问题。
+> [复审证据](docs/reviews/2026-10-24-rendering-technical-and-semantic-review.md)与
+> [新agent探索prompt](docs/prompts/bilingual-semantic-alignment-exploration.md)记录当前事实和边界。
+> 用户批准的ASS百分秒投影、U+2060可逆显示控制及发布顺序修订仍以ADR-0006为准。
+> 本次整理后复验：2580 passed / 6 skipped，84份Markdown本地链接0断链；未新增语义修复算法。
+> 后续顺序仍为rendering→orchestration→CLI→Web UI；不能把技术样片交付写成语义或出版质量通过。
 
 > 用户另要求简化阅读稿，已新增[全97句v3/agent两方对照](output/cue-evaluation/20261023-candidate-v3/two_way_v1/all_97_sentences.md)。
 > 仅投影已冻结正文/时间并标明跨句共用关系，不重切或新增质量评价；负责人独立重算MD/JSONL字节一致。
-> 两方展示回归9项，最新完整离线 **1404 passed / 5 deselected**；以下1395为此前v3实施验收时点结果。
+> 两方展示回归9项，当时完整离线 **1404 passed / 5 deselected**；以下1395为此前v3实施验收时点结果。
 
 > 2026-10-23补记：当前默认已是候选v3，SP-13/14已通过负责人技术验收，完整离线
 > **1395 passed / 5 deselected**。中文只在停顿标点/句末切；16单位/7秒/9CPS均软目标，
@@ -30,10 +45,12 @@
 | 已实现 + 离线测试 + CNBC 真实集成测试 | `transcription` |
 | 已实现 + 离线测试；Codex CLI 真实集成在本次 prompt 修正前已通过 | `translation` |
 | 已实现 + 离线跨层验收 + CNBC 真实技术集成（非出版级质量背书） | `srt_processing` |
-| 仅脚手架（分层目录 + AGENTS.md，无代码） | `cli`、`orchestration`、`subtitle_rendering`、`webui` |
+| 技术实现/真实样片已交付；用户发现双语语义同步问题，最终验收未通过 | `subtitle_rendering` |
+| 仅脚手架（分层目录 + AGENTS.md，无代码） | `cli`、`orchestration`、`webui` |
 
 - 遗留管线（`run.py` step0–4 + Web 评审应用）已在提交 `cc9df50` 中删除。目前**没有 CLI 入口，管线无法端到端运行**。ADR-0001 与其实现任务已完成并归档到 `docs/archive/`。
-- 当前技术入口是 `docs/decisions/` 中仍生效的 ADR。归档任务仅记录已完成工作，不再作为现行路线图；此前两份路线图已由用户删除，不得恢复。
+- 文档入口为`docs/README.md`；进行中ADR在`docs/decisions/`，已实现ADR/任务在`docs/archive/`。
+  归档不自动使决策失效，但历史任务不再作为现行路线图；此前两份路线图已由用户删除，不得恢复。
 - 尚无 lint/typecheck/CI。离线 pytest 套件是唯一的验证门槛；另有少量 `live` 标记测试，包括
   acquisition→media_download 真实网络测试，以及 `RUN_TRANSCRIPTION_INTEGRATION=1` 门控的真实
   WhisperX 集成测试。本地 CNBC 2000 上午场连续第 6、7 节样本可从空 `output/` 自动准备，并在
@@ -56,7 +73,7 @@
   bytes/mtime 不变、0写入，19份上游文件未变。SRT 本身完全不调用 provider。
 - 负责人/agent 已完成 CNBC 文本内容审读，但**不是人类签字、语义对齐或出版级字幕质量通过**，
   未观看音画或验证像素/烧录。c3/c4 人物地名错位、c183“风/险”语义提前、c142–147“认/为”
-  及破折号/专名拆分等已知比例/应急限制保留，详见 [SP-08](docs/tasks/SP-08-real-sample-and-final-status.md)。
+  及破折号/专名拆分等已知比例/应急限制保留，详见 [SP-08](docs/archive/tasks/SP-08-real-sample-and-final-status.md)。
   在当时v1代码环境中，保留规范工件后可独立运行字幕样本入口复用，无需 ASR/translation 或其他模块 live 测试；当前候选路径/冲突说明见下文。
   完整离线 pytest 仍是代码改动门槛。
 - 用户于2026-10-22授权先修一版再审阅，该轮规则为**历史候选v2，不是最终质量定版**（当前v3见上文）：
@@ -66,7 +83,7 @@
 - 候选隔离工作区`output/cue-evaluation/20261022-candidate-v2/workspaces/cnbc_2000_morning/`
   真实生成224 cues，194.410s；随后复用及负责人独立`reused → reused`均0写、bytes/mtime不变。
   原正式33文件与SP-09的139份参考/证据文件未变，没有重跑ASR/translation/provider。
-  全97句三方对照见[SP-12](docs/tasks/SP-12-candidate-v2-comparison.md)；候选短cue从旧2增至9，
+  全97句三方对照见[SP-12](docs/archive/tasks/SP-12-candidate-v2-comparison.md)；候选短cue从旧2增至9，
   中文CPS按统一新口径从旧11增至17，且有s30/s32等新语义错位，**不得宣称质量全面改善**。
 - 旧CNBC规范目录保留v1字幕；当前v3代码对其直接运行原sample_runner应受控冲突，不再承诺
   原地直接复用。候选复跑用`tests.srt_processing.candidate_runner --run`并指定从未存在的
@@ -118,7 +135,8 @@ orchestration：可恢复任务计划 · cli/webui：薄接口 · infrastructure
 
 各阶段状态：实现到 `srt_processing` 为止；transcription 已通过离线测试与当前 CNBC 真实集成
 验收，translation 已通过离线测试与 Codex CLI ChatGPT 真实集成验收。srt_processing 已通过
-离线跨层与 CNBC 真实技术集成，已知字幕内容质量限制见 SP-08；其下游仍是脚手架。
+离线跨层与 CNBC 真实技术集成，已知字幕内容质量限制见 SP-08；rendering技术实现/样片已交付，
+最终语义质量验收未通过，后续模块仍为脚手架。
 
 ## 模块地图
 
@@ -130,7 +148,7 @@ orchestration：可恢复任务计划 · cli/webui：薄接口 · infrastructure
 - `src/srt_processing/` —— 确定性双语 cue 规划、三份 SRT 投影/解析、QA 与可恢复发布。*（已实现 + 离线跨层验收 + CNBC 真实技术集成，非出版级质量背书）*
 - `src/translation/` —— 完整英文句子/section 翻译、checkpoint、术语/风格策略、服务适配器、结果
   校验与原子发布。*（已实现 + 离线测试 + Codex CLI 真实集成测试）*
-- `src/subtitle_rendering/` —— SRT/ASS 样式、烧录渲染、ffmpeg 命令规划、渲染元数据。*（脚手架）*
+- `src/subtitle_rendering/` —— SRT/ASS 样式、烧录渲染、ffmpeg 命令规划、渲染元数据。*（SR-01..06已验收，真实样片已交付，最终验收未通过）*
 - `src/webui/` —— 本地评审 UI 边界、目录契约。*（脚手架）*
 - `src/cli/` —— 命令解析、面向人的命令、进度显示。*（脚手架）*
 - `src/orchestration/` —— 管线组装、可恢复工作流、依赖排序、故障恢复。*（脚手架）*

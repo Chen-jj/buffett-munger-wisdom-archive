@@ -19,28 +19,41 @@ download:
   rate_limit: null            # 限速，如 "5M"
   retries: 3
 
-# 字幕样式（ASS 格式）
-subtitle_style:
-  font_name: "Hiragino Sans GB"   # macOS 上当前已验证可被 ffmpeg/libass 正常命中的字体
-  font_size: 30
-  primary_color: "&H00FFFFFF"   # 白色
-  outline_color: "&H00000000"   # 黑色描边
+# 固定双语烧录配置（ADR-0006）
+subtitle_rendering:
+  profile: "bilingual-burnin.hiragino-640x360.v1"
+  output_mode: "bilingual"
+  reference_width: 640
+  reference_height: 360
+  horizontal_margin: 32
+  vertical_margin: 42
+  maximum_subtitle_height: 160
+  maximum_chinese_lines: 2
+  maximum_english_lines: 2
+  maximum_total_lines: 4
+  alignment: 2
+  font:
+    path: "/System/Library/Fonts/Hiragino Sans GB.ttc"
+    sha256: "f887295caf2881cab9554b14c5ab4c9ee624c3895599da152ec37416b5aefae0"
+    family: "Hiragino Sans GB"
+    style: "W3"
+    face_index: 0
+  chinese:
+    font_size: 30
+    primary_color: "&H00FFFFFF"
+  english:
+    font_size: 20
+    primary_color: "&H0060E6FF"
+  outline_color: "&H00000000"
   outline_width: 2
   shadow: 1
-  margin_v: 42                # 距底部边距
-  alignment: 2                # 2=底部居中（双语都在下方，中文在上英文在下）
-
-# 双语字幕（中英对照）
-bilingual:
-  enabled: true
-  secondary_font_size: 20
-  secondary_color: "&H0060E6FF"  # 柔和黄色英文
-
-# FFmpeg 编码参数
-ffmpeg:
-  codec: "libx264"
-  crf: 18
-  preset: "medium"            # ultrafast/fast/medium/slow
+  encoder:
+    video_codec: "libx264"
+    crf: 18
+    preset: "medium"
+    pixel_format: "yuv420p"
+    audio_mode: "copy-all"
+    movflags: "+faststart"
 
 # WhisperX 语音对齐（可选）
 whisperx:

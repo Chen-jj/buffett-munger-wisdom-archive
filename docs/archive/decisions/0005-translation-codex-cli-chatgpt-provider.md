@@ -429,4 +429,4 @@ provider adapter 的要求。
 - [OpenAI Codex developer commands](https://learn.chatgpt.com/docs/developer-commands?surface=cli)
 - [OpenAI Codex developer settings](https://learn.chatgpt.com/docs/developer-settings)
 - [OpenAI Sign in with ChatGPT：Codex app-server](https://developers.openai.com/siwc/token-sharing-open-source/codex-app-server)
-- ADR-0002：`docs/decisions/0002-translation-sentence-units.md`
+- ADR-0002：`docs/archive/decisions/0002-translation-sentence-units.md`

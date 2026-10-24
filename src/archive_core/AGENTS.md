@@ -23,6 +23,21 @@
 - 序列化保持显式且有版本号；避免跨模块裸传 dict。
 - 本模块避免重依赖。
 
+## Subtitle rendering 公共契约（SR-01，2026-10-24 00:00 CST 核对）
+
+- 已增加 ADR-0006 的四个独立 rendering 工件类型及规范文件名，沿用既有 `RENDERED_VIDEO`。
+- `archive_core.interfaces.rendering` 和公共导出发布严格的 profile/font/tool/media、视觉断点、
+  plan/report/成功 manifest DTO；显式版本化序列化拒绝未知字段、未知版本和非有限数值。
+- render plan 对公共 `SubtitlePlanDTO` 验证原毫秒时间、逻辑正文 SHA-256、code-point offset
+  与重建；保留原始正文及空白，不依赖 SRT。ASS 显示时间按用户批准的
+  `nearest-centisecond-half-up.v1` 投影，单边误差不超过 5ms，必须保持正时长、不重叠、不越界。
+- profile hash、字体 PostScript name/face/文件指纹、完整工具身份、微秒媒体描述、严格 tags /
+  chapters 和固定主视频/全部音频映射进入审计；manifest 与 plan/report 交叉验证，不以文件
+  存在代替完成。布局搜索、字体读取、像素渲染、媒体 QA 和实际发布仍属于 rendering 模块。
+- 本轮定向契约 188 passed，连同既有核心/字幕契约 344 passed；当时完整离线为
+  1592 passed / 5 skipped。这里只记录开发验证，负责人验收及 rendering 下游实现另行记录，
+  不代表已经生成 ASS、成片或完成像素/出版质量验收。
+
 ## Transcription 公共契约
 
 - `ArtifactType` 统一定义 transcription 的规范工件名：`audio.wav`、`vad.json`、
@@ -107,7 +122,7 @@
   5 deselected）；公共契约自身仍不是阶段完成证明。用户授权的 SP-08A 已持久补齐正式译文，
   CNBC 真实技术集成通过242 cues生成、即时与独立进程复用、19份上游不变及六输出bytes/mtime
   不变验证。负责人/agent文本审读不是人类签字或语义/出版级/像素质量证明，已知比例错位与
-  应急拆词限制见 [SP-08](../../docs/tasks/SP-08-real-sample-and-final-status.md)。
+  应急拆词限制见 [SP-08](../../docs/archive/tasks/SP-08-real-sample-and-final-status.md)。
 - SP-11 已加入候选 v2 profile 和 codec 身份的最小兼容扩展，旧 profile/hash/codec 形状保持；
   公共契约、多行 codec、workflow 与完整离线套件已通过。候选仅为用户授权试验，真实隔离
   样本验收由 SP-10..12 统一记录，不表示最终字幕质量通过。

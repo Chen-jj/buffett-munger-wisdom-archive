@@ -3,7 +3,7 @@
 - 状态：已实现并通过离线与 CNBC 真实集成验收
 - 日期：2026-10-13
 - 影响模块：`archive_core`、`transcription`、`translation`
-- 关联决策：ADR-0001（已接受并归档）、ADR-0002（离线实现完成，OpenAI 真实集成待验收）
+- 关联决策：ADR-0001（已归档）、ADR-0002（已实现并通过Codex CLI真实集成；旧OpenAI gate由ADR-0005取代）
 - 所属阶段：Phase 1
 
 ## 1. 决策摘要

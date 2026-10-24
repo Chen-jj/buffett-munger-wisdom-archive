@@ -47,6 +47,6 @@
 - 242→153 cues、中位显示1878→3321ms，但参考98 cues超原容量（81中文、82英文，65双超），因此不将其当同profile整体胜出。全97句文本审读优49/平45/劣3，仅为agent文本判断；完整兼容组内s32/s57微改善，19句相同。s4/s74/s88参考错误明确保留。
 - 另派手工构造s6/s60/s90后验原预算见证，负责人独立复跑完整拼接验证通过。s90同3cue、同英文边界，仅移动中文offset即可不拆“今年”；s6/s60各7cue（基线各6）可保专名/词/双破折号，但不证明节奏或整体语义改善。这三例不混入153-cue指标或97句胜负。
 - 33份正式工作区文件hash/size/mtime最终均未变；作者冻结原稿未变。未改生产实现/ADR/正式资产，未运行ASR/translation/provider/渲染。最新完整离线复验为1220 passed / 5 deselected（3.98s），diff check通过。
-- 报告：[全量评估与修复建议](../reviews/2026-10-22-cue-agent-vs-dp.md)。本地实验入口为`output/cue-evaluation/20261022-agent-vs-dp/README.md`，含实验SRT、逐句对照、指标与复跑协议。负责人独立证据保存在`audit/lead_materialized_v1/`、`lead_review_v3/`、`lead_posthoc_validation_v1/`及`lead_formal_final.v1.json`。
+- 报告：[全量评估与修复建议](../../reviews/2026-10-22-cue-agent-vs-dp.md)。本地实验入口为`output/cue-evaluation/20261022-agent-vs-dp/README.md`，含实验SRT、逐句对照、指标与复跑协议。负责人独立证据保存在`audit/lead_materialized_v1/`、`lead_review_v3/`、`lead_posthoc_validation_v1/`及`lead_formal_final.v1.json`。
 
 结论：本任务的全量参考创作、对比、归因与修复建议交付验收通过；**不代表当前生产cue质量通过，也不代表参考稿可直接发布**。下一步应先明确边界质量/D39政策并做小步全量回归，容量与固定译序/共享时间轴语义目标分别决策，不直接以参考稿替换正式产物。

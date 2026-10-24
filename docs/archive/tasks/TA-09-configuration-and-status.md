@@ -55,8 +55,8 @@ python -m pytest tests/ -q -m "not live"
 git diff --check
 git diff -- config.yaml requirements.txt AGENTS.md \
   src/archive_core/AGENTS.md src/transcription/AGENTS.md src/translation/AGENTS.md \
-  docs/decisions/0002-translation-sentence-units.md \
-  docs/decisions/0004-transcription-source-sections.md
+  docs/archive/decisions/0002-translation-sentence-units.md \
+  docs/archive/decisions/0004-transcription-source-sections.md
 ```
 
 - **Full offline suite required:** yes

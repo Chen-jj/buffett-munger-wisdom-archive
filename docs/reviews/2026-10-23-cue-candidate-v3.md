@@ -27,7 +27,7 @@ v3_delivery完成隔离runner、机器对照与手工审读，负责人独立测
 - 英文仍实际最多2行、每行42，不能只用总84替代word边界packing。
 - S19独立一cue或逗号两cue均可；S20独立一cue。S34中文自然两块优先，接受其逐cue语义不同步。
 
-精确九层成本、停顿组和跨句救援定义见[SP-13](../tasks/SP-13-candidate-v3-pause-planner.md)。
+精确九层成本、停顿组和跨句救援定义见[SP-13](../archive/tasks/SP-13-candidate-v3-pause-planner.md)。
 中文节奏为`Σ[1+(2×max(0,h−32)/32)^2]`，h为中文半单位；这是软折衷而非新硬字数上限。
 分号优先分块；只能在原短片段单独合法延长后仍<834ms时跨句救援，后继必须完整消费原句，
 不偷下一句开头。section/speaker/null、源覆盖、媒体末尾、非重叠与500ms总延长硬门禁不变。

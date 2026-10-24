@@ -2,6 +2,8 @@
 
 Local media pipeline for collecting Buffett and Munger archive videos, generating subtitles, rendering review videos, and serving review assets.
 
+See [documentation](docs/README.md) for active work, archived implementation decisions, and current subtitle quality limits.
+
 ## Quick Start
 
 ### 1. Install System Dependencies

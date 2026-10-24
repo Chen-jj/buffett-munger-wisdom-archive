@@ -1,5 +1,13 @@
 # srt_processing AGENTS.md
 
+## 2026-10-24 人类播放反馈与探索边界
+
+ADR-0003及已完成SP任务已归档，候选v3的技术/实验accepted状态不撤销，但不代表语义质量通过。
+用户播放真实烧录样片后确认其观察中的英文词时间准确，主要问题是中文优先分块后按比例分配
+英文，造成专名/谓语等跨cue错位。当前尚未接受新的语义对齐方案；禁止将讨论直接变成新默认
+算法、重跑ASR或静默改译/改时间。先按[探索prompt](../../docs/prompts/bilingual-semantic-alignment-exploration.md)
+研究需要修改哪些旧契约/约束，当前LLM禁令和公共契约仍有效，不能绕过。
+
 ## 2026-10-23 用户确认的候选v3（技术与比较交付通过，非最终质量定版）
 
 本节覆盖下文v1/v2冲突规则。用户确认中文只在停顿标点或句末切cue，逗号可选；中文16单位
@@ -9,11 +17,11 @@
 源锚点、非重叠、section/speaker/null、媒体末尾与最多500ms总延长等硬门禁保留。
 
 精确通用算法和v3公共profile已冻结，由子开发agent实施；负责人只拆解/审查/验收不编码。
-[SP-13](../../docs/tasks/SP-13-candidate-v3-pause-planner.md)核心技术已accepted，完整离线
+[SP-13](../../docs/archive/tasks/SP-13-candidate-v3-pause-planner.md)核心技术已accepted，完整离线
 **1395 passed / 5 deselected**，负责人独立复跑且三个domain源码指纹一致。规则/边界/planner
 定向184 passed，包含独立全路径暴力oracle、非贪心与候选顺序扰动，不以测试代替语义验收。
-[SP-14](../../docs/tasks/SP-14-candidate-v3-contracts.md)提供契约/跨层接入；
-[SP-15](../../docs/tasks/SP-15-candidate-v3-comparison.md)隔离真实集成/全97句对照已完成负责人验收。
+[SP-14](../../docs/archive/tasks/SP-14-candidate-v3-contracts.md)提供契约/跨层接入；
+[SP-15](../../docs/archive/tasks/SP-15-candidate-v3-comparison.md)隔离真实集成/全97句对照已完成负责人验收。
 真实163 cues生成→复用及负责人独立零写复用通过，四方数据及六份手工审读表独立重算字节一致。
 中文非停顿cut0、短cue0，中文长度/7秒/CPS告警81/9/18；33句中文偏好23满足/4允许/5部分/
 1未满足，双语节奏18/2/12/1。S17/S22/S48/S74/S88/S94等残余明确披露，不建议质量定版，
@@ -46,8 +54,8 @@
 ## 2026-10-22 用户授权候选v2（技术验证通过，质量待审阅）
 
 用户要求先修一版并逐句对照SP-09的153-cue独立agent稿，再决定最终策略。候选约定见
-[SP-10](../../docs/tasks/SP-10-candidate-v2-rules.md)、[SP-11](../../docs/tasks/SP-11-candidate-v2-projection.md)、
-[SP-12](../../docs/tasks/SP-12-candidate-v2-comparison.md)。本节覆盖下文v1的一行英文/半宽Latin及D39旧规则，
+[SP-10](../../docs/archive/tasks/SP-10-candidate-v2-rules.md)、[SP-11](../../docs/archive/tasks/SP-11-candidate-v2-projection.md)、
+[SP-12](../../docs/archive/tasks/SP-12-candidate-v2-comparison.md)。本节覆盖下文v1的一行英文/半宽Latin及D39旧规则，
 下文保留的242-cue技术验收是历史v1事实，不是候选v2已通过证明。
 
 候选代码已通过完整离线1329 passed / 5 deselected；隔离CNBC224 cues真实生成与复用通过，
@@ -72,7 +80,7 @@
 截至 2026-10-21 10:11 CST，公共契约、输入门禁、确定性 planner、ffprobe/pysubs2/store
 适配器及 manifest-last workflow 已实现，SP-01..07 已通过负责人审查、跨层/对抗验收与
 完整离线套件（1220 passed / 5 deselected）。正式决策见
-`docs/decisions/0003-srt-processing-input-boundary.md`（ADR-0003）。历史缺译文阻断已由用户
+`docs/archive/decisions/0003-srt-processing-input-boundary.md`（ADR-0003）。历史缺译文阻断已由用户
 授权的 SP-08A 解决，正式工件已持久保存。CNBC 双 section 真实技术集成生成242 cues，
 `succeeded → reused` 后独立新进程再次 `reused → reused`；六输出bytes/mtime不变、0写入，
 19份上游文件不变。负责人/agent内容审读已完成；SP-08已由负责人完成最终文档验收并标记accepted。
@@ -80,7 +88,7 @@
 **上述不是人类签字、语义对齐或出版级字幕质量通过，未观看音画或做像素/ASS/烧录验收。**
 c3/c4人物地名错位、c183“风/险”语义提前、c142–147“认/为”及破折号拆分、中文栏英文专名
 拆分等比例/应急限制均保留，具体证据见
-[SP-08](../../docs/tasks/SP-08-real-sample-and-final-status.md)。不宣称全片字幕质量过关。
+[SP-08](../../docs/archive/tasks/SP-08-real-sample-and-final-status.md)。不宣称全片字幕质量过关。
 
 ## 已实现入口与运行边界
 

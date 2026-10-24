@@ -101,3 +101,69 @@ def run_process(
     if check and not result.ok:
         raise ProcessExecutionError(result)
     return result
+
+
+@dataclass(frozen=True)
+class ProcessBytesResult:
+    """Binary stdout plus decoded diagnostics; stdin is never retained."""
+
+    command: tuple[str, ...]
+    returncode: int
+    stdout: bytes
+    stderr: str
+    dry_run: bool = False
+
+    @property
+    def ok(self) -> bool:
+        return self.returncode == 0
+
+
+class ProcessBytesExecutionError(RuntimeError):
+    def __init__(self, result: ProcessBytesResult) -> None:
+        self.result = result
+        message = f"Command failed with exit code {result.returncode}: {' '.join(result.command)}"
+        if result.stderr.strip():
+            message += f"\n{result.stderr.strip()}"
+        super().__init__(message)
+
+
+def run_process_bytes(
+    command: Sequence[str | Path],
+    *,
+    stdin_bytes: bytes | None = None,
+    dry_run: bool = False,
+    check: bool = False,
+    cwd: str | Path | None = None,
+    env: Mapping[str, str] | None = None,
+    timeout: float | None = None,
+    runner: Callable[..., subprocess.CompletedProcess[bytes]] = subprocess.run,
+) -> ProcessBytesResult:
+    """Run a binary pipe without changing the existing text process API."""
+    normalized = tuple(str(part) for part in command)
+    if not normalized:
+        raise ValueError("command must not be empty")
+    if stdin_bytes is not None and not isinstance(stdin_bytes, bytes):
+        raise ValueError("stdin_bytes must be bytes")
+    if dry_run:
+        return ProcessBytesResult(normalized, 0, b"", "", True)
+
+    def diagnostic(value: bytes | str | None) -> str:
+        return value.decode("utf-8", errors="replace") if isinstance(value, bytes) else (value or "")
+
+    try:
+        options = {"cwd": str(cwd) if cwd is not None else None,
+                   "env": dict(env) if env is not None else None, "timeout": timeout,
+                   "capture_output": True, "text": False}
+        if stdin_bytes is not None:
+            options["input"] = stdin_bytes
+        completed = runner(list(normalized), **options)
+        result = ProcessBytesResult(normalized, int(completed.returncode), completed.stdout or b"",
+                                    diagnostic(completed.stderr))
+    except FileNotFoundError as exc:
+        result = ProcessBytesResult(normalized, 127, b"", str(exc))
+    except subprocess.TimeoutExpired as exc:
+        result = ProcessBytesResult(normalized, 124, exc.stdout or b"",
+                                    diagnostic(exc.stderr) or f"Command timed out after {timeout} seconds")
+    if check and not result.ok:
+        raise ProcessBytesExecutionError(result)
+    return result
