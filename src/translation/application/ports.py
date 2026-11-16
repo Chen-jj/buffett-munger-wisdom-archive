@@ -31,6 +31,8 @@ class TranslationArtifactStore(Protocol):
 
     def read_json(self, path: str) -> Mapping[str, Any]: ...
 
+    def publish_json_bundle(self, bodies, manifest_path, manifest_factory, *, output_names, overwrite): ...
+
     def publish_json_pair(
         self,
         result_path: str,

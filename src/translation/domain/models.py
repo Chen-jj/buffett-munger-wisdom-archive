@@ -16,7 +16,7 @@ SOURCE_LANGUAGE = "en"
 TARGET_LANGUAGE = "zh-Hans"
 
 _SECTION_ID_RE = re.compile(r"^sec[1-9][0-9]*$")
-_SENTENCE_ID_RE = re.compile(r"^s[1-9][0-9]*$")
+_CHUNK_ID_RE = re.compile(r"^k[1-9][0-9]*$")
 
 
 def _require_non_blank(value: object, field_name: str) -> str:
@@ -58,15 +58,17 @@ def _thaw_json(value: object) -> Any:
 class TranslationRequestItem:
     id: str
     text: str
+    budget: Mapping[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         _require_non_blank(self.id, "request item id")
-        if _SENTENCE_ID_RE.fullmatch(self.id) is None:
-            raise ValueError("request item id must use the format s<one-based position>")
+        if _CHUNK_ID_RE.fullmatch(self.id) is None:
+            raise ValueError("request item id must use the format k<one-based position>")
         _require_non_blank(self.text, "request item text")
+        object.__setattr__(self, "budget", _freeze_json(self.budget))
 
-    def to_dict(self) -> dict[str, str]:
-        return {"id": self.id, "text": self.text}
+    def to_dict(self) -> dict[str, Any]:
+        return {"id": self.id, "text": self.text, "budget": _thaw_json(self.budget)}
 
 
 @dataclass(frozen=True)
@@ -93,6 +95,10 @@ class TranslationRequest:
     target_language: str
     section: TranslationRequestSection | None
     items: tuple[TranslationRequestItem, ...] = field(default_factory=tuple)
+    readonly_context: tuple[Mapping[str, object], ...] = field(default_factory=tuple)
+    annotations: tuple[Mapping[str, object], ...] = field(default_factory=tuple)
+    glossary: tuple[Mapping[str, object], ...] = field(default_factory=tuple)
+    translate_title: bool = False
 
     def __post_init__(self) -> None:
         if self.source_language != SOURCE_LANGUAGE:
@@ -106,6 +112,12 @@ class TranslationRequest:
         object.__setattr__(self, "items", tuple(self.items))
         if not all(isinstance(item, TranslationRequestItem) for item in self.items):
             raise ValueError("items must contain TranslationRequestItem values")
+        if not isinstance(self.translate_title, bool):
+            raise ValueError("translate_title must be boolean")
+        if self.translate_title and (self.section is None or not self.section.title.strip()):
+            raise ValueError("title task requires a non-empty section title")
+        for name in ("readonly_context", "annotations", "glossary"):
+            object.__setattr__(self, name, _freeze_json(getattr(self, name)))
         item_ids = [item.id for item in self.items]
         if len(item_ids) != len(set(item_ids)):
             raise ValueError("request item IDs must not contain duplicates")
@@ -116,6 +128,11 @@ class TranslationRequest:
             "target_language": self.target_language,
             "section": self.section.to_dict() if self.section is not None else None,
             "items": [item.to_dict() for item in self.items],
+            "task": "chunk_translation",
+            "readonly_context": _thaw_json(self.readonly_context),
+            "annotations": _thaw_json(self.annotations),
+            "glossary": _thaw_json(self.glossary),
+            "translate_title": self.translate_title,
         }
 
     def canonical_json(self) -> str:
@@ -123,6 +140,22 @@ class TranslationRequest:
 
     def checksum(self) -> str:
         return canonical_json_sha256(self.to_dict())
+
+
+@dataclass(frozen=True)
+class RevisionRequest:
+    payload: Mapping[str, object]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.payload, Mapping) or not self.payload:
+            raise ValueError("revision payload must be a nonempty object")
+        object.__setattr__(self, "payload", _freeze_json(self.payload))
+
+    def to_dict(self) -> dict[str, Any]:
+        return _thaw_json(self.payload)
+
+    def canonical_json(self) -> str:
+        return canonical_json_bytes(self.to_dict()).decode("utf-8")
 
 
 @dataclass(frozen=True)
@@ -179,8 +212,8 @@ class ProviderCall:
 
     def __post_init__(self) -> None:
         _require_non_blank(self.instructions, "instructions")
-        if not isinstance(self.request, TranslationRequest):
-            raise ValueError("request must be a TranslationRequest")
+        if not isinstance(self.request, (TranslationRequest, RevisionRequest)):
+            raise ValueError("request must be a TranslationRequest or RevisionRequest")
         if not isinstance(self.output_schema, Mapping):
             raise ValueError("output_schema must be an object")
         if isinstance(self.max_attempts, bool) or not isinstance(self.max_attempts, int):

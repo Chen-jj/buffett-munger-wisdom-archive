@@ -343,6 +343,46 @@ def test_versioned_normalization_covers_required_equivalences() -> None:
     )
 
 
+@pytest.mark.parametrize("spelling", ("See's", "See’s"))
+def test_official_sees_candy_spelling_preserves_bilaterally_anchored_asr_time(
+    tmp_path: Path, spelling: str,
+) -> None:
+    store = MemoryArtifactStore()
+    aligned = _aligned_input(
+        store, tmp_path, ("the", "castle", "Seas", "candy", "has", "a", "moat."),
+    )
+    official = _official_input(
+        store, tmp_path, _transcript(f"the castle {spelling} Candy has a moat."),
+    )
+    service, _, _ = _service(store, tmp_path)
+
+    result = service.execute(aligned, official=official)
+
+    corrected = result.words[2]
+    original = aligned.artifact.words[2]
+    assert corrected.text == spelling
+    assert corrected.match_type is MatchType.SUBSTITUTION
+    assert corrected.asr_word_ids == (original.id,)
+    assert corrected.official_token_ids == ("ot3",)
+    assert (corrected.start_ms, corrected.end_ms) == (original.start_ms, original.end_ms)
+    assert len(result.words) == len(aligned.artifact.words)
+
+
+@pytest.mark.parametrize(("asr", "official"), (
+    (("the", "castle", "Seas", "candy", "has", "a", "moat."), "the castle sees candy has a moat."),
+    (("Seas", "candy", "has", "a", "moat."), "See's Candy has a moat."),
+))
+def test_default_sees_alias_requires_actual_apostrophized_official_word_and_bilateral_anchors(
+    asr: tuple[str, ...], official: str,
+) -> None:
+    tokens, _ = build_official_tokens(_transcript(official), NormalizationPolicy())
+    plans = plan_transcript_fusion(
+        _aligned_artifact(asr).words, tokens,
+        normalization=NormalizationPolicy(), matching=MatchingPolicy(),
+    )
+    assert MatchType.SUBSTITUTION not in {plan.match_type for plan in plans}
+
+
 @pytest.mark.parametrize(
     ("asr_surface", "official_surface"),
     [

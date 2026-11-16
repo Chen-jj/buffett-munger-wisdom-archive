@@ -109,3 +109,10 @@ def build_session_workspace(
         session_id=session_id,
         workspace_path=str(workspace_path),
     )
+
+
+def build_pipeline_run_path(asset_id: AssetId, root: str | Path, run_id: str) -> Path:
+    """Return a safe run directory without creating it or inspecting the filesystem."""
+    if not isinstance(run_id, str) or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,99}", run_id) is None:
+        raise ValueError("run_id must be a safe non-empty identifier")
+    return build_asset_workspace(asset_id, root) / "pipeline_runs" / run_id

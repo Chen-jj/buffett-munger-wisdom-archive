@@ -8,11 +8,11 @@
 v3_delivery完成隔离runner、机器对照与手工审读，负责人独立测试、复用、重算和审查。
 本轮不重跑ASR/translation/provider，不改上游文字或词时间，不覆盖旧242/224/153工件。
 
-- [全97句四方对照](../../output/cue-evaluation/20261023-candidate-v3/review_v3/all_97_sentences.md)
-- [33句中文偏好与双语/节奏分栏](../../output/cue-evaluation/20261023-candidate-v3/review_v3/chinese_vs_joint_acceptance.md)
-- [v3双语SRT](../../output/cue-evaluation/20261023-candidate-v3/workspaces/cnbc_2000_morning/bilingual.srt)
-- [独立作者复核与固定路径成本解释](../../output/cue-evaluation/20261023-candidate-v3/independent_author_review.v1.md)
-- [目录与复跑命令](../../output/cue-evaluation/20261023-candidate-v3/README.md)
+- 全97句四方对照（历史产物已授权删除；原路径：`../../output/cue-evaluation/20261023-candidate-v3/review_v3/all_97_sentences.md`）
+- 33句中文偏好与双语/节奏分栏（历史产物已授权删除；原路径：`../../output/cue-evaluation/20261023-candidate-v3/review_v3/chinese_vs_joint_acceptance.md`）
+- v3双语SRT（历史产物已授权删除；原路径：`../../output/cue-evaluation/20261023-candidate-v3/workspaces/cnbc_2000_morning/bilingual.srt`）
+- 独立作者复核与固定路径成本解释（历史产物已授权删除；原路径：`../../output/cue-evaluation/20261023-candidate-v3/independent_author_review.v1.md`）
+- 目录与复跑命令（历史产物已授权删除；原路径：`../../output/cue-evaluation/20261023-candidate-v3/README.md`）
 
 这些判断是agent/负责人文本审读，不是盲评、自动语义评分、音画/像素/烧录验收或人类出版签字。
 独立作者参与过参考稿和SP-14，不能称外部独立专家。

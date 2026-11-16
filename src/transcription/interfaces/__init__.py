@@ -11,3 +11,6 @@ __all__ = [
     "TranscriptionCommandHandler",
     "TranscriptionResult",
 ]
+
+from .factory import build_transcription_handler
+from .verification import verify_transcription

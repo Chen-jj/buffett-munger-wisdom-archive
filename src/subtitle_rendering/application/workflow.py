@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from archive_core.interfaces.bilingual_timing import empty_frame_count
+
 from dataclasses import dataclass
 import json
 from pathlib import Path
@@ -67,9 +69,20 @@ def _summary(plan: SubtitleRenderPlanDTO | None, findings: tuple[RenderFindingDT
 
 def _successful_report(inputs, plan, pixels) -> SubtitleRenderReportDTO:
     # Upstream warnings remain context, never promoted to rendering errors.
-    findings = tuple(RenderFindingDTO("upstream." + finding.code, "warning",
+    findings = tuple(RenderFindingDTO("upstream." + finding["code"], "warning",
                                      diagnostic="Upstream subtitle warning; not a rendering hard error.")
-                     for finding in inputs.srt_report.findings if finding.severity == "warning")
+                     for finding in inputs.srt_report["findings"] if finding["severity"] == "warning")
+    gap_findings = []
+    for left, right in zip(plan.cues, plan.cues[1:]):
+        count = empty_frame_count(inputs.source_plan.media, left.ass_end_ms, right.ass_start_ms)
+        if count is None or count < 2:
+            gap_findings.append(RenderFindingDTO(
+                "ass.frame_gap_unverified" if count is None else "ass.short_frame_gap", "warning",
+                cue_id=left.id, start_ms=left.start_ms, end_ms=left.end_ms,
+                diagnostic=(f"ASS projected gap [{left.ass_end_ms}, {right.ass_start_ms}) ms; empty frame count: "
+                            + ("unverified" if count is None else str(count))),
+            ))
+    findings += tuple(gap_findings)
     report = SubtitleRenderReportDTO(plan.asset_id, "succeeded", _summary(plan, findings, passed=True), findings, tuple(pixels))
     report.validate_against_plan(plan)
     return report
@@ -151,7 +164,7 @@ class SubtitleRenderingWorkflow:
                                                   profile=self.profile, mapping=plan.stream_mapping)
             if dry_run:
                 return SubtitleRenderingRunResult("planned", "render", **{key + "_path": value for key, value in paths.items()},
-                                                  cue_count=len(plan.cues), warning_count=sum(item.severity == "warning" for item in inputs.srt_report.findings), command=command)
+                                                  cue_count=len(plan.cues), warning_count=sum(item["severity"] == "warning" for item in inputs.srt_report["findings"]), command=command)
             self.artifacts.create_staging(staging)
             self._stage(staged["ass"], ass)
             stage_category = "ass_generation_failed"

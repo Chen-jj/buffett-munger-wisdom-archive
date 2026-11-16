@@ -1,5 +1,18 @@
 # transcription AGENTS.md
 
+2026-11-06：生产编排完整转录复用命中全部cache时，复验成功日志/报告/manifest并返回原报告，
+不重写任何阶段工件；实际工具身份可只读探测。真实ASR/跨层集成已迁入编排。
+
+## 2026-11-05 ADR-0009 开发交付（待负责人完整验收）
+
+融合结果/声学缓存不改；SentenceBoundaryService在canonical发布前按明确asset source=cnbc及
+官网token证据分离保留的U+2014，重建正文，发布source-alignment.v2的无时间annotations。
+非CNBC、ASR-only、无官网符号证据、U+2013和U+002D保持；canonical缓存身份绑定标记政策，
+不使audio/VAD/ASR/alignment/fusion无故失效。旧schema明确拒绝。
+公共factory为transcription.interfaces.build_transcription_handler(output_root=...,runtime=...)，
+构造不探测工具/加载模型/读凭据；execute时才preflight并组装现有production能力，不import tests。
+定向325 passed / 1 skipped；真实空工作区重跑和全样本标记审核由编排验收，不预称完成。
+
 ## 模块定位
 
 `transcription` 负责把已验证的英文源视频转换为带词级时间锚点和完整英文句界的
@@ -116,6 +129,10 @@
   不能证明 substitution（如 million/billion）；折叠仅在 normalization units 证明等价时允许，
   one-to-many 不得跨 chapter、paragraph 或 speaker，many-to-one 不得把 interpolated timing
   伪报成 merged acoustic。已对齐 ASR-only word 始终保留并记录。
+- NB-09 默认拼写清单加入 ASR `seas` 与实际官网 `See's` 的单词配对；只有局部 DP 具备
+  双侧词汇锚点才可纳入，保留声学时间、ASR ID 和官网 token ID。保留官网拼写的撇号，
+  不将普通动词 `sees` 当作该别名；无官网的 identity 路径不改写。清单已纳入融合缓存身份，
+  不使 audio/VAD/ASR/alignment 失效。需重新切词或涉及官网编辑插注的疑似专名不自动猜测。
 - official-only run 仅在真正包围该 run 的最近两侧 n-gram anchor 全部是达到配置 score 阈值的
   acoustic timing、speaker 不跨界、窗口合法，且 `OfficialTranscriptAligner` 返回
   数量/顺序/文字/时间/score 全部

@@ -24,6 +24,16 @@ class ArtifactType(str, Enum):
     TRANSCRIPTION_MANIFEST = "transcription_manifest"
     TRANSLATION_RESULT = "translation_result"
     TRANSLATION_MANIFEST = "translation_manifest"
+    DOWNLOAD_MANIFEST = "download_manifest"
+    MEDIA_DERIVATION_MANIFEST = "media_derivation_manifest"
+    SOURCE_CHUNKS = "source_chunks"
+    SOURCE_CHUNKING_REPORT = "source_chunking_report"
+    SOURCE_CHUNKING_MANIFEST = "source_chunking_manifest"
+    FINAL_BILINGUAL_DRAFT = "final_bilingual_draft"
+    BILINGUAL_POSTPROCESSING_REPORT = "bilingual_postprocessing_report"
+    BILINGUAL_POSTPROCESSING_MANIFEST = "bilingual_postprocessing_manifest"
+    MEDIA_BOUNDARY = "media_boundary"
+    ACQUISITION_RECEIPT = "acquisition_receipt"
     ENGLISH_SRT = "english_srt"
     CHINESE_SRT = "chinese_srt"
     SUBTITLE_PLAN = "subtitle_plan"
@@ -55,6 +65,16 @@ CANONICAL_FILENAMES: dict[ArtifactType, str] = {
     ArtifactType.TRANSCRIPTION_MANIFEST: "transcription_manifest.json",
     ArtifactType.TRANSLATION_RESULT: "translation_result.json",
     ArtifactType.TRANSLATION_MANIFEST: "translation_manifest.json",
+    ArtifactType.DOWNLOAD_MANIFEST: "download_manifest.json",
+    ArtifactType.MEDIA_DERIVATION_MANIFEST: "media_derivation_manifest.json",
+    ArtifactType.SOURCE_CHUNKS: "source_chunks.json",
+    ArtifactType.SOURCE_CHUNKING_REPORT: "source_chunking_report.json",
+    ArtifactType.SOURCE_CHUNKING_MANIFEST: "source_chunking_manifest.json",
+    ArtifactType.FINAL_BILINGUAL_DRAFT: "final_bilingual_draft.json",
+    ArtifactType.BILINGUAL_POSTPROCESSING_REPORT: "bilingual_postprocessing_report.json",
+    ArtifactType.BILINGUAL_POSTPROCESSING_MANIFEST: "bilingual_postprocessing_manifest.json",
+    ArtifactType.MEDIA_BOUNDARY: "media_boundary.json",
+    ArtifactType.ACQUISITION_RECEIPT: "acquisition_receipt.json",
     ArtifactType.ENGLISH_SRT: "english.srt",
     ArtifactType.CHINESE_SRT: "chinese.srt",
     ArtifactType.SUBTITLE_PLAN: "subtitle_plan.json",

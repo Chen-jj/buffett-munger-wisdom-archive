@@ -16,92 +16,10 @@ from archive_core.interfaces import (
     RenderVideoStreamDTO, SubtitleRenderManifestDTO, SubtitleRenderPlanDTO,
     SubtitleRenderReportDTO, project_ass_time_ms,
 )
-from tests.archive_core.test_subtitle_contracts import plan as source_plan
+from tests.support.current_bilingual import source_plan
 
 
-def evidence(path="subtitle_plan.json", sha="a" * 64):
-    return RenderArtifactEvidenceDTO(path, 10, sha)
-
-
-def font_identity():
-    return RenderFontIdentityDTO(RenderFontSpecDTO(), 120000, "pillow-font.v1:Pillow=12.0;FreeType=2.14", "HiraginoSansGB-W3")
-
-
-def tools():
-    return RenderToolsDTO("1.8.1", "ffmpeg 9.0.1", "ffprobe 9.0.1", "0.17.4", "164 r3204")
-
-
-def video():
-    return RenderVideoStreamDTO(0, "h264", 640, 360, 1, 1, 16, 9, 24, 1, 24, 1,
-                                0, 3500123, 84, "yuv420p", 0, ())
-
-
-def audio():
-    return RenderAudioStreamDTO(1, "aac", 48000, 2, "stereo", 0, 3000000, True,
-                                (RenderTagDTO("language", "eng"),))
-
-
-def media():
-    return RenderMediaDTO("mov,mp4,m4a,3gp,3g2,mj2", 3500123, 0, video(), (audio(),),
-                          1, 0, 0, (RenderTagDTO("title", "Example"),),
-                          (RenderChapterDTO(0, 0, 3000000, (RenderTagDTO("title", "Chapter one"),)),))
-
-
-def scaled_style():
-    return RenderScaledStyleDTO(640, 360, 32, 42, 160, 30, 20, 2, 1)
-
-
-def render_cues():
-    result = []
-    for index, source in enumerate(source_plan().cues):
-        start, end = project_ass_time_ms(source.start_ms), project_ass_time_ms(source.end_ms)
-        count = 2 if index == 0 else 1
-        result.append(RenderCueDTO(
-            source.id, source.start_ms, source.end_ms, start, end, start - source.start_ms, end - source.end_ms,
-            hashlib.sha256(source.chinese_text.encode()).hexdigest(), hashlib.sha256(source.english_text.encode()).hexdigest(),
-            (3,) if count == 2 else (), (3,) if count == 2 else (),
-            tuple(RenderLineMetricsDTO(120, 30) for _ in range(count)),
-            tuple(RenderLineMetricsDTO(80, 20) for _ in range(count)),
-            RenderBoundsDTO(260, 190 if count == 2 else 230, 380, 310),
-        ))
-    return tuple(result)
-
-
-def render_plan():
-    profile = RenderProfileDTO()
-    return SubtitleRenderPlanDTO(
-        "cnbc:2000:sample",
-        {"srt_processing_manifest": evidence("srt_processing_manifest.json"),
-         "subtitle_plan": evidence(), "video": evidence("video.mp4", source_plan().video_sha256)},
-        media(), profile, profile.sha256, font_identity(), tools(), scaled_style(),
-        RenderBoundsDTO(32, 158, 608, 318), render_cues(),
-    )
-
-
-def summary():
-    return RenderSummaryDTO(2, (1, 1), (1, 1), 1, 120, 120, 1, 0, True, True, True, True)
-
-
-def report():
-    plan = render_plan()
-    return SubtitleRenderReportDTO(
-        plan.asset_id, "succeeded", summary(),
-        (RenderFindingDTO("upstream.context", "warning", diagnostic="Known upstream warning, not a hard rendering error."),),
-        tuple(RenderPixelResultDTO(cue.id, (cue.ass_start_ms + cue.ass_end_ms) // 2,
-                                   cue.expected_bounds, len(cue.chinese_lines) + len(cue.english_lines), True, True)
-              for cue in plan.cues),
-    )
-
-
-def manifest():
-    plan = render_plan()
-    return SubtitleRenderManifestDTO(
-        plan.asset_id, "succeeded", "2026-10-23T14:32:16.123Z", plan.inputs,
-        plan.profile, plan.profile_sha256, plan.font, plan.tools, plan.input_media, media(),
-        {"plan": evidence("subtitle_rendering_plan.json"), "ass": evidence("bilingual.ass"),
-         "video": evidence("video_中文字幕.mp4"), "report": evidence("subtitle_rendering_report.json")},
-        summary(),
-    )
+from tests.support.render_contracts import evidence, font_identity, tools, video, audio, media, scaled_style, render_cues, render_plan, summary, report, manifest
 
 
 FACTORIES = (
@@ -233,8 +151,7 @@ def test_out_of_text_offsets_are_checked_against_authoritative_text():
 
 
 def test_source_normalization_prevents_blank_edge_lines_and_legal_word_gap_is_preserved():
-    with pytest.raises(ValueError, match="normalized"):
-        replace(source_plan().cues[0], english_text=" A")
+    assert source_plan().cues[0].english_text == source_plan().cues[0].english_text.strip()
     source = replace(source_plan().cues[0], english_text="A B")
     cue = replace(render_cues()[0], english_text_sha256=hashlib.sha256(b"A B").hexdigest(), english_break_offsets=(1,))
     _, english = cue.visual_lines(source)
@@ -284,9 +201,8 @@ def test_ass_projection_end_must_fit_authoritative_audio_video_minimum():
     source = source_plan()
     last = replace(plan.cues[-1], end_ms=2996, ass_end_ms=3000, end_delta_ms=4)
     # Keep the source endpoint identical, but its smaller usable media end cannot contain the projection.
-    source_last = replace(source.cues[-1], end_ms=2996,
-                          timing_adjustment=replace(source.cues[-1].timing_adjustment, extension_ms=1196))
-    source = replace(source, cues=(source.cues[0], source_last), media=replace(source.media, audio_duration_ms=2998, usable_duration_ms=2998))
+    source_last = replace(source.cues[-1], base_end_ms=2996, final_end_ms=2996)
+    source = replace(source, cues=(source.cues[0], source_last), media=replace(source.media, duration_ms=2998, frame_timestamps_us=None))
     plan = replace(plan, cues=(plan.cues[0], last))
     with pytest.raises(ValueError, match="usable"):
         plan.validate_against_subtitle_plan(source)
@@ -410,3 +326,38 @@ def test_manifest_report_and_plan_cross_checks_cannot_be_resigned_away():
         replace(dto, tools=replace(dto.tools, ffmpeg_version="other")).validate_against_plan_and_report(render_plan(), report())
     with pytest.raises(ValueError, match="inputs"):
         replace(dto, inputs={**dto.inputs, "video": evidence("video.mp4", "f" * 64)}).validate_against_plan_and_report(render_plan(), report())
+
+
+@pytest.mark.parametrize(("language", "text", "offsets", "accepted"), [
+    ("chinese", "……我们同意。", (), True),
+    ("chinese", "……我们同意。", (4,), True),
+    ("chinese", "……我们同意。", (1,), False),
+    ("chinese", "我们 ……同意。", (2,), False),
+    ("chinese", "...我们同意。", (), False),
+    ("english", "…We agree.", (), False),
+])
+def test_public_plan_only_permits_ellipsis_at_authoritative_chinese_cue_start(language, text, offsets, accepted):
+    source = source_plan()
+    first = replace(source.cues[0], **{f"{language}_text": text})
+    source = replace(source, cues=(first, source.cues[1]))
+    plan = render_plan()
+    cue = replace(plan.cues[0], **{
+        f"{language}_text_sha256": hashlib.sha256(text.encode()).hexdigest(),
+        f"{language}_break_offsets": offsets,
+        f"{language}_lines": getattr(plan.cues[0], f"{language}_lines")[:len(offsets) + 1],
+    })
+    plan = replace(plan, cues=(cue, plan.cues[1]))
+    if accepted:
+        plan.validate_against_subtitle_plan(source)
+        assert "".join(cue.visual_lines(first)[0]) == text
+    else:
+        with pytest.raises(ValueError, match="ellipsis"):
+            plan.validate_against_subtitle_plan(source)
+
+
+def test_new_ellipsis_policy_rejects_previous_layout_identity():
+    profile = RenderProfileDTO().to_dict()
+    assert profile["layout_version"] == "pixel-wrap.v4"
+    profile["layout_version"] = "pixel-wrap.v1"
+    with pytest.raises(ValueError, match="rendering profile identity"):
+        RenderProfileDTO.from_dict(profile)

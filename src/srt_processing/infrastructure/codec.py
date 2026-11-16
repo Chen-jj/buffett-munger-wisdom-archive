@@ -7,9 +7,8 @@ import warnings
 
 import pysubs2
 
-from archive_core.interfaces import SubtitleCodecDTO, SubtitlePlanDTO
+from archive_core.interfaces.bilingual import FinalBilingualDraftDTO
 from srt_processing.application.ports import SrtCue, SubtitleLanguage
-from srt_processing.domain.rules import wrap_english_text
 
 
 _TIMESTAMP_LINE_RE = re.compile(
@@ -28,22 +27,19 @@ class Pysubs2SrtCodec:
             raise SubtitleCodecError("subtitle codec requires pysubs2 1.8.1")
 
     @property
-    def identity(self) -> SubtitleCodecDTO:
-        return SubtitleCodecDTO(serialization_version="word-wrap-english-2x42.v2")
+    def identity(self) -> dict:
+        return {"engine": "pysubs2-1.8.1", "serialization": "logical-lines.v1"}
 
-    def encode(self, plan: SubtitlePlanDTO, language: SubtitleLanguage) -> bytes:
-        if not isinstance(plan, SubtitlePlanDTO):
-            raise SubtitleCodecError("plan must be a SubtitlePlanDTO")
+    def encode(self, plan: FinalBilingualDraftDTO, language: SubtitleLanguage) -> bytes:
+        if not isinstance(plan, FinalBilingualDraftDTO):
+            raise SubtitleCodecError("plan must be a FinalBilingualDraftDTO")
         if language not in ("english", "chinese", "bilingual"):
             raise SubtitleCodecError("unsupported subtitle projection language")
 
         expected: list[SrtCue] = []
         subtitles = pysubs2.SSAFile()
         for position, cue in enumerate(plan.cues, 1):
-            try:
-                english = wrap_english_text(cue.english_text)
-            except ValueError as error:
-                raise SubtitleCodecError("English text cannot fit the fixed two-line projection") from error
+            english = cue.english_text
             if language == "english":
                 text = english
             elif language == "chinese":

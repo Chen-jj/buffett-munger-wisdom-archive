@@ -1,12 +1,12 @@
 requests>=2.28.0
 beautifulsoup4>=4.11.0
 pysubs2==1.8.1
-jieba==0.42.1
 pyyaml>=6.0
 openai==3.31.0
 yt-dlp>=2024.0.0
 Pillow>=10.0.0
 regex==2026.7.19
+jieba==0.42.1
 fonttools==4.63.0
 
 # ASR/alignment stack for the transcription pipeline.
@@ -15,3 +15,6 @@ aiohttp==3.13.5
 transformers==4.57.6
 faster-whisper==1.2.1
 whisperx==3.8.5
+
+# Local English constituency analysis; models are prepared explicitly.
+stanza==1.11.0

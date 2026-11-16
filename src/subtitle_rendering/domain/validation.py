@@ -1,13 +1,13 @@
 """Pure verification of the public plan against the same frozen layout rules."""
 
-from archive_core.interfaces import SubtitlePlanDTO, SubtitleRenderPlanDTO
+from archive_core.interfaces import FinalBilingualDraftDTO, SubtitleRenderPlanDTO
 
 from .layout import build_render_plan
 from .models import FontMeasurer, GraphemeSegmenter, LayoutError
 
 
 def validate_render_plan(
-    plan: SubtitleRenderPlanDTO, source_plan: SubtitlePlanDTO,
+    plan: SubtitleRenderPlanDTO, source_plan: FinalBilingualDraftDTO,
     measurer: FontMeasurer, segmenter: GraphemeSegmenter,
 ) -> None:
     """Recompute measurements, offsets and deterministic choices; never trust saved QA."""

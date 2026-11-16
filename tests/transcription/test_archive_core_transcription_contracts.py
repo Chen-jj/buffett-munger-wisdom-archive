@@ -293,7 +293,7 @@ def test_versioned_transcription_contracts_reject_unknown_versions() -> None:
         )
     with pytest.raises(ValueError, match="unsupported source alignment schema"):
         SourceAlignmentDTO.from_dict(
-            {**alignment_data, "schema_version": "transcription.source-alignment.v2"}
+            {**alignment_data, "schema_version": "transcription.source-alignment.v1"}
         )
 
 
@@ -317,7 +317,7 @@ def test_source_alignment_round_trips_with_null_and_string_speakers() -> None:
     data = alignment.to_dict()
     restored = SourceAlignmentDTO.from_dict(data)
 
-    assert data["schema_version"] == "transcription.source-alignment.v1"
+    assert data["schema_version"] == "transcription.source-alignment.v2"
     assert data["audio_duration_ms"] == 2_000
     assert data["sentences"][0]["speaker_label"] is None
     assert data["sentences"][1]["speaker_label"] == "CHARLIE MUNGER"
@@ -351,7 +351,7 @@ def test_source_alignment_rejects_missing_sections() -> None:
     data = _valid_alignment().to_dict()
     del data["sections"]
 
-    with pytest.raises(ValueError, match="sections must be an array"):
+    with pytest.raises(ValueError, match="missing or unknown fields"):
         SourceAlignmentDTO.from_dict(data)
 
 

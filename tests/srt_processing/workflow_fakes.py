@@ -1,155 +1,113 @@
-"""In-memory ports for workflow tests; no media tools or subtitle library."""
-
-from __future__ import annotations
-
+"""Isolated final-draft export fakes; no external libraries or filesystem."""
+from dataclasses import replace
+import hashlib
 import json
+from pathlib import Path
 
-from archive_core.interfaces import SubtitleCodecDTO, character_boundaries
-from srt_processing.application import SrtCue, SrtProcessingWorkflow
-from srt_processing.domain import plan_subtitles
-from srt_processing.domain.rules import PROFILE, wrap_english_text
-
-from tests.srt_processing.test_inputs import InputCase, MemoryStore
+from srt_processing.application.ports import SrtCue
+from srt_processing.application.workflow import SrtProcessingWorkflow
+from srt_processing.interfaces.workflow import SrtProcessingCommand, SrtProcessingCommandHandler
+from tests.support.current_bilingual import alignment, populate_current_chain
 
 
-class RecordingStore(MemoryStore):
-    def __init__(self, files) -> None:
-        super().__init__()
-        self.files = dict(files)
-        self.operations = []
-        self.stage_count = 0
-        self.publish_count = 0
-        self.fail_stage_at = None
-        self.fail_publish_at = None
-        self.corrupt_stage_at = None
-        self.fail_failed_report = False
-        self.staged_read_count = 0
-        self.fail_staged_read_at = None
+class MemoryStore:
+    def __init__(self):
+        self.files, self.operations = {}, []
+        self.fail = None
+
+    def exists(self, path):
+        return path in self.files
 
     def read_bytes(self, path):
-        if ".staged." in path:
-            self.staged_read_count += 1
-            if self.staged_read_count == self.fail_staged_read_at:
-                raise OSError("staged read failed /secret/path")
-        return super().read_bytes(path)
+        self.operation("read", path)
+        return self.files[path]
 
-    def stage_bytes(self, target_path, data):
-        self.stage_count += 1
-        self.operations.append(("stage", target_path))
-        if self.stage_count == self.fail_stage_at:
-            raise OSError("stage failed /secret/path")
-        if self.fail_failed_report and target_path.endswith("srt_processing_report.json"):
-            if json.loads(data)["status"] == "failed":
-                raise OSError("failed report could not be written /secret/path")
-        staged = f"{target_path}.staged.{self.stage_count}"
-        self.files[staged] = data + b" " if self.stage_count == self.corrupt_stage_at else data
+    def size(self, path):
+        return len(self.files[path])
+
+    def sha256(self, path):
+        return hashlib.sha256(self.files[path]).hexdigest()
+
+    def operation(self, action, path):
+        self.operations.append((action, path))
+        if self.fail and self.fail(action, path):
+            raise OSError("injected storage fault")
+
+    def stage_bytes(self, path, data):
+        self.operation("stage", path)
+        staged = path + ".stage"
+        self.files[staged] = data
         return staged
 
-    def publish(self, staged_path, target_path, *, overwrite):
-        self.publish_count += 1
-        self.operations.append(("publish", target_path))
-        if self.publish_count == self.fail_publish_at:
-            raise OSError("publish failed /secret/path")
-        if target_path in self.files and not overwrite:
-            raise FileExistsError(target_path)
-        self.files[target_path] = self.files.pop(staged_path)
+    def publish(self, staged, path, *, overwrite):
+        self.operation("publish", path)
+        if not overwrite and path in self.files:
+            raise FileExistsError(path)
+        self.files[path] = self.files.pop(staged)
 
 
-class FakeCodec:
-    def __init__(self) -> None:
-        self.identity = SubtitleCodecDTO(serialization_version="word-wrap-english-2x42.v2")
-        self.encode_calls = []
-        self.decode_calls = []
-        self.failure = None
-        self.bad_decode = None
+class Codec:
+    identity = {"engine": "fake", "serialization": "fake.v1"}
 
-    def encode(self, plan, language):
-        self.encode_calls.append(language)
-        if self.failure is not None:
-            raise self.failure
-        events = []
-        for index, cue in enumerate(plan.cues, 1):
-            english = wrap_english_text(cue.english_text)
-            if language == "english":
-                text = english
-            elif language == "chinese":
-                text = cue.chinese_text
-            else:
-                text = cue.chinese_text + "\n" + english
-            events.append([index, cue.start_ms, cue.end_ms, text])
-        return json.dumps(events, ensure_ascii=False).encode("utf-8")
-
-    def decode(self, data):
-        self.decode_calls.append(data)
-        events = tuple(SrtCue(*fields) for fields in json.loads(data))
-        return self.bad_decode(events) if self.bad_decode is not None else events
-
-
-class FixedClock:
     def __init__(self):
-        self.calls = 0
+        self.calls = []
+        self.mutate = lambda value: value
+
+    def encode(self, draft, language):
+        self.calls.append(language)
+        def row(cue):
+            return [int(cue.id[1:]), cue.start_ms, cue.end_ms, cue.english_text if language == "english" else cue.chinese_text
+                    if language == "chinese" else cue.chinese_text + "\n" + cue.english_text]
+        return json.dumps(self.mutate([row(cue) for cue in draft.cues]), ensure_ascii=False).encode()
+
+    def decode(self, payload):
+        return tuple(SrtCue(*row) for row in json.loads(payload))
+
+
+class Clock:
+    calls = 0
 
     def now_utc(self):
         self.calls += 1
-        return "2026-10-21T12:00:00Z"
+        return "2026-11-06T00:00:00Z"
 
 
-class FakeSegmenter:
+class WorkflowCase:
+    root = "/archive"
+    workspace = "/archive/cnbc_2000_sample"
+    asset_id = "cnbc:2000:sample"
+    output_names = ("english.srt", "chinese.srt", "bilingual.srt", "srt_processing_report.json", "srt_processing_manifest.json")
+
     def __init__(self):
-        self.identity = {key: PROFILE.parameters[key] for key in (
-            "chinese_segmentation_engine", "chinese_dictionary_sha256", "chinese_segmentation_mode",
-        )}
-        self.calls = []
+        self.store, self.codec, self.clock = MemoryStore(), Codec(), Clock()
+        self.put("video.mp4", b"mock media")
+        self.put("source_alignment.json", alignment().to_dict())
+        source_path = self.path("source_alignment.json")
+        self.put("transcription_manifest.json", {"schema_version": "transcription.audio-vad-asr-cache.v1",
+            "asset": {"source": "cnbc", "group": "2000", "item": "sample"}, "workflow": {"status": "succeeded"},
+            "records": {"source_alignment": {"status": "succeeded", "path": source_path, "size_bytes": self.store.size(source_path),
+                           "sha256": self.store.sha256(source_path)}, "audio": {"provenance": {"video_sha256": self.store.sha256(self.path("video.mp4"))}}}})
+        self.draft = populate_current_chain(self, export=False)
+        self.command = SrtProcessingCommand(self.asset_id, self.path("bilingual_postprocessing_manifest.json"))
+        self.workflow = SrtProcessingWorkflow(artifacts=self.store, codec=self.codec, clock=self.clock, output_root=self.root)
+        self.handler = SrtProcessingCommandHandler(self.workflow)
+        self.upstream = dict(self.store.files)
+        self.store.operations.clear()
 
-    def spans(self, text):
-        self.calls.append(text)
-        boundaries = character_boundaries(text)
-        return tuple(zip(boundaries, boundaries[1:]))
+    def path(self, name):
+        return str(Path(self.workspace) / name)
 
+    def put(self, name, value):
+        self.store.files[self.path(name)] = value if isinstance(value, bytes) else (json.dumps(value, ensure_ascii=False, sort_keys=True) + "\n").encode()
 
-class CountingPlanner:
-    def __init__(self):
-        self.calls = 0
-        self.failure = None
+    def read(self, name):
+        return json.loads(self.store.files[self.path(name)])
 
-    def __call__(self, *args, **kwargs):
-        self.calls += 1
-        if self.failure is not None:
-            raise self.failure
-        return plan_subtitles(*args, **kwargs)
+    def run(self, **kwargs):
+        return self.handler.handle(replace(self.command, **kwargs))
 
-
-class WorkflowCase(InputCase):
-    def __init__(self):
-        super().__init__()
-        self.store = RecordingStore(self.store.files)
-        self.codec = FakeCodec()
-        self.clock = FixedClock()
-        self.segmenter = FakeSegmenter()
-        self.planner = CountingPlanner()
-        self.workflow = SrtProcessingWorkflow(
-            artifacts=self.store, probe=self.probe, codec=self.codec, clock=self.clock,
-            segmenter=self.segmenter, output_root=self.root, planner=self.planner,
-        )
-        self.output_paths = {name: str(self.workspace / filename) for name, filename in {
-            "subtitle_plan": "subtitle_plan.json", "english_srt": "english.srt",
-            "chinese_srt": "chinese.srt", "bilingual_srt": "bilingual.srt",
-            "report": "srt_processing_report.json", "manifest": "srt_processing_manifest.json",
-        }.items()}
-
-    def run(self, **overrides):
-        arguments = dict(asset_id=self.asset.value,
-                         transcription_manifest_path=self.paths["transcription_manifest"],
-                         translation_manifest_path=self.paths["translation_manifest"],
-                         overwrite=False)
-        arguments.update(overrides)
-        return self.workflow.execute(**arguments)
-
-    def formal_outputs(self):
-        return {key: self.store.files[path] for key, path in self.output_paths.items() if path in self.store.files}
-
-    def read_output(self, name):
-        return json.loads(self.store.files[self.output_paths[name]])
-
-    def write_output(self, name, data):
-        self.store.files[self.output_paths[name]] = json.dumps(data, ensure_ascii=False).encode("utf-8")
+    def resign_output(self, key, name):
+        manifest = self.read("srt_processing_manifest.json")
+        path = self.path(name)
+        manifest["outputs"][key] = {"path": path, "size_bytes": self.store.size(path), "sha256": self.store.sha256(path)}
+        self.put("srt_processing_manifest.json", manifest)

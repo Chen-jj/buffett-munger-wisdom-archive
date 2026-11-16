@@ -5,19 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Mapping, Protocol
 
-from archive_core.interfaces import SubtitleCodecDTO, SubtitlePlanDTO
+from archive_core.interfaces.bilingual import FinalBilingualDraftDTO
 
 
 SubtitleLanguage = Literal["english", "chinese", "bilingual"]
-
-
-class ChineseWordSegmenter(Protocol):
-    @property
-    def identity(self) -> Mapping[str, str]: ...
-
-    def spans(self, text: str) -> tuple[tuple[int, int], ...]:
-        """Return an exact ordered code-point partition without rewriting text."""
-        ...
 
 
 class SubtitleArtifactStore(Protocol):
@@ -78,9 +69,9 @@ class SrtCue:
 
 class SrtCodec(Protocol):
     @property
-    def identity(self) -> SubtitleCodecDTO: ...
+    def identity(self) -> Mapping[str, str]: ...
 
-    def encode(self, plan: SubtitlePlanDTO, language: SubtitleLanguage) -> bytes: ...
+    def encode(self, plan: FinalBilingualDraftDTO, language: SubtitleLanguage) -> bytes: ...
 
     def decode(self, data: bytes) -> tuple[SrtCue, ...]: ...
 

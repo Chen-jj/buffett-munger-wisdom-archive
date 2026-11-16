@@ -29,6 +29,7 @@ def _require_non_blank(value: object, field_name: str) -> str:
 @dataclass(frozen=True)
 class CheckpointCacheKeyInput:
     source_alignment_sha256: str
+    source_chunks_sha256: str
     request_sha256: str
     source_language: str
     target_language: str
@@ -40,6 +41,7 @@ class CheckpointCacheKeyInput:
 
     def __post_init__(self) -> None:
         _require_sha256(self.source_alignment_sha256, "source_alignment_sha256")
+        _require_sha256(self.source_chunks_sha256, "source_chunks_sha256")
         _require_sha256(self.request_sha256, "request_sha256")
         _require_non_blank(self.source_language, "source_language")
         _require_non_blank(self.target_language, "target_language")
@@ -56,6 +58,7 @@ class CheckpointCacheKeyInput:
         cls,
         *,
         source_alignment_sha256: str,
+        source_chunks_sha256: str,
         request: TranslationRequest,
         prompt_version: str,
         prompt_sha256: str,
@@ -67,6 +70,7 @@ class CheckpointCacheKeyInput:
             raise ValueError("request must be a TranslationRequest")
         return cls(
             source_alignment_sha256=source_alignment_sha256,
+            source_chunks_sha256=source_chunks_sha256,
             request_sha256=request.checksum(),
             source_language=request.source_language,
             target_language=request.target_language,
@@ -81,6 +85,7 @@ class CheckpointCacheKeyInput:
         identity = self.provider_identity.to_dict()
         return {
             "source_alignment_sha256": self.source_alignment_sha256,
+            "source_chunks_sha256": self.source_chunks_sha256,
             "request_sha256": self.request_sha256,
             "source_language": self.source_language,
             "target_language": self.target_language,

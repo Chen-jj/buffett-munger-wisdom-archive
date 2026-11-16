@@ -9,9 +9,9 @@ from archive_core.interfaces import RenderPixelResultDTO, RenderProfileDTO
 from subtitle_rendering.application.workflow import SubtitleRenderingWorkflow
 from subtitle_rendering.domain.layout import UNICODE_CLASSIFICATION_VERSION
 from subtitle_rendering.interfaces import SubtitleRenderingCommand, SubtitleRenderingCommandHandler
-from tests.archive_core.test_rendering_contracts import font_identity, media, tools
-from tests.archive_core.test_subtitle_contracts import alignment, manifest, plan, report, translation
-from tests.subtitle_rendering.test_layout import Measurer, Segments
+from tests.support.render_contracts import font_identity, media, tools
+from tests.support.current_bilingual import acoustic_alignment_rows, alignment, populate_current_chain
+from tests.support.render_layout import Measurer, Segments
 
 
 def encoded(data):
@@ -180,16 +180,6 @@ class WorkflowCase:
         self.put("audio.wav", b"canonical audio")
         self.put("source_alignment.json", alignment().to_dict())
         alignment_sha = self.evidence("source_alignment.json")["sha256"]
-        translated = replace(translation(), source_alignment_sha256=alignment_sha)
-        self.put("translation_result.json", translated.to_dict())
-        self.put("translation_manifest.json", {
-            "schema_version": "translation.manifest.v1", "asset_id": self.asset_id, "status": "succeeded", "completed_at": "2026-10-24T01:00:00Z",
-            "input": {"path": "source_alignment.json", "sha256": alignment_sha},
-            "translation": {"source_language": "en", "target_language": "zh-Hans", "prompt_version": "prompt.v1", "prompt_sha256": "a" * 64,
-                            "glossary_path": None, "glossary_sha256": None, "provider": "fake", "model": "fake", "generation_parameters": {}},
-            "output": self.evidence("translation_result.json"),
-            "execution": {"request_count": 1, "checkpoint_reuse_count": 0, "attempt_count": 1, "input_tokens": None, "output_tokens": None},
-        })
         chapter_sha = None
         if chapters:
             from archive_core.interfaces import StructuredTranscriptDTO
@@ -207,7 +197,7 @@ class WorkflowCase:
                            "language": "en", "task": "transcribe", "profile": "production", "provider": providers, "config": config, "segments": []}
             elif name == "aligned_asr":
                 payload = {**common, "schema_version": "transcription.aligned-asr.v1", "audio_sha256": audio_sha, "raw_asr_sha256": records["raw_asr"]["sha256"],
-                           "language": "en", "provider": providers, "config": config, "words": []}
+                           "language": "en", "provider": providers, "config": config, "words": acoustic_alignment_rows(alignment())}
             else:
                 payload = {**common, "schema_version": "transcription.transcript-fusion.v1", "aligned_asr_sha256": records["aligned_asr"]["sha256"],
                            "chapters_sha256": chapter_sha, "mode": "official", "normalization": {}, "matching": {}, "official_aligner": {},
@@ -237,19 +227,13 @@ class WorkflowCase:
         self.put("transcription_manifest.json", {"schema_version": "transcription.audio-vad-asr-cache.v1", "asset": {"source": "cnbc", "group": "2000", "item": "sample"},
             "records": records, "workflow": {"status": "succeeded", "stage_order": stages, "completed_stages": stages, "cache_hits": [],
             "inputs": {"chapters_sha256": chapter_sha, "download_manifest_path": download_path}, "qa_policy": {"version": "transcription-qa.v1", "require_non_empty_alignment": True, "max_interpolated_word_ratio": 0.1}, "summary": counts}})
-        source = replace(plan(), source_alignment_sha256=alignment_sha, translation_result_sha256=self.evidence("translation_result.json")["sha256"], video_sha256=self.evidence("video.mp4")["sha256"])
-        self.put("subtitle_plan.json", source.to_dict())
-        self.put("srt_processing_report.json", report().to_dict())
-        for name in ("english.srt", "chinese.srt", "bilingual.srt"):
-            self.put(name, b"SRT bytes are evidence only; never authoritative rendering text\n")
-        self.put("srt_processing_manifest.json", manifest().to_dict())
-        self.resign_srt()
+        populate_current_chain(self)
 
     def resign_srt(self):
         data = self.read("srt_processing_manifest.json")
         for items in (data["inputs"], data["outputs"]):
             for key, evidence in items.items():
-                items[key] = self.evidence(evidence["path"])
+                items[key] = {**self.evidence(Path(evidence["path"]).name), "path": evidence["path"]}
         self.put("srt_processing_manifest.json", data)
 
     def resign_transcription(self, name):

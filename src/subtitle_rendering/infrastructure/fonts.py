@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+from functools import lru_cache
 import hashlib
 from pathlib import Path
 import re
@@ -13,6 +14,7 @@ from fontTools.ttLib import TTCollection, TTFont, TTLibError
 import PIL
 from PIL import ImageFont, features
 import regex
+import jieba
 
 from archive_core.interfaces import RenderFontIdentityDTO, RenderFontSpecDTO, RenderLineMetricsDTO
 from subtitle_rendering.domain.layout import UNICODE_CLASSIFICATION_VERSION
@@ -22,13 +24,40 @@ class FontValidationError(ValueError):
     category = "font_invalid"
 
 
+JIEBA_VERSION = "0.42.1"
+JIEBA_DICTIONARY_SHA256 = "7197c3211ddd98962b036cdf40324d1ea2bfaa12bd028e68faa70111a88e12a8"
+
+
+@lru_cache(maxsize=1)
+def _chinese_tokenizer():
+    path = Path(jieba.__file__).with_name("dict.txt")
+    try:
+        with path.open("rb") as stream:
+            data = stream.read()
+    except OSError as error:
+        raise FontValidationError("The pinned Chinese lexical dictionary is unavailable.") from error
+    if jieba.__version__ != JIEBA_VERSION or hashlib.sha256(data).hexdigest() != JIEBA_DICTIONARY_SHA256:
+        raise FontValidationError("The pinned Chinese lexical dictionary or library differs.")
+    tokenizer = jieba.Tokenizer()
+    # Build from verified bytes rather than jieba's mutable on-disk cache/user dictionary.
+    tokenizer.FREQ, tokenizer.total = tokenizer.gen_pfdict(BytesIO(data))
+    tokenizer.initialized = True
+    return tokenizer
+
+
 class RegexGraphemeSegmenter:
-    version = f"unicode-grapheme.regex-{regex.__version__}.v1"
+    version = (f"unicode-grapheme.regex-{regex.__version__}.v1+chinese-lexical.jieba-{JIEBA_VERSION}"
+               f"-HMMFalse-{JIEBA_DICTIONARY_SHA256}.v1")
 
     def boundaries(self, text: str) -> tuple[int, ...]:
         if not isinstance(text, str):
             raise ValueError("grapheme segmentation requires text")
         return (0, *(match.end() for match in regex.finditer(r"\X", text)))
+
+    def lexical_boundaries(self, text: str) -> tuple[int, ...]:
+        if not isinstance(text, str):
+            raise ValueError("Chinese lexical segmentation requires text")
+        return tuple(sorted({0, len(text), *(end for _, _, end in _chinese_tokenizer().tokenize(text, HMM=False))}))
 
 
 def _names(face: TTFont, name_id: int) -> frozenset[str]:

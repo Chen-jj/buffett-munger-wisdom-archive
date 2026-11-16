@@ -11,24 +11,26 @@ from typing import Mapping
 from archive_core.interfaces import (
     RenderArtifactEvidenceDTO, RenderBoundsDTO, RenderCueDTO, RenderFontIdentityDTO,
     RenderLineMetricsDTO, RenderMediaDTO, RenderProfileDTO, RenderScaledStyleDTO,
-    RenderToolsDTO, SubtitleCueDTO, SubtitlePlanDTO, SubtitleRenderPlanDTO,
+    RenderToolsDTO, FinalCueDTO, FinalBilingualDraftDTO, SubtitleRenderPlanDTO,
     project_ass_time_ms,
 )
+
+from archive_core.interfaces.rendering import has_forbidden_leading_ellipsis
 
 from .models import FontMeasurer, GraphemeSegmenter, LayoutError, VisualLayout
 
 
-# These tables are frozen semantic content of profile layout_version=pixel-wrap.v1.
+# These tables are frozen semantic content of the rendering layout profile.
 # Runtime Unicode name/category/decimal classification is separately identity-bound.
-NUMERIC_UNIT_RULES_VERSION = "numeric-units.v1"
+NUMERIC_UNIT_RULES_VERSION = "numeric-units.v2"
 UNICODE_CLASSIFICATION_VERSION = f"unicode-classification-{unicodedata.unidata_version}"
 NUMERIC_UNITS = (
     "人民币", "美元", "美分", "欧元", "英镑", "港元", "日元", "元", "角", "分",
     "平方公里", "平方米", "平方厘米", "平方毫米", "立方米", "立方厘米", "公里", "千米",
-    "厘米", "毫米", "米", "英里", "英尺", "英寸", "千克", "公斤", "毫克", "克", "吨",
+    "厘米", "毫米", "米", "英里", "英尺", "英寸", "千克", "公斤", "毫克", "克", "吨", "盎司",
     "毫升", "升", "摄氏度", "华氏度", "度", "年", "个月", "月", "星期", "周", "天",
     "小时", "分钟", "毫秒", "秒", "日", "岁", "倍", "基点", "个百分点", "百分点", "个", "人", "家",
-    "次", "股", "手", "台", "件", "本", "项", "笔", "点", "℃", "℉", "°", "%", "％", "‰", "‱",
+    "次", "股", "手", "台", "件", "本", "项", "笔", "份", "点", "℃", "℉", "°", "%", "％", "‰", "‱",
 )
 _STRONG_PUNCTUATION = frozenset("。！？!?；;.")
 _WEAK_PUNCTUATION = frozenset("，、,:：")
@@ -102,6 +104,8 @@ def protected_spans(text: str) -> tuple[tuple[int, int], ...]:
         latin_unit = _LATIN_UNIT_RE.match(text, end)
         if latin_unit is not None:
             end = latin_unit.end()
+        if (unit is not None or latin_unit is not None) and text[end:end + 1] == "装":
+            end += 1
         spans.append((start, end))
     return tuple(sorted(set(spans)))
 
@@ -130,13 +134,16 @@ def candidate_break_offsets(text: str, language: str, segmenter: GraphemeSegment
     raise ValueError("visual layout language must be chinese or english")
 
 
-def _punctuation_problem_count(lines: tuple[str, ...]) -> int:
+def _punctuation_problem_count(lines: tuple[str, ...], language: str) -> int:
     count = 0
-    for line in lines:
+    for index, line in enumerate(lines):
         stripped = line.strip()
         if not stripped:
             return len(lines) + 1
-        count += stripped[0] in _CLOSING_PUNCTUATION or unicodedata.category(stripped[0]) in ("Pe", "Pf")
+        if stripped[0] == "…":
+            count += has_forbidden_leading_ellipsis(line, language, index)
+        else:
+            count += stripped[0] in _CLOSING_PUNCTUATION or unicodedata.category(stripped[0]) in ("Pe", "Pf")
         count += stripped[-1] in _OPENING_PUNCTUATION or unicodedata.category(stripped[-1]) in ("Ps", "Pi")
     return count
 
@@ -161,11 +168,18 @@ def choose_visual_layout(
         if type(value) is not int or value < minimum:
             raise ValueError(f"{name} must be an integer >= {minimum}")
     paths = ((), *((offset,) for offset in candidate_break_offsets(text, language, segmenter)))
+    lexical = ()
+    if language == "chinese":
+        lexical = segmenter.lexical_boundaries(text)
+        if (not isinstance(lexical, tuple) or not lexical or lexical[0] != 0 or lexical[-1] != len(text)
+                or any(type(value) is not int for value in lexical)
+                or any(left >= right for left, right in zip(lexical, lexical[1:]))):
+            raise ValueError("Chinese lexical boundaries must strictly cover 0..len(text)")
     candidates = []
     for offsets in paths:
         boundaries = (0, *offsets, len(text))
         lines = tuple(text[start:end] for start, end in zip(boundaries, boundaries[1:]))
-        problems = _punctuation_problem_count(lines)
+        problems = _punctuation_problem_count(lines, language)
         if problems:
             continue
         metrics = tuple(measurer.measure(line, font_size, outline_width, shadow) for line in lines)
@@ -176,7 +190,8 @@ def choose_visual_layout(
             continue
         widths = tuple(metric.width for metric in metrics)
         mean = sum(widths) / len(widths)
-        score = (overflow_count, _boundary_penalty(text, offsets), problems, max(widths),
+        lexical_penalty = sum(offset not in lexical for offset in offsets) if language == "chinese" else 0
+        score = (overflow_count, _boundary_penalty(text, offsets), lexical_penalty, problems, max(widths),
                  sum((width - mean) ** 2 for width in widths), offsets)
         candidates.append((score, VisualLayout(offsets, metrics)))
     if not candidates:
@@ -185,10 +200,10 @@ def choose_visual_layout(
 
 
 def layout_cue(
-    source_cue: SubtitleCueDTO, scaled_style: RenderScaledStyleDTO, safe_area: RenderBoundsDTO,
+    source_cue: FinalCueDTO, scaled_style: RenderScaledStyleDTO, safe_area: RenderBoundsDTO,
     measurer: FontMeasurer, segmenter: GraphemeSegmenter,
 ) -> RenderCueDTO:
-    if not isinstance(source_cue, SubtitleCueDTO) or not isinstance(scaled_style, RenderScaledStyleDTO) or not isinstance(safe_area, RenderBoundsDTO):
+    if not isinstance(source_cue, FinalCueDTO) or not isinstance(scaled_style, RenderScaledStyleDTO) or not isinstance(safe_area, RenderBoundsDTO):
         raise ValueError("layout_cue requires typed source cue, scaled style and safe area")
     width = safe_area.right - safe_area.left
     chinese = choose_visual_layout(source_cue.chinese_text, "chinese", scaled_style.chinese_font_size,
@@ -220,10 +235,10 @@ def layout_cue(
 
 def build_render_plan(
     *, asset_id: str, inputs: Mapping[str, RenderArtifactEvidenceDTO], input_media: RenderMediaDTO,
-    source_plan: SubtitlePlanDTO, profile: RenderProfileDTO, font: RenderFontIdentityDTO,
+    source_plan: FinalBilingualDraftDTO, profile: RenderProfileDTO, font: RenderFontIdentityDTO,
     tools: RenderToolsDTO, measurer: FontMeasurer, segmenter: GraphemeSegmenter,
 ) -> SubtitleRenderPlanDTO:
-    if not isinstance(source_plan, SubtitlePlanDTO) or not isinstance(input_media, RenderMediaDTO) or not isinstance(font, RenderFontIdentityDTO):
+    if not isinstance(source_plan, FinalBilingualDraftDTO) or not isinstance(input_media, RenderMediaDTO) or not isinstance(font, RenderFontIdentityDTO):
         raise ValueError("render plan requires typed source, media and font identity")
     measurement_identities = font.measurement_adapter_version.split(";")
     if not isinstance(segmenter.version, str) or not segmenter.version or segmenter.version not in measurement_identities:

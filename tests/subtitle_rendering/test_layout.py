@@ -18,27 +18,11 @@ from subtitle_rendering.domain.layout import (
 )
 from subtitle_rendering.domain.models import LayoutError, profile_from_config
 from subtitle_rendering.domain.validation import validate_render_plan
-from tests.archive_core.test_rendering_contracts import render_plan as contract_plan
-from tests.archive_core.test_subtitle_contracts import plan as source_plan
+from tests.support.render_contracts import render_plan as contract_plan
+from tests.support.current_bilingual import source_plan
 
 
-class Segments:
-    version = "unicode-grapheme.regex-2026.7.19.v1"
-
-    def boundaries(self, text):
-        return (0, *(match.end() for match in regex.finditer(r"\X", text)))
-
-
-class Measurer:
-    def __init__(self, unit=10, line_height=None):
-        self.unit = unit
-        self.line_height = line_height
-        self.calls = []
-
-    def measure(self, text, font_size, outline_width, shadow):
-        self.calls.append((text, font_size, outline_width, shadow))
-        width = len(text) * self.unit + 2 * outline_width + shadow
-        return RenderLineMetricsDTO(width, self.line_height or font_size + 2 * outline_width + shadow)
+from tests.support.render_layout import Measurer, Segments
 
 
 def choose(text, language="chinese", width=70, measurer=None):
@@ -113,6 +97,7 @@ def test_latin_words_apostrophes_hyphens_and_accents_are_protected(token):
     "12,345.67", "9:30", "2026-10-24", "1/2", "$1,234.50", "￥１２３．４５", "−3.5%",
     "3.5亿美元", "20个百分点", "10km/h", "10kg/m²", "36°C", "3小时", "5千克", "2平方米",
     "2026年", "24日", "10bps", "15μm", "3.2‰", "5万", "1,234公斤", "-$1.50", "+￥123", "1.2e-3kg",
+    "8盎司", "8000万份", "8盎司装", "500毫升装", "500ml装",
 ))
 def test_numeric_separators_and_tight_recognized_units_are_not_split(token):
     text = "甲" + token + "乙"
@@ -121,9 +106,26 @@ def test_numeric_separators_and_tight_recognized_units_are_not_split(token):
 
 
 def test_numeric_units_table_has_frozen_version_and_common_multi_character_units():
-    assert NUMERIC_UNIT_RULES_VERSION == "numeric-units.v1"
-    assert {"美元", "人民币", "平方公里", "平方米", "千克", "毫秒", "百分点", "摄氏度"} <= set(NUMERIC_UNITS)
-    assert RenderProfileDTO().layout_version == "pixel-wrap.v1"
+    assert NUMERIC_UNIT_RULES_VERSION == "numeric-units.v2"
+    assert {"美元", "人民币", "平方公里", "平方米", "千克", "毫秒", "百分点", "摄氏度", "盎司", "份"} <= set(NUMERIC_UNITS)
+    assert RenderProfileDTO().layout_version == "pixel-wrap.v4"
+
+
+def test_adjacent_serving_count_and_ounce_amount_each_keep_their_tight_unit():
+    text = "8000万份8盎司装的软饮料"
+    offsets = candidate_break_offsets(text, "chinese", Segments())
+    assert 6 in offsets  # Between the complete quantity and serving-size tokens.
+    assert not any(0 < offset < 6 or 6 < offset < 9 for offset in offsets)
+
+
+def test_packaging_suffix_only_attaches_to_a_recognized_quantity_unit():
+    text = "500毫升装的饮料"
+    offsets = candidate_break_offsets(text, "chinese", Segments())
+    assert len("500毫升装") in offsets
+    assert len("500毫升装的") in offsets
+    assert not any(0 < offset < len("500毫升装") for offset in offsets)
+    assert 1 in candidate_break_offsets("3装饰物", "chinese", Segments())
+    assert 1 in candidate_break_offsets("3盒装的饮料", "chinese", Segments())
 
 
 @pytest.mark.parametrize("unit", NUMERIC_UNITS)
@@ -177,7 +179,7 @@ def test_chosen_lines_never_start_with_closing_or_end_with_opening_punctuation(t
     result = choose(text, width=45)
     boundaries = (0, *result.break_offsets, len(text))
     pieces = tuple(text[start:end] for start, end in zip(boundaries, boundaries[1:]))
-    assert layout._punctuation_problem_count(pieces) == 0
+    assert layout._punctuation_problem_count(pieces, "chinese") == 0
     assert "".join(pieces) == text
 
 
@@ -210,6 +212,22 @@ def test_one_or_two_per_language_produces_two_to_four_bilingual_lines(chinese, e
 def test_cannot_fit_two_chinese_lines_without_changing_text_or_font():
     with pytest.raises(LayoutError, match="two visual lines"):
         choose("甲" * 20, width=70)
+
+
+def test_eighty_character_english_cue_uses_visual_wrap_without_recutting():
+    english = "That doesn't mean we don't do it inadvertently and make mistakes, because we do."
+    assert len(english) == 80
+    source = replace(source_plan().cues[0], english_text=english)
+    style, safe = scale_profile(RenderProfileDTO(), 640, 360)
+    cue = layout_cue(source, style, safe, Measurer(), Segments())
+    _, lines = cue.visual_lines(source)
+    assert len(lines) == 2
+    assert "".join(lines) == english
+    assert (cue.start_ms, cue.end_ms) == (source.start_ms, source.end_ms)
+    assert safe.contains(cue.expected_bounds)
+
+    with pytest.raises(LayoutError, match="two visual lines"):
+        layout_cue(source, style, safe, Measurer(unit=20), Segments())
 
 
 def test_independently_selected_language_lines_must_fit_total_height():
@@ -353,3 +371,67 @@ def test_profile_config_rejects_legacy_unknown_missing_and_untyped_fields(change
     change(data)
     with pytest.raises(ValueError):
         profile_from_config(data)
+
+
+@pytest.mark.parametrize(("width", "line_count"), [(100, 1), (45, 2)])
+def test_original_chinese_cue_leading_ellipsis_is_preserved(width, line_count):
+    text = "……甲乙丙丁"
+    result = choose(text, width=width)
+    boundaries = (0, *result.break_offsets, len(text))
+    lines = tuple(text[start:end] for start, end in zip(boundaries, boundaries[1:]))
+    assert len(lines) == line_count
+    assert lines[0].startswith("……") and "".join(lines) == text
+    assert all(not line.lstrip().startswith("…") for line in lines[1:])
+
+
+@pytest.mark.parametrize("text", ["甲乙……丙丁", "……甲……乙"])
+def test_wrap_must_not_create_a_new_leading_ellipsis(text):
+    # Only a 3+3 split fits this width; its second line would begin with an ellipsis.
+    with pytest.raises(LayoutError, match="two visual lines"):
+        choose(text, width=35)
+
+
+@pytest.mark.parametrize(("text", "language"), [
+    ("…We agree.", "english"), ("...甲乙", "chinese"), ("　……甲乙", "chinese"),
+])
+def test_source_leading_ellipsis_exception_is_narrow(text, language):
+    with pytest.raises(LayoutError, match="two visual lines"):
+        choose(text, language, width=200)
+
+
+def test_original_chinese_leading_ellipsis_does_not_bypass_safe_width():
+    with pytest.raises(LayoutError, match="two visual lines"):
+        choose("……甲乙丙丁戊", width=35)
+
+
+@pytest.mark.parametrize("text,words", (
+    ("证券价值稳定", (0, 2, 4, 6)),
+    ("公司净资产增加", (0, 2, 5, 7)),
+    ("经济优势稳定", (0, 2, 4, 6)),
+))
+def test_chinese_word_boundary_beats_more_balanced_character_cut(text, words):
+    class Words(Segments):
+        def lexical_boundaries(self, text):
+            return words
+    result = choose_visual_layout(text, "chinese", 30, 2, 1, 55, Measurer(), Words())
+    assert result.break_offsets[0] in words
+    assert "".join((text[:result.break_offsets[0]], text[result.break_offsets[0]:])) == text
+
+
+def test_chinese_word_boundary_is_soft_when_only_an_internal_cut_fits():
+    class LongWord(Segments):
+        def lexical_boundaries(self, text):
+            return (0, len(text))
+    result = choose_visual_layout("甲乙丙丁戊己", "chinese", 30, 2, 1, 35, Measurer(), LongWord())
+    assert result.break_offsets == (3,)
+    with pytest.raises(LayoutError, match="two visual lines"):
+        choose_visual_layout("甲乙丙丁戊己", "chinese", 30, 2, 1, 34, Measurer(), LongWord())
+
+
+@pytest.mark.parametrize("boundaries", ((1, 4), (0, 3), (0, 4, 3), (0, True, 4), [0, 4]))
+def test_chinese_lexical_boundary_port_is_strict(boundaries):
+    class InvalidWords(Segments):
+        def lexical_boundaries(self, text):
+            return boundaries
+    with pytest.raises(ValueError, match="lexical boundaries"):
+        choose_visual_layout("甲乙丙丁", "chinese", 30, 2, 1, 100, Measurer(), InvalidWords())

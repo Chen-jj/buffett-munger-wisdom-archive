@@ -1,0 +1,25 @@
+{
+  "schema_version": "translation.glossary.v1",
+  "entries": [
+    {"source": "margin of safety", "target": "安全边际"},
+    {"source": "intrinsic value", "target": "内在价值"},
+    {"source": "underlying value", "target": "内在价值"},
+    {"source": "net worth", "target": "净资产"},
+    {"source": "opportunity cost", "target": "机会成本"},
+    {"source": "mathematical edge", "target": "数学上的优势"},
+    {"source": "Warren Buffett", "target": "沃伦·巴菲特"},
+    {"source": "Warren", "target": "沃伦"},
+    {"source": "Buffett", "target": "巴菲特"},
+    {"source": "Charlie Munger", "target": "查理·芒格"},
+    {"source": "Charlie", "target": "查理"},
+    {"source": "Munger", "target": "芒格"},
+    {"source": "Ajit Jain", "target": "阿吉特·贾恩"},
+    {"source": "Berkshire Hathaway", "target": "伯克希尔·哈撒韦"},
+    {"source": "Berkshire", "target": "伯克希尔"},
+    {"source": "Buffett Limited Partnership", "target": "巴菲特有限合伙公司"},
+    {"source": "Coca-Cola", "target": "可口可乐"},
+    {"source": "Coke", "target": "可口可乐"},
+    {"source": "Gillette", "target": "吉列"},
+    {"source": "See's Candy", "target": "喜诗糖果"}
+  ]
+}

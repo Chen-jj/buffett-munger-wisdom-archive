@@ -9,7 +9,7 @@ from typing import Any, Mapping, Sequence
 
 
 STRUCTURED_TRANSCRIPT_SCHEMA_VERSION = "acquisition.transcript.v2"
-SOURCE_ALIGNMENT_SCHEMA_VERSION = "transcription.source-alignment.v1"
+SOURCE_ALIGNMENT_SCHEMA_VERSION = "transcription.source-alignment.v2"
 
 _TIMED_WORD_ID_RE = re.compile(r"^w[1-9][0-9]*$")
 _SOURCE_SENTENCE_ID_RE = re.compile(r"^s[1-9][0-9]*$")
@@ -421,12 +421,48 @@ class SourceSectionDTO:
 
 
 @dataclass(frozen=True)
+class EditorialBreakDTO:
+    """Untimed source annotation, never an additional spoken word."""
+
+    id: str
+    after_word_id: str
+    official_token_ids: tuple[str, ...]
+    source: str = "cnbc"
+    kind: str = "editorial_break"
+    policy_version: str = "cnbc-editorial-break.v1"
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.id, str) or re.fullmatch(r"e[1-9][0-9]*", self.id) is None:
+            raise ValueError("annotation id must use e1..eN")
+        if not isinstance(self.after_word_id, str) or _TIMED_WORD_ID_RE.fullmatch(self.after_word_id) is None:
+            raise ValueError("annotation must reference a word")
+        tokens = _string_tuple(self.official_token_ids, "official_token_ids")
+        if not tokens or any(re.fullmatch(r"ot[1-9][0-9]*", token) is None for token in tokens):
+            raise ValueError("annotation must carry official token provenance")
+        object.__setattr__(self, "official_token_ids", tokens)
+        if (self.source, self.kind, self.policy_version) != ("cnbc", "editorial_break", "cnbc-editorial-break.v1"):
+            raise ValueError("unsupported editorial annotation policy")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"id": self.id, "after_word_id": self.after_word_id,
+                "official_token_ids": list(self.official_token_ids), "source": self.source,
+                "kind": self.kind, "policy_version": self.policy_version}
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "EditorialBreakDTO":
+        if not isinstance(data, Mapping) or set(data) != {"id", "after_word_id", "official_token_ids", "source", "kind", "policy_version"}:
+            raise ValueError("editorial annotation has missing or unknown fields")
+        return cls(**data)
+
+
+@dataclass(frozen=True)
 class SourceAlignmentDTO:
     language: str
     audio_duration_ms: int
     words: tuple[TimedWordDTO, ...]
     sentences: tuple[SourceSentenceDTO, ...]
     sections: tuple[SourceSectionDTO, ...]
+    annotations: tuple[EditorialBreakDTO, ...] = field(default_factory=tuple)
     schema_version: str = SOURCE_ALIGNMENT_SCHEMA_VERSION
 
     def __post_init__(self) -> None:
@@ -447,6 +483,19 @@ class SourceAlignmentDTO:
         self._validate_timeline_and_ids()
         self._validate_sentence_coverage()
         self._validate_section_coverage()
+        object.__setattr__(self, "annotations", tuple(self.annotations))
+        word_map = {word.id: word for word in self.words}
+        previous_position = 0
+        for position, annotation in enumerate(self.annotations, 1):
+            if not isinstance(annotation, EditorialBreakDTO) or annotation.id != f"e{position}":
+                raise ValueError("annotations must use e1..eN in order")
+            word = word_map.get(annotation.after_word_id)
+            if word is None or not set(annotation.official_token_ids) <= set(word.official_token_ids):
+                raise ValueError("annotation provenance must belong to its source word")
+            current_position = int(word.id[1:])
+            if current_position < previous_position:
+                raise ValueError("annotations must follow source word order")
+            previous_position = current_position
 
     def _validate_timeline_and_ids(self) -> None:
         previous_end_ms = 0
@@ -529,10 +578,13 @@ class SourceAlignmentDTO:
             "words": [word.to_dict() for word in self.words],
             "sentences": [sentence.to_dict() for sentence in self.sentences],
             "sections": [section.to_dict() for section in self.sections],
+            "annotations": [annotation.to_dict() for annotation in self.annotations],
         }
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "SourceAlignmentDTO":
+        if not isinstance(data, Mapping) or set(data) != {"schema_version", "language", "audio_duration_ms", "words", "sentences", "sections", "annotations"}:
+            raise ValueError("source alignment has missing or unknown fields")
         schema_version = data.get("schema_version")
         if schema_version != SOURCE_ALIGNMENT_SCHEMA_VERSION:
             raise ValueError(f"unsupported source alignment schema: {schema_version}")
@@ -555,4 +607,5 @@ class SourceAlignmentDTO:
             words=tuple(TimedWordDTO.from_dict(item) for item in words),
             sentences=tuple(SourceSentenceDTO.from_dict(item) for item in sentences),
             sections=tuple(SourceSectionDTO.from_dict(item) for item in sections),
+            annotations=tuple(EditorialBreakDTO.from_dict(item) for item in _require_sequence(data["annotations"], "annotations")),
         )

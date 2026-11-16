@@ -4,13 +4,96 @@
 
 ## 当前状态（先读这里）
 
+> 2026-11-17（Asia/Shanghai）：按用户新授权整理文档：NB-00～NB-10共11份技术交付/固定实验/诊断记录已移入[任务归档](docs/archive/tasks/README.md)；ADR-0007以superseded未实施历史归档，ADR-0008～0012以已实施技术方案归档，未被替代的契约继续生效，[总方案ADR-0008](docs/archive/decisions/0008-local-orchestration-and-integration-tests.md)仍是行为入口。
+> 当前目录仅保留[NB-12](docs/tasks/NB-12-chunking-quality-iteration.md)、[ADR-0006](docs/decisions/0006-subtitle-rendering-ass-and-burn-in.md)与[ADR-0013](docs/decisions/0013-typed-chunking-quality-and-regression.md)的未完成质量验收/迭代；归档不把历史未通过改成通过。诊断样片已技术交付，整体语义/出版仍NOT PASSED，未核听。
+> 用户已明确授权**全部本地代码、测试、文档累计改动commit并push**，由负责人完成最终验收/敏感信息扫描及git操作；忽略的output、模型、视频不提交。此前各阶段“不commit/push”属于历史约束，已被本次明确授权取代；不回滚既有dirty、不删除内容或资产，不重跑昂贵阶段。完整原文/路径/哈希保全映射见[归档清单](docs/archive/2026-11-17-document-relocation.json)。
+
+> 2026-11-15（Asia/Shanghai）：[NB-12](docs/tasks/NB-12-chunking-quality-iteration.md)/[ADR-0013](docs/decisions/0013-typed-chunking-quality-and-regression.md)的84字符、统一typed DP及最小保护已实现为policy v8；comparison-v1～v9与US精确证明已留证。最后完整离线2873 passed / 7 skipped（13.39s），负责人独立2873 / 7（13.00s）。新根实际Stanza 46次/165 chunks，完整9字段plan精确等cached v9；14份输入/NB09原库存及201份source保全。
+> 用户明确允许英文/词时/上下文/术语/初译外发已登录Codex服务（不发视频音频）后，原require_escalated正常获准；此前CreateProcess前拒绝保留为历史，不绕过。真实初译4次、编辑10次且10窗口均首请求采纳，已发布166 cue权威最终稿/173条真实warning，SHA `36721b9d5686438f3522c5301ee9e1408ff5ff2c08ee1d8ba6d9171ea5ed274f`；没有重跑ASR/对齐或修改源词/时间。
+> 负责人及独立agent全97句/166cue文本审读已完成：s16/s18/s88等好切法保住，s60原say|five和780ms短尾已由编辑实际修复，不能再当作final残余。仍有c69中文“每天”比per day提前4042ms，不能通过整体语义同步；c66/69“8盎司装”计量口径风险、c61 I would原偏好部分未满足及其它措辞/口语精度项明确披露。术语20项沿用，JET源残余不猜成Ajit Jain；旧c70/c114用户允许项不强制改。
+> 负责人已实际复用source/translation/postprocessing三阶段，全reused、0 provider/analyzer/writes，正文/checkpoint不变。现仅放行**诊断候选样片**供用户复审，不通过整体字幕或出版质量，不再改prompt/重置额度/手改最终稿；诊断候选已实际烧录623秒/166cue，视频SHA `12092104058edb3b7dffa5a1dc307b6ea14c61184824e346c68d324677da4514`；像素/字形/ASS/媒体技术检查0error、217warning（权威173＋ASSgap44），五阶段同/新进程复用0调用/0改写，音轨packet hash与源完全相同。负责人已目视3原像素tile共18帧并额外看frame018原640×360，未见这些帧裁切/缺字/tofu/中英重叠；非全面观看/连续播放，未核听。c162双破折号按offset10拆成两行各一“—”是新披露rendering换行残余，本轮不修；profile与NB09完全相同。旧样片仍是旧策略/术语身份，不冒称已应用新规则。
+> 运行/复用证据完成后，负责人已明确开放最终doc-only窗口，仅同步模块指南/根文档，生产.py/测试/模型/权威稿不改且与v9算法身份区分；dirty改动及所有旧/失败媒体、工件、账本保留，不删除/覆盖、不commit/push。负责人仅调度/验收，以下14/13日记录保留为当时事实。
+
+> 2026-11-14（Asia/Shanghai）：[NB-12](docs/tasks/NB-12-chunking-quality-iteration.md)/[ADR-0013](docs/decisions/0013-typed-chunking-quality-and-regression.md)的84字符项目容量、完整句Stanza统一typed DP、最小保护及二阶评价已实现；US单生产负责人独立完整离线2658 passed / 7 skipped（14.21s），cached97与冻结US非policy完整plan/指标/有序评分精确证明已通过（仅实现等价），不是源语或出版质量通过。
+> comparison-v1～v5的80/84×旧新评分、四消融、全97句/1569词why及冻结源码已持久化；s16参考四屏和so/And归属已改善，但s6/7/13、what kind/of、terms/of、up/and down等仍有残余，整体质量尚未通过。
+> B/U/S/US两因子2×2隔离试验已完成；负责人批准US两原则作为唯一生产目标（未知普通2、普通句法等级先于CPS），typed v4及有序字段身份已落盘，稳定完整离线及与冻结US精确证明已过；证明后才另开CF/question四项修复（最终guard2684 passed / 7 skipped、comparison-v5已留证），随后独立NomOf一般软附着已实现为typed v6并完整离线2723 passed / 7 skipped（13.66s），新comparison-v6已留证；负责人独立2723/7并审全165 cue后，确认多数NomOf改善但s94新virtually|all及s18/s68/s60局部单位缺陷仍阻断。仅新授权五项局部scope/小单位切片typed v7实施中，向量/阈值不变，不混US归因或硬护全部noun-of。此有限选择不代表整体质量通过，不由自动分数决定上线。
+> 本轮未调用provider、ASR/词对齐或新渲染；旧样片仍为旧策略/术语身份，不能冒称已应用新规则。后续新根仅通过adoption绑定冻结媒体/转录，不伪称生产前四阶段fresh/reused；真实翻译/样片仍待质量审读放行。
+> 既有dirty改动及所有旧/失败资产保留，不删除/覆盖、不commit/push；负责人仅拆解/调度/验收/回归，编码仍由子agent实施。下方13日计划及历史验收保留为当时记录。
+
+> 2026-11-13（Asia/Shanghai）：[ADR-0013 有类型切分与防退化迭代](docs/decisions/0013-typed-chunking-quality-and-regression.md)及[NB-12任务](docs/tasks/NB-12-chunking-quality-iteration.md)已获用户授权进入实现，设计/基线已由负责人验收，子agent编码进行中；尚无通过的新算法实验或新样片。
+> 目标为项目84字符逻辑cue容量、完整句Stanza统一DP、最小保护/typed边界/cue特征、分层罚分与有界奖励，并经80/84×旧新评分、多解保好/反例/未见集与逐轮消融验证。
+> 开工生产为80/逗号优先v4，新实现尚待离线/质量回归；84替代逻辑cue的80，显示换行/字号/像素继续归rendering，不新增单行门禁或声称Netflix84字符单行合规。
+> 负责人仅拆解/调度/验收/回归，代码由子agent实施；已先验收计划，编码按阶段实施。既有dirty改动/媒体/转录及失败资产保留，新候选及真实翻译/编辑/烧录只写新根，不重跑ASR/词对齐、不覆盖/删除、不commit/push。
+> 本次负责人实测离线基线2450 passed / 7 skipped（12.69s）；不是新算法、核听或出版质量通过，真实结果随后按NB-12更新。
+
+> 2026-11-08（Asia/Shanghai）：[NB-10 逐cue反馈溯源](docs/archive/tasks/NB-10-cue-feedback-diagnosis.md)核对用户新增18项问题。
+> NB-09“整体同档”是此前审核判断，不能作为这些逐cue问题已通过的结论；切分、逐屏对应及口语修订仍待改进。
+> 本轮仅新增 underlying value→内在价值、net worth→净资产、Ajit Jain→阿吉特·贾恩及默认资源匹配测试；未改chunking/prompt、未调用provider或重生成样片。
+> 现存样片仍为NB-09旧术语身份，不能冒称已应用新表或直接按新配置复用；原资产保留。
+> 最新完整离线2450 passed / 7 skipped；默认术语20项，7份关键现存产物hash与NB-09相同，未把离线通过写成逐cue质量通过。
+
+> 2026-11-07（Asia/Shanghai）：[NB-09 编辑质量迭代](docs/archive/tasks/NB-09-editorial-quality-iteration.md)已完成本次固定样片的文本/排版验收，完整离线2448 passed / 7 skipped。
+> 英文chunk正常容量80字符，安全逗号优先、必要时Stanza；后处理直接替换为现有translation内的有界双语编辑生成（180源词/50初稿cue、每批最多3次持久额度），不是自动语义评分或发布门禁。
+> 已扩充人物/公司/数学优势术语、官方证据See's拼写；中文词界软择优、数量单位与包装语法独立排版，SRT/ASS仍共享唯一权威正文和时间。
+> 真实623秒/163 cue新成片已生成；负责人及独立agent全97句复审为整体与独立参考同档，不是逐句全面更好；177条权威警告、39条ASS间隔及措辞风险保留。
+> 同/新进程九阶段全复用、84项保护集不变、昂贵调用和阶段改写0；本人已实际静音播放抽查，未核听或取得人类出版签字。新成片及审核见NB-09，所有失败/旧工件原样保全；不commit/push。
+
+> 2026-11-06（Asia/Shanghai）：新版已实现，集中迁移后完整离线 2361 passed / 7 skipped。
+> 真实 CNBC 链路从空根启动，经保留故障和阶段恢复，发布 623 秒 / 275 cue 正式烧录样片。
+> 用户批准的原有中文起首省略号例外已验证；未改稿、字号或时间。
+> 同进程与独立新进程九阶段全复用，昂贵调用和阶段改写均为0，78项保护集不变。
+> 本人已播放抽查；文本语义残余已披露，核听未验证，人类出版签字未取得。
+> 新真实产物及质量状态见 [NB-08](docs/archive/tasks/NB-08-full-fresh-acceptance.md)。
+> 开工基线2580 passed / 6 skipped；下文旧候选和已清理产物的历史记录不是本次验收。
+> 负责人只拆解、调度、验收与回归，编码交子 agent；不 commit/push。授权移除仅限已确认旧路径。
+
+> 2026-11-05任务整理：SR-00、SR-07及runner设计交接已归档，保留技术交付及质量未通过记录；
+> 无关且未实施的SA-00已删除。docs/tasks仅保留当前入口导航，旧任务状态不再作为待办。
+
+> 2026-11-05 更新：用户明确授权删除旧集成及候选评估产物，已清空 output 下 cue-evaluation、
+> subtitle-rendering-integration、transcription-integration 三个目录（458 文件、8 符号链接）。
+> 历史段落中的保留要求、465份资产及旧文件可复核性是当时记录，已被本次授权取代。
+> 编排模块完成后必须从空产物工作区完整跑采集到成片，再逐阶段审核和验证复用；当前未重跑昂贵阶段。
+
+
+> 新双语链路的 ADR-0009～0012 行为设计已接受、未实施；ADR-0008 已同步新阶段依赖。
+> 现有转录词时间保留，编辑标记单独传递；英文分块 → 上下文初译 → 局部修订与排时 → SRT/ASS。
+> 指标超标可带 warning 发布；实际重叠、源覆盖和来源链错误仍阻断。样片 agent 回归不新增自动语义门禁。
+> 仅更新设计，现有生产代码及历史资产不变。未来直接替换旧契约/算法，不做旧版兼容或双路径；
+> 旧产物清理以本节最新授权为准。总方案入口为 ADR-0008，实施 agent 须逐阶段审查真实产物及样片声音/字幕。
+
 仓库正处于迁移中期。动手前先核实现实，不要假设某个模块能用。
 
-> 状态最后核对：2026-10-24 21:02 CST。**每次完成编码任务后，若实现状态或本文件中的事实发生变化，必须在同一次提交中更新本节（含核对时间）。**
+> 状态最后核对：2026-11-17（Asia/Shanghai）。**每次完成编码任务后，若实现状态或本文件中的事实发生变化，必须在同一次提交中更新本节（含核对时间）。**
+
+> [ADR-0010源语chunking](docs/archive/decisions/0010-source-chunking.md)的行为与归属设计已接受，**未实施**：
+> 归现有`srt_processing`，消费完整英文句子及词时间；42字符/20 CPS、先裁超长再并超短，
+> 不换行/不借时间。初次裁切采用本地Stanza、不调用LLM；CPS不触发裁切但限制合并。
+> 跨原句gap<500ms是用户指定的项目回退规则，核查未找到可直接采用的行业上限，不称为Netflix规定。
+> 两轮分组后只读估算中文阅读预算，尾端最多预估延长500ms；不改时间，实际排时留给后处理。
+> 本轮只更新设计/指南，未下载或运行模型、未改生产算法/配置/公共schema、未生成新字幕或媒体。
+> 模型版本、公开接口及实现验证仍待开展；不影响下文现有v3及旧资产状态，ADR-0007/0008仍未接受。
+> 本轮完整离线复验2580 passed / 6 skipped；465份资产条目大小/mtime/链接值不变，未做媒体全量hash复核。
+
+> 用户要求先搁置原语义方案，按[业界调研](docs/reviews/2026-10-28-industry-bilingual-subtitle-pipelines.md)
+> 重新比较流水线。已查阅专业制作规范、2026含英中/财经域论文与开源关键代码；优先验证
+> 字幕模板约束下的上下文翻译及联合生成，不预设新增独立semantic_alignment模块。
+> 这是研究建议，不是方案接受或实验通过；ADR-0007/0008及SA-00保持未实施，旧依赖不直接执行。
+> 本轮只更新文档，未跑候选/外部项目、未重跑昂贵阶段/迁移测试/生成新片；完整离线
+> 2580 passed / 6 skipped，465份input/output全部证据不变，92份Markdown本地链接0断链。
+
+> [语义同步研究设计](docs/reviews/2026-10-24-bilingual-semantic-alignment-design.md)已交付：
+> GPT未读旧plan独立审读9/97句、82组word/中文范围；负责人逐项复算一致。四例已追踪，
+> 12帧旧片显示核查通过；30秒尾词仍待核听，86秒另有官网But the被排除的局部覆盖候选，
+> 不据此重跑或否定整体transcription。ADR-0007语义证据/联合规划与ADR-0008编排/集成测试
+> 唯一归属均为proposed；SA-00（旧 SA-00 未实施任务已按用户要求移除；现行入口为 ADR-0008）
+> 记录带依赖切片。未改生产算法、未迁移/删除测试、未生成新样片或运行新样片agent回归。
+> 本轮完整离线2580 passed / 6 skipped；465份input/output的hash/size/mtime/链接目标未变。
+> 当前各模块实现/质量状态不变；所有后续实验与实现须先获批准，不能将草案视为接受。
 
 > 文档已整理：[导航](docs/README.md)。ADR-0001..0005、TA/SP历史任务和已验收SR-01..06
 > 已归档；TA-10仍为superseded而非通过。归档不撤销未被替代的公共契约，也不把候选质量写成定版。
-> ADR-0006、SR-00及SR-07仍进行中。SR-01..06已accepted，渲染公共契约、纯布局、字体/ASS/
+> 当时状态：ADR-0006、SR-00及SR-07仍进行中（任务现已按本节最新整理说明归档）。SR-01..06已accepted，渲染公共契约、纯布局、字体/ASS/
 > 像素/媒体适配器、工作流与独立对抗测试均已实现。完整离线最近验收为2580 passed / 6 skipped。
 > 同源623秒/163-cue双语样片已持久交付，succeeded→reused→reused、逐cue像素、媒体QA与零写/
 > 上游不变通过；负责人另独立复用和20帧审图，**不是完整听音或人类质量签字**。
@@ -23,7 +106,7 @@
 > 本次整理后复验：2580 passed / 6 skipped，84份Markdown本地链接0断链；未新增语义修复算法。
 > 后续顺序仍为rendering→orchestration→CLI→Web UI；不能把技术样片交付写成语义或出版质量通过。
 
-> 用户另要求简化阅读稿，已新增[全97句v3/agent两方对照](output/cue-evaluation/20261023-candidate-v3/two_way_v1/all_97_sentences.md)。
+> 用户另要求简化阅读稿，已新增全97句v3/agent两方对照（历史产物已授权删除；原路径：`output/cue-evaluation/20261023-candidate-v3/two_way_v1/all_97_sentences.md`）。
 > 仅投影已冻结正文/时间并标明跨句共用关系，不重切或新增质量评价；负责人独立重算MD/JSONL字节一致。
 > 两方展示回归9项，当时完整离线 **1404 passed / 5 deselected**；以下1395为此前v3实施验收时点结果。
 
@@ -39,6 +122,8 @@
 > [本轮报告](docs/reviews/2026-10-23-cue-candidate-v3.md)包含逐句入口、失败与成本原因。
 > 下文v1/v2数字是历史结果，旧资产不覆盖。
 
+历史开工基线（新版事实见本节置顶及 NB-00）：
+
 | 状态 | 模块 |
 |---|---|
 | 已实现 + 离线测试 | `archive_core`、`acquisition`、`media_download`、`infrastructure` |
@@ -48,7 +133,7 @@
 | 技术实现/真实样片已交付；用户发现双语语义同步问题，最终验收未通过 | `subtitle_rendering` |
 | 仅脚手架（分层目录 + AGENTS.md，无代码） | `cli`、`orchestration`、`webui` |
 
-- 遗留管线（`run.py` step0–4 + Web 评审应用）已在提交 `cc9df50` 中删除。目前**没有 CLI 入口，管线无法端到端运行**。ADR-0001 与其实现任务已完成并归档到 `docs/archive/`。
+- 遗留管线（`run.py` step0–4 + Web 评审应用）已在提交 `cc9df50` 中删除。开工前没有 CLI 或生产编排入口；当前由上述公开编排运行，CLI/Web UI仍不在本轮范围。ADR-0001 与其实现任务已完成并归档到 `docs/archive/`。
 - 文档入口为`docs/README.md`；进行中ADR在`docs/decisions/`，已实现ADR/任务在`docs/archive/`。
   归档不自动使决策失效，但历史任务不再作为现行路线图；此前两份路线图已由用户删除，不得恢复。
 - 尚无 lint/typecheck/CI。离线 pytest 套件是唯一的验证门槛；另有少量 `live` 标记测试，包括
@@ -116,27 +201,17 @@
 - 首次真实使用 ASR 会下载 Whisper 模型文件（按配置为 `large-v3`）——很慢，缓存它，别跟它较劲。
 - `config.yaml` 存放非敏感运行时配置（包括翻译 API key 的环境变量名、下载、字幕样式、WhisperX、抓取礼貌性）。**绝不提交真实 API key**。
 
-## 管线数据流（目标态）
+## 管线数据流（ADR-0008）
 
 ```text
-acquisition ─→ media_download ─→ transcription ── source_alignment.json ─┬─→ translation
-（网页抓取/         （yt-dlp）      （WhisperX + 词级对齐/句界）             │   （句级翻译）
- 结构化逐字稿）                                                         │        │
-                                                                        │        ▼
-                                                                        └─→ srt_processing
-                                                         translation_result.json ─┘
-                                                                                │
-                                                                                ▼
-                                                               subtitle_rendering（libass/ffmpeg）
-
-archive_core：资产身份、路径、公共 schema、manifest、溯源
-orchestration：可恢复任务计划 · cli/webui：薄接口 · infrastructure：共享适配器
+acquisition → media_download（需要时显式派生） → transcription（词时间、编辑标记）
+ → srt_processing（英文候选块、只读预算） → translation（上下文分批初译）
+ → translation（有界修订、最终排时、权威双语稿）
+ → srt_processing（三SRT导出） → subtitle_rendering（同一权威稿、ASS/烧录）
 ```
 
-各阶段状态：实现到 `srt_processing` 为止；transcription 已通过离线测试与当前 CNBC 真实集成
-验收，translation 已通过离线测试与 Codex CLI ChatGPT 真实集成验收。srt_processing 已通过
-离线跨层与 CNBC 真实技术集成，已知字幕内容质量限制见 SP-08；rendering技术实现/样片已交付，
-最终语义质量验收未通过，后续模块仍为脚手架。
+`archive_core` 定义公共工件/溯源；`orchestration` 组装执行、授权、恢复和复用，集中集成验收。
+本轮不建 CLI/Web UI。基础实现/验收历史见 [NB-00](docs/archive/tasks/NB-00-implementation-map.md)，当前质量状态以 [NB-12](docs/tasks/NB-12-chunking-quality-iteration.md) 及本节最新记录为准。
 
 ## 模块地图
 
@@ -145,16 +220,17 @@ orchestration：可恢复任务计划 · cli/webui：薄接口 · infrastructure
 - `src/media_download/` —— 媒体 URL 解析、yt-dlp 下载编排、校验和/溯源采集。
 - `src/transcription/` —— 音频提取、VAD、ASR、词级对齐、逐字稿融合、英文句界。*（已实现 +
   离线测试 + CNBC 真实集成测试）*
-- `src/srt_processing/` —— 确定性双语 cue 规划、三份 SRT 投影/解析、QA 与可恢复发布。*（已实现 + 离线跨层验收 + CNBC 真实技术集成，非出版级质量背书）*
-- `src/translation/` —— 完整英文句子/section 翻译、checkpoint、术语/风格策略、服务适配器、结果
-  校验与原子发布。*（已实现 + 离线测试 + Codex CLI 真实集成测试）*
+- `src/srt_processing/` —— 英文候选块、只读预算、权威稿校验、三份 SRT 投影与可恢复发布。
+- `src/translation/` —— 上下文分批初译、checkpoint、有界双语修订与最终排时。
 - `src/subtitle_rendering/` —— SRT/ASS 样式、烧录渲染、ffmpeg 命令规划、渲染元数据。*（SR-01..06已验收，真实样片已交付，最终验收未通过）*
 - `src/webui/` —— 本地评审 UI 边界、目录契约。*（脚手架）*
 - `src/cli/` —— 命令解析、面向人的命令、进度显示。*（脚手架）*
-- `src/orchestration/` —— 管线组装、可恢复工作流、依赖排序、故障恢复。*（脚手架）*
+- `src/orchestration/` —— 管线组装、依赖、授权、恢复、复用与集中集成验收。
 - `src/infrastructure/` —— 共享技术适配器：配置、文件系统、进程执行、HTTP、日志、工具发现。
 
-跨模块 import 规则：`archive_core`（领域契约）与 `infrastructure`（技术适配器）是仅有的两个允许被其他模块 import 的模块；功能模块的内部实现不得被跨模块 import。
+跨模块 import 规则：功能模块只依赖共享 `archive_core` 与 `infrastructure`，不得互相 import。
+ADR-0008 的唯一例外是 `orchestration.infrastructure.composition` 允许导入各功能模块显式公开的
+`interfaces` factory/command；编排 domain/application 不使用该例外，任何生产代码不得依赖 tests。
 
 ## 架构
 

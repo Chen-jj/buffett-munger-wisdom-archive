@@ -308,6 +308,32 @@ class TranscriptionWorkflow:
                 )
             )
             report = self.events.finalize_success()
+            if sentence.cache_hit and set(cache_hits) == {
+                "audio", "vad", "raw_asr", "aligned_asr", "source_alignment"
+            } | ({"transcript_fusion"} if official is not None else set()):
+                existing = self._load_transcription_manifest(paths["manifest"], request.asset_id)
+                if existing.workflow is not None and existing.workflow.get("status") == WorkflowStatus.SUCCEEDED.value:
+                    for key, path_key in (("transcription_log", "log"), ("transcription_report", "report")):
+                        record = existing.records.get(key)
+                        if (record is None or record.path != paths[path_key]
+                                or record.status != "succeeded"
+                                or self.artifacts.size(record.path) != record.size_bytes
+                                or self.checksum.sha256(record.path) != record.sha256):
+                            raise TranscriptionWorkflowInputError("existing observability evidence is invalid")
+                    published = TranscriptionReport.from_dict(self.artifacts.read_json(paths["report"]))
+                    if (published.asset_id != request.asset_id.value or published.status.value != "succeeded"
+                            or published.failure_reason is not None or not all(item.passed for item in published.qa)
+                            or dict(published.counts) != existing.workflow.get("summary")):
+                        raise TranscriptionWorkflowInputError("existing report content differs from its successful workflow")
+                    if existing.workflow.get("inputs") != {
+                        "download_manifest_path": request.download_manifest_path, "chapters_sha256": request.chapters_sha256
+                    } or existing.workflow.get("qa_policy") != self.config.qa.to_dict():
+                        raise TranscriptionWorkflowInputError("existing successful workflow identity changed")
+                    return TranscriptionWorkflowOutcome(
+                        status=WorkflowStatus.SUCCEEDED, source_alignment_path=sentence.path,
+                        manifest_path=paths["manifest"], log_path=paths["log"], report_path=paths["report"],
+                        report=published, cache_hits=tuple(cache_hits),
+                    )
             log_record, report_record = self._persist_observability(paths, report)
             manifest = self._load_transcription_manifest(
                 paths["manifest"], request.asset_id

@@ -6,7 +6,7 @@ from typing import Iterable, Protocol
 
 from archive_core.interfaces import (
     RenderFontIdentityDTO, RenderFontSpecDTO, RenderMediaDTO, RenderProfileDTO,
-    RenderStreamMappingDTO, RenderToolsDTO, SubtitlePlanDTO, SubtitleRenderPlanDTO,
+    RenderStreamMappingDTO, RenderToolsDTO, FinalBilingualDraftDTO, SubtitleRenderPlanDTO,
 )
 from subtitle_rendering.domain.models import FontMeasurer
 
@@ -33,8 +33,8 @@ class FontFactory(Protocol):
 class AssCodec(Protocol):
     library_version: str
 
-    def encode(self, plan: SubtitleRenderPlanDTO, source: SubtitlePlanDTO) -> bytes: ...
-    def validate(self, data: bytes, plan: SubtitleRenderPlanDTO, source: SubtitlePlanDTO) -> None: ...
+    def encode(self, plan: SubtitleRenderPlanDTO, source: FinalBilingualDraftDTO) -> bytes: ...
+    def validate(self, data: bytes, plan: SubtitleRenderPlanDTO, source: FinalBilingualDraftDTO) -> None: ...
 
 
 class MediaProbe(Protocol):

@@ -1,73 +1,81 @@
-"""Thin, safe command boundary for local subtitle processing."""
-
-from __future__ import annotations
-
+"""Thin final-draft export boundary."""
 from dataclasses import dataclass
-
-from srt_processing.application import (
-    SrtProcessingWorkflow,
-    SrtProcessingWorkflowError,
-    SubtitleInputError,
-)
-
-
-_ERROR_MESSAGES = {
-    "input_invalid": "Subtitle inputs are missing or invalid.",
-    "media_invalid": "The canonical video could not be validated.",
-    "artifact_conflict": "Existing subtitle artifacts cannot be reused; explicit overwrite is required.",
-    "planning_failed": "No valid subtitle plan could be produced.",
-    "projection_failed": "Subtitle projections could not preserve the plan.",
-    "publication_failed": "Subtitle artifacts could not be published.",
-    "srt_processing_failed": "Subtitle processing did not complete.",
-}
 
 
 @dataclass(frozen=True)
 class SrtProcessingCommand:
     asset_id: str
-    transcription_manifest_path: str
-    translation_manifest_path: str
+    bilingual_postprocessing_manifest_path: str
     overwrite: bool = False
 
 
 @dataclass(frozen=True)
 class SrtProcessingOutcome:
     status: str
-    plan_path: str | None
-    manifest_path: str | None
-    report_path: str | None
-    english_srt_path: str | None
-    chinese_srt_path: str | None
-    bilingual_srt_path: str | None
-    cue_count: int
-    warning_count: int
+    plan_path: str | None = None
+    manifest_path: str | None = None
+    report_path: str | None = None
+    english_srt_path: str | None = None
+    chinese_srt_path: str | None = None
+    bilingual_srt_path: str | None = None
+    cue_count: int = 0
+    warning_count: int = 0
+    writes: int = 0
     error_category: str | None = None
     error_message: str | None = None
 
 
 class SrtProcessingCommandHandler:
-    def __init__(self, workflow: SrtProcessingWorkflow) -> None:
+    def __init__(self, workflow):
         self.workflow = workflow
 
     def handle(self, command: SrtProcessingCommand) -> SrtProcessingOutcome:
         if not isinstance(command, SrtProcessingCommand):
-            raise ValueError("command must be a SrtProcessingCommand")
+            raise ValueError("command must be SrtProcessingCommand")
         try:
-            result = self.workflow.execute(
-                asset_id=command.asset_id,
-                transcription_manifest_path=command.transcription_manifest_path,
-                translation_manifest_path=command.translation_manifest_path,
-                overwrite=command.overwrite,
-            )
-        except (SubtitleInputError, SrtProcessingWorkflowError) as error:
-            category = error.category if error.category in _ERROR_MESSAGES else "srt_processing_failed"
-            return SrtProcessingOutcome(
-                "failed", None, None, None, None, None, None, 0, 0,
-                category, _ERROR_MESSAGES[category],
-            )
-        return SrtProcessingOutcome(
-            status=result.status, plan_path=result.plan_path, manifest_path=result.manifest_path,
-            report_path=result.report_path, english_srt_path=result.english_srt_path,
-            chinese_srt_path=result.chinese_srt_path, bilingual_srt_path=result.bilingual_srt_path,
-            cue_count=result.cue_count, warning_count=result.warning_count,
-        )
+            result = self.workflow.execute(asset_id=command.asset_id,
+                                           bilingual_postprocessing_manifest_path=command.bilingual_postprocessing_manifest_path,
+                                           overwrite=command.overwrite)
+            return SrtProcessingOutcome(**result.__dict__)
+        except Exception as error:
+            return SrtProcessingOutcome("failed", error_category="artifact_conflict" if isinstance(error, FileExistsError) else getattr(error, "category", "srt_processing_failed"), error_message=str(error))
+
+
+def build_srt_processing_handler(*, output_root="output", artifacts=None, codec=None, clock=None):
+    from srt_processing.infrastructure.composition import build_srt_processing_handler as build
+    return build(output_root=output_root, artifacts=artifacts, codec=codec, clock=clock)
+
+
+def verify_srt_export(command: SrtProcessingCommand, *, output_root="output"):
+    """Static, strictly read-only source-chain and exact-projection verification."""
+    import json
+    import hashlib
+    from archive_core.interfaces.bilingual import StageManifestDTO
+    from srt_processing.application.inputs import load_subtitle_inputs
+    from srt_processing.application.workflow import export_report
+    from srt_processing.application.source_chunking import metadata_bytes
+    from srt_processing.infrastructure.local import LocalSubtitleArtifactStore
+    from srt_processing.infrastructure.codec import Pysubs2SrtCodec
+    try:
+        store, codec = LocalSubtitleArtifactStore(), Pysubs2SrtCodec()
+        inputs = load_subtitle_inputs(asset_id=command.asset_id, bilingual_postprocessing_manifest_path=command.bilingual_postprocessing_manifest_path,
+                                      artifacts=store, output_root=output_root)
+        path = inputs.workspace / "srt_processing_manifest.json"
+        manifest = StageManifestDTO.from_dict(json.loads(path.read_bytes()))
+        if manifest.stage != "srt_export" or manifest.asset_id != command.asset_id or manifest.inputs != inputs.evidence:
+            raise ValueError("SRT source identity differs")
+        expected = {language + "_srt": codec.encode(inputs.draft, language) for language in ("english", "chinese", "bilingual")}
+        report = export_report(inputs.draft)
+        expected["report"] = metadata_bytes(report)
+        if set(manifest.outputs) != set(expected):
+            raise ValueError("SRT output set differs")
+        for name, raw in expected.items():
+            evidence = manifest.outputs[name]
+            if (store.read_bytes(evidence.path) != raw or evidence.size_bytes != len(raw)
+                    or evidence.sha256 != hashlib.sha256(raw).hexdigest()):
+                raise ValueError("SRT output projection differs")
+        return SrtProcessingOutcome("reused", inputs.evidence["final_bilingual_draft"].path, str(path), manifest.outputs["report"].path,
+                                     manifest.outputs["english_srt"].path, manifest.outputs["chinese_srt"].path, manifest.outputs["bilingual_srt"].path,
+                                     len(inputs.draft.cues), report["summary"]["warning_count"])
+    except Exception as error:
+        return SrtProcessingOutcome("failed", error_category="input_invalid", error_message=str(error))

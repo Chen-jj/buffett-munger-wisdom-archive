@@ -1,5 +1,9 @@
 # acquisition AGENTS.md
 
+2026-11-06：生产单资产入口为acquisition.interfaces.AcquisitionCommand/build_acquisition_handler。
+规范采集工件以acquisition_receipt.json最后发布，绑定locator/资产/hash；匹配复用不触网/不写。
+真实网络/文件集成现归tests/orchestration/integration。
+
 ## 模块定位
 
 `acquisition` 负责来源发现、抓取、来源页面解析、逐字稿提取、来源元数据规范化，以及采集工件的持久化。

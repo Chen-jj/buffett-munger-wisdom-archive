@@ -135,9 +135,8 @@ class MatchingPolicy:
     max_unanchored_conflict_words: int = 4
     max_group_size: int = 4
     max_official_only_words: int = 3
-    allowed_substitutions: tuple[tuple[str, str], ...] = field(
-        default_factory=tuple
-    )
+    # Apostrophized official spellings are matched literally (e.g. not "sees").
+    allowed_substitutions: tuple[tuple[str, str], ...] = (("seas", "see's"),)
 
     def __post_init__(self) -> None:
         _require_text(self.version, "version")

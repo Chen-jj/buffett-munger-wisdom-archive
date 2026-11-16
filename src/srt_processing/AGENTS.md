@@ -1,194 +1,51 @@
 # srt_processing AGENTS.md
 
-## 2026-10-24 人类播放反馈与探索边界
+## 当前职责（2026-11-15，Asia/Shanghai）
 
-ADR-0003及已完成SP任务已归档，候选v3的技术/实验accepted状态不撤销，但不代表语义质量通过。
-用户播放真实烧录样片后确认其观察中的英文词时间准确，主要问题是中文优先分块后按比例分配
-英文，造成专名/谓语等跨cue错位。当前尚未接受新的语义对齐方案；禁止将讨论直接变成新默认
-算法、重跑ASR或静默改译/改时间。先按[探索prompt](../../docs/prompts/bilingual-semantic-alignment-exploration.md)
-研究需要修改哪些旧契约/约束，当前LLM禁令和公共契约仍有效，不能绕过。
+本模块有两个独立、单套生产用例，来源与顺序见 ADR-0008：
+- ADR-0010 英文源语 chunking：验证 canonical alignment/视频/媒体帧证据，两轮分组、只读预算，
+  发布 source_chunks.json、source_chunking_report.json、source_chunking_manifest.json。
+- ADR-0012 权威最终稿导出：验证最终稿、连续源词覆盖、初译及上游 manifest/hash，精确投影
+  English/Chinese/Bilingual 三份 SRT（双语中文上英文下），发布 export report 和成功 manifest。
+  不生成第二份权威 plan、不分块/改译/移时、不调用模型。显示换行和像素适配归 rendering。
 
-## 2026-10-23 用户确认的候选v3（技术与比较交付通过，非最终质量定版）
+## NB-12最新验收（2026-11-15，验收后doc-only）
 
-本节覆盖下文v1/v2冲突规则。用户确认中文只在停顿标点或句末切cue，逗号可选；中文16单位
-改软目标，7000ms改显示时长warning目标，**没有另一个10秒硬上限**；9CPS仍只warning，
-不能为达标破坏完整语块。S34接受中文自然分块优先，不要求逐cue中英语义严格对应；S19
-可独立一cue或逗号两cue，S20独立一cue。英文实际2×42、中文一逻辑行、完整文本/词覆盖、
-源锚点、非重叠、section/speaker/null、媒体末尾与最多500ms总延长等硬门禁保留。
+已实现并交付诊断候选的技术样片，不是整体语义/出版质量通过。policy typed v8、实际Stanza 46次/165 chunks与cached v9完整9字段精确一致；最后完整离线2873 / 7，源词/时间不改。真实初译/编辑后166 cue，三SRT与623秒成片同一权威稿；同/新进程五阶段复用0昂贵调用/0阶段改写，未重跑ASR。
+全97文本复审确认s16/s18/s88保好、s60旧短尾已由编辑修复；仍有c69中文每天提前4042ms等残余，不能由技术门禁或warning数签认语义。负责人只目视18抽帧（非全部cue/连续播放），未核听。c162双破折号跨视觉行拆开属rendering，不改本模块源语边界。
+本段仅为所有冻结实验/真实运行/复用证据完成后获批的文档状态同步；生产.py、测试、模型、权威稿与样式均不改，不回签旧manifest的代码快照身份。下面保留分轮实现依据；当前结论以本段及NB-12最新记录为准。
 
-精确通用算法和v3公共profile已冻结，由子开发agent实施；负责人只拆解/审查/验收不编码。
-[SP-13](../../docs/archive/tasks/SP-13-candidate-v3-pause-planner.md)核心技术已accepted，完整离线
-**1395 passed / 5 deselected**，负责人独立复跑且三个domain源码指纹一致。规则/边界/planner
-定向184 passed，包含独立全路径暴力oracle、非贪心与候选顺序扰动，不以测试代替语义验收。
-[SP-14](../../docs/archive/tasks/SP-14-candidate-v3-contracts.md)提供契约/跨层接入；
-[SP-15](../../docs/archive/tasks/SP-15-candidate-v3-comparison.md)隔离真实集成/全97句对照已完成负责人验收。
-真实163 cues生成→复用及负责人独立零写复用通过，四方数据及六份手工审读表独立重算字节一致。
-中文非停顿cut0、短cue0，中文长度/7秒/CPS告警81/9/18；33句中文偏好23满足/4允许/5部分/
-1未满足，双语节奏18/2/12/1。S17/S22/S48/S74/S88/S94等残余明确披露，不建议质量定版，
-也不是音画/像素/出版签字通过。旧v1/v2/153参考均不覆盖，不重跑ASR/translation。
-详见[本轮报告](../../docs/reviews/2026-10-23-cue-candidate-v3.md)。
+## 英文源语 chunking
 
-- 当前默认profile为`netflix-audio-gap.zh-priority.v3`，算法`bilingual-pause-dp.v3`，边界
-  `chinese-pause-closed.v3`，成本`d39-pause-rhythm-rational.v3`；计数/词典/视觉codec仍沿v2。
-  v3用`chinese_target_half_units=32`与`target_duration_ms=7000`明确软目标；旧v1/v2精确shape/hash
-  可读且原样回写，不注入新字段，与当前规则不符的旧输出不能静默复用或覆盖。
-- 中文只可在完整停顿组后或句末切：中文/ASCII逗号、顿号、分号、冒号、句号/问叹号、完整
-  省略号、em/en dash、重复hyphen组。单hyphen、Latin词内、组合序列、数字/Latin内部句点、
-  数字内部comma/colon不可切。停顿/闭引号右括号/空格可交错成组，整组归前块；不把外逗号
-  留给下一cue。纯helper为`chinese_pause_boundaries()`；没有非标点应急fallback。
-- 完整路径固定九层字典序：内部中文分号跨越→局部词/专名/数字单位/英文function-word悬挂
-  →最终过短cue→跨句边界→中文节奏→英文无标点word切口→比例偏差→word-gap弱罚→完整断点。
-  中文节奏为`Σ[1+(2*max(0,h−32)/32)^2]`（h为实际完整正文半单位），自含每cue切换成本1。
-  20/23单位整句不因16而必拆，长的有可选逗号时可分块；这不是24或其他新硬容量。
-  分号为软首项，不可切时允许保留并定位warning。9CPS/7秒均不进入DP成本，不为达标破坏语块。
-- 跨句仅救援第一fragment原始<834ms且合法单独延长后仍过短的情况；所有后继fragment必须
-  完整消费其原句中英，不偷下一句开头。后继可非短句；原每gap<500ms、section/known-speaker
-  集合/null与英文实际2×42门禁保留。可延长至834ms则不跨句，CPS本身不赋予合并资格。
-- 新warning为`reading.chinese_length`（half_units/target_half_units）、`timing.target_duration`
-  （最终显示duration_ms/target_duration_ms）及`planning.strong_pause_retained`（semicolon_count），
-  均带cue/sentence定位并在复用时重算；summary schema不变。16/7秒可超，仍只能共用最多500ms
-  延长且不得越媒体末尾/下一源词。无合法pause-only/英文2×42完整路径时受控失败，不改字/序/时间。
-- 规则是版本化启发式，不保证agent语义选择；S34等固定译序与共享单调时间轴的局部双语
-  不同步仍需报告。真实比较前不因看到样本而调成本，不把少cue或测试全绿视为出版质量通过。
+- NB-12 / ADR-0013 已实现并技术交付（质量未过）：英文 Unicode code points 含空格/标点，项目逻辑容量84字符/cue、20 CPS、834–7000ms；显示换行/字号/像素仍归 rendering，不新增单行门禁。当前代码及定向测试不代表全97句/未见集/新样片质量已通过。
+- 只容量或最长时长违规触发完整句 Stanza 与统一DP；逗号不独立先试，数字逗号及已知最小保护不切。CPS/超短本身不触发新裁切；不可解保留整句及真实warning，不删词或借时间。
+- 适配器保存有类型边界与半开结构跨度，domain局部计费：强依附/混接与<250ms工程闪现为高影响、一般结构单列，再比较超短数量/缺口、普通边界等级（未知默认2）、CPS负担、cue数、有条件帧停顿、相邻字符节奏与贴顶风险，最后稳定offset。诊断多标签按每个实际cut及其左右cue表现最高级收费一次，不按单cue全max合并不同cut，也不全局set重复/漏计。
+- objective-v1四组固定源实验后，负责人已授权将US作为唯一生产目标：未知ordinary回普通2、普通语法等级先于CPS，policy为`english-typed-cue-dp.v4`；ordered `SCORE_FIELDS`及其policy身份是报告字段顺序的唯一来源。不提供运行时B/U/S/US分支；旧实验仅由测试侧冻结源码重放。此选择不代表问句核心、名词附着等残余或整体源语质量通过，尚未放行真实provider/新样片。
+- US实现已在独立`production-us-proof-v1`精确等于冻结objective US的全部非policy字段、实际指标及有序评分，证明不等于源语质量通过。随后独立CF/question阶段已落地：`clause.interrogative`为低档、`noun.clause`为一般结构，policy/ranking为typed v5，US字段顺序/阈值不变；adapter四guards及类型契约已定向/完整离线验证，实际97句文本质量仍待独立审读，不新增全部名词of硬保护。
+- CF最终完整question guard已离线验证并完成独立comparison-v5回放，整体质量仍未通过。随后另开NomOf软附着：NP/NML/WHNP/QP下有名词/数量/WH头或all/most/some量词的直接of-PP标`attachment.nominal-of`一般档，policy/ranking typed v6；不删候选/扩硬保护、不改VP prep-of/非of PP，不混scope/短ADVP。US有序字段、排序与阈值不变，本轮实际分组质量待v6验证。
+- v6后局部scope/小单位五项已实现为typed v7：最小no-matter-WH核心由adapter hard护，attachment.coordination/scope/frequency/temporal四tag为一般soft。仅获批三项ADVP、NP/QP量词、限定times NP、数量时间+from now结构；US字段/向量/阈值不变。2026-11-15稳定完整离线2795 / 7及comparison-v7已留证，负责人确认no matter what/virtually all改善，但are|not related与currently|exist仍阻断源语质量，不能以mapping/pytest通过替代文本验收。
+- v7复审后仅授权adapter-only两类最小predicate core：同VP copular be经simple RB/纯RB ADVP到ADJP起首直接JJ*（ADJP内仅同类局部副词前缀），hard止首adj、不递归/跨标点/CC/PP/clause/PRN；已确认VP补语的无marker单子S/SBAR纯wrapper链，末端S无NP/旧S，单叶ADVP紧接VP首直接VB*，hard仅adverb+verb。独立句、if/WH/question/supplement、长插入ADVP及非be负例保留；domain/tag/policy typed v7不变，adapter protection/ranking身份独立升级，实际编排与样片的显式bundle verify绑定当前identity。完成稳定全套/独立comparison-v8与97句复审前不放行provider/新渲染，不扩大say|five或合法长PP取舍。
+- adapter-only两predicate core已完整离线2848 / 7并完成comparison-v8，源语仍因related|to等未过；随后仅授权ADJP直接JJ/JJR/JJS head后的直接PP beforePP标attachment.adjectival一般soft，policy/ranking为typed v8。不跨comma/CC/clause/PRN、不借深ADJP/其它祖先head，不影响VP/NP-owned PP或无adj头，不新增hard；长PP容量需要时可切。US有序字段/阈值与源词/时间不变，稳定全套及独立comparison-v9/全97复审前不放provider；say|five及尾PP780ms是真实披露取舍，不扩本片。
+- DP状态(first_offset, previous_first_offset)保留上一cue范围，正确计算左右cue根因与相邻字符差；它只是节奏代理，实际时长/CPS落差另报。旧窄三块候选已含统一DP，撤下其独立gap择优分支；短cue救援须严格改善同一完整分组目标（含左右外邻居），不为帧间隔拆坏结构。
+- 实际PTS停顿工程档0–3帧绝对中性、4–8收益1、9+收益2，结构适合且罚分同档才参与，单切点总收益封顶2。相对log1p帧median/MAD仅原句内>=8个有效gap且MAD>0、z初档2/3；跨句gap只有固定档，救援沿原句统计，不改成全片MAD。未核听不推断呼吸/强调，2秒不是修辞识别器。
+- 合并四项指标全达标，不能跨 section、不同已知 speaker 或经 null 桥接；跨原句只合完整原句且 gap <500ms。
+  合格候选与原分组按同目标完整比较，严格改善才采纳，稳定offset决胜；未解警告不掩盖。保留每个源词与声学锚点。
+- Stanza 以精确 token 字符跨度映射到 canonical word，不在词内切，不用辅助编辑标记评分。
+  已分析句 ID 和可保护范围进入公开结果；缺模型、映射不确定、实际时间轴错误均失败，不 fallback。
+- 模型固定 Stanza 1.11.0 与 ELECTRA-large constituency；显式准备：
+  `PYTHONPATH=src .venv/bin/python -m srt_processing.infrastructure.prepare_stanza <bundle>`。
+  跟踪的 model lock 固定处理器与依赖文件 SHA-256，正式用例只读已准备模型，不联网。
+- 使用实际 decoded video PTS 保留两帧；只读估算最多可借 500ms 且不越 7 秒、媒体末尾或下一源词。
+  缺帧相邻块估算 0。估算永不改变基本窗；中文 16 单位是独立软目标，不把建议当交付门禁。
 
-## 2026-10-22 用户授权候选v2（技术验证通过，质量待审阅）
+## 导出、分层与复用
 
-用户要求先修一版并逐句对照SP-09的153-cue独立agent稿，再决定最终策略。候选约定见
-[SP-10](../../docs/archive/tasks/SP-10-candidate-v2-rules.md)、[SP-11](../../docs/archive/tasks/SP-11-candidate-v2-projection.md)、
-[SP-12](../../docs/archive/tasks/SP-12-candidate-v2-comparison.md)。本节覆盖下文v1的一行英文/半宽Latin及D39旧规则，
-下文保留的242-cue技术验收是历史v1事实，不是候选v2已通过证明。
-
-候选代码已通过完整离线1329 passed / 5 deselected；隔离CNBC224 cues真实生成与复用通过，
-负责人独立复用/三方重算/97句审读均已进行。旧正式33文件与SP-09的139份文件未变，
-但短cue9、中文CPS新口径17及s30/s32等语义回归明确保留；这不是内容质量或最终策略通过。
-旧规范目录保留v1输出，当前代码直接对其运行旧sample_runner会受控冲突。候选复跑使用
-`tests.srt_processing.candidate_runner`和唯一新结果/比较路径，不能覆盖旧资产。
-
-- 中文仍一行16单位；中文内English word计1，词内撇号/连字符保留，数字/其他标点沿旧计数，空白0。
-- 英文最多两行，每行42；必须存在word边界的合法排布，不以总量84替代逐行校验。
-- 逻辑plan仍无视觉lines；英文/双语SRT采用同一确定性文本行预算换行，不宣称字体/像素排版通过。
-- 固定本地jieba词典、HMM=False，版本/hash/mode进入profile；IO在adapter，domain消费span，不联网或fallback。
-- Latin词/成组标点保护及中文分词/专名/数字单位质量信号、新D39顺序均版本化；语义重排残余仍须报告。
-- 旧v1 profile/codec形状仍可读且原样回写，但与新身份冲突；不自动覆盖旧正式工件。仅独立实验工作区生成。
-- 不重跑上游、不重译/重排/改时间，原覆盖/时间/speaker/section/合并约束不变。最终规则取舍待用户审阅。
-
-## 模块定位与当前状态
-
-`srt_processing` 负责从已验证的英文词级 alignment 与整句中文翻译生成统一双语 cue plan，
-再投影为 SRT；不为 translation 准备 SRT 文本单元。
-
-截至 2026-10-21 10:11 CST，公共契约、输入门禁、确定性 planner、ffprobe/pysubs2/store
-适配器及 manifest-last workflow 已实现，SP-01..07 已通过负责人审查、跨层/对抗验收与
-完整离线套件（1220 passed / 5 deselected）。正式决策见
-`docs/archive/decisions/0003-srt-processing-input-boundary.md`（ADR-0003）。历史缺译文阻断已由用户
-授权的 SP-08A 解决，正式工件已持久保存。CNBC 双 section 真实技术集成生成242 cues，
-`succeeded → reused` 后独立新进程再次 `reused → reused`；六输出bytes/mtime不变、0写入，
-19份上游文件不变。负责人/agent内容审读已完成；SP-08已由负责人完成最终文档验收并标记accepted。
-
-**上述不是人类签字、语义对齐或出版级字幕质量通过，未观看音画或做像素/ASS/烧录验收。**
-c3/c4人物地名错位、c183“风/险”语义提前、c142–147“认/为”及破折号拆分、中文栏英文专名
-拆分等比例/应急限制均保留，具体证据见
-[SP-08](../../docs/archive/tasks/SP-08-real-sample-and-final-status.md)。不宣称全片字幕质量过关。
-
-## 已实现入口与运行边界
-
-### 2026-10-22 历史候选v2（SP-10/11；当前冲突规则以上节v3为准）
-
-用户授权在不重译、重排或修改词时间的前提下修复一版，再与冻结153-cue参考逐句比较。
-该轮默认profile为`netflix-audio-gap.zh-priority.v2`，算法/计数/边界/成本版本与hash均已改变；
-上文242-cue真实验收是历史v1记录，不代表本候选已获出版级或最终产品质量认可。
-
-- 中文一行16单位；每个完整Latin英文word计1，Coca-Cola/See's等词内连字/撇号保留；数字与
-  其他标点沿旧规则，空格0。容量、中文CPS、合并资格与物化统一用完整实际正文计数，不能
-  将非加性word计数错误分摊到每个字符或相加跨fragment计数。
-- 英文最多2行、每行42非空白计数；完整word超过42受控失败，总量<=84仍须确实可按word
-  边界放进两行。纯`wrap_english_text()`共用于规划、codec和回读expected；选择合法均衡断点
-  是固定预算排版，不是句法/像素换行。plan仍只有原逻辑正文，绝不保存lines。
-- 本地`jieba==0.42.1`随包dict.txt SHA256为
-  `7197c3211ddd98962b036cdf40324d1ea2bfaa12bd028e68faa70111a88e12a8`，固定default/HMM=False。
-  包版、字典hash和mode进入profile；adapter只加载已核验bytes，不使用全局变更或/tmp缓存，
-  缺依赖/字典错误不fallback。domain只接收完整句级span分区，workflow生成/复用均核验身份。
-- Latin词内、组合序列、成组破折号/省略号不可切；jieba词内、数字单位、英文专名/紧密短语
-  等是软保护。长词或词典误分仍保留高代价应急路径，不把词法识别说成语义证明。
-- 候选字典序为：局部词/专名/数字单位断裂数→普通应急数→过短数→中文CPS超额→跨句边界数
-  →cue数→累计比例偏差→完整断点序列。微小比例改善不再压过切换数；少cue仍不等于语义正确。
-- 7秒、834ms软目标、500ms共享延长、原始gap单次分类、section/speaker/null与跨句资格不变。
-  原v1正式工件和冻结参考只读，旧身份不能按v2静默复用/覆盖；新候选在隔离workspace生成。
-
-开发侧完整离线复验为1329 passed / 5 deselected；候选运行规则已冻结供SP-12独立比较。
-不以这一测试结果或尚未完成的比较宣称全部97句质量通过。
-
-- 公共接口为 `SrtProcessingCommand(asset_id, transcription_manifest_path,
-  translation_manifest_path, overwrite=False)` 和 `SrtProcessingCommandHandler.handle()`；
-  outcome 区分 `succeeded/reused/failed`，返回六份规范路径、cue/warning 数与受控错误文案。
-- `infrastructure.build_srt_processing_handler()` 显式组装本地 adapter，也允许注入
-  store/probe/codec/clock 供离线测试和验收观测。构造过程不探测视频；没有 CLI 或端到端入口。
-- 复用重新验证五项输入、全部输出证据、规则/profile/media/probe/codec 身份、plan 硬 QA、
-  三份投影读回及报告重算；不重新规划、调用 clock 或改写正式文件。
-- 五份正文/报告先全部同文件系统暂存并回读 QA，再逐个原子发布，成功 manifest 最后发布。
-  保留失败暂存文件与旧 manifest，不自动清理或回滚；混合代次通过完整证据校验拒绝接受。
-- 默认 artifact conflict 完全只读；输入/生成失败也不能覆盖已有本阶段输出或成功 report。
-  只有六份正式输出全不存在，或调用方显式 overwrite，才尽力写 failed report；写入失败不掩盖原错。
-- 单资产并发、checkpoint、ASR/翻译重跑、视觉排版和渲染均不属于本模块。
-- `PYTHONPATH=src .venv/bin/python -m tests.srt_processing.sample_runner --run` 是显式本地样本验收入口，只消费现有
-  canonical 工件，不下载或补跑上游；不是 CLI 或全管线入口。CNBC正式输入及六份字幕输出
-  已保留在 `output/transcription-integration/cnbc_2000_morning/`，该目录是历史v1输出；当前v2直接
-  运行会受控冲突，候选改用上文独立workspace/runner验证复用，仍不需ASR/translation或其他
-  模块live测试；完整离线pytest门槛仍需保留。
-- SP-08A是用户明确授权的样本准备例外：只通过既有Codex CLI translation生成两section正式
-  译文，不改生产实现/配置，不重跑ASR。SRT workflow和本地字幕入口仍完全不调用provider。
-
-## 职责
-
-- 分别验证 transcription/translation manifest 与正式工件，再交叉校验 source alignment SHA-256。
-- 验证规范视频与 transcription 同源，由 ffprobe adapter 获取平均帧率和媒体时长。
-- 使用本地确定性动态规划生成中英单调比例 cue；中文主导，禁止 LLM、翻译 provider 和重译。
-- 规划 cue 拆分、受限跨句合并、字符容量与结束时间调整，不修改上游 word/sentence/译文。
-- 以 `subtitle_plan.json` 为唯一权威字幕工件，固定投影 English/Chinese/Bilingual 三份 SRT。
-- 三份共用 cue 数量与时间，生成后重新解析并对照 plan；编号是最终 cue 的顺序，不保持旧 cue 切分。
-- 产出独立 report 和 manifest，使用 manifest 驱动复用；冲突需显式 overwrite，无 checkpoint。
-
-## 核心规划与时间规则（v1/v2历史；当前冲突规则以上节v3为准）
-
-- profile 是代码内版本化常量；当前候选英文总预算84但须满足2x42实际word排布，中文容量16。
-  中文Latin word=1，数字/半角标点保持半宽，空格不计；英文仍逐普通非空白字符计数。
-- 中文9 CPS主导优化和延长，英文17 CPS只报告。所有 CPS 超标均只 warning，无绝对 CPS 硬上限。
-- 最短834ms，先尝试合法合并再延长，仍不足 warning；最大7000ms与字符容量是硬门禁。
-- 禁止跨 section，cue 内非空 speaker 标签至多一种；允许 null/null、已知/null，保留原 null。
-  不能通过 `BUFFETT -> null -> MUNGER` 间接合并不同已知 speaker。
-- 跨句候选要求至少一个单元原始过短或中文 CPS 超目标，每个原始句间停顿<500ms，合并后合法。
-- 开始锚定首词，结束可延长，但最短时长/CPS/gap共用最后一个源词结束后最多500ms的总额度。
-- gap 按调整前原始值分类；长 gap 不为美化而延长，但可为可读性延长。800ms延长500ms后剩
-  300ms合法，不二次收紧。短 gap 尝试收紧至两帧，做不到 warning；0～两帧且不重叠则保留。
-- 重叠是硬时间轴错误，不能作为 gap 美化处理；不得截掉讲话来腾两帧间隔或突破视频/硬边界。
-- ffprobe平均帧率只作近似并警告；word间隙不宣称静音。禁止读取transcription私有VAD或检测镜头。
-
-## 视觉与输出边界
-
-- 字符容量与本候选固定英文2x42的word边界换行归本模块；字体/字号、画面像素排版、ASS与
-  烧录归`subtitle_rendering`，不把固定计数换行当作视觉适配证明。
-- plan保存逻辑中英正文、word/中文字符范围、片段speaker和时间方法，不保存视觉lines数组或findings。
-- 候选英文SRT按同一纯函数输出1或2行；中文保持一逻辑行；双语中文在上，后接1或2行英文。
-  三份共用cue/时间；plan不写入导出换行，不能从SRT行数反推权威语言或范围。
-- speaker与section标题不显示；无样式标签；UTF-8无BOM、LF、末尾换行。
-- `pysubs2`只在adapter出现，负责读写与回读验证；已锁`pysubs2==1.8.1`以兼容Python3.11。
-- rendering消费公共plan，不从SRT反推权威数据；findings放report，方法放plan，执行时间放manifest。
-
-## 分层规则
-
-- `domain/`：双语片段/cue/plan、profile、finding及纯断点、DP、合并、时间调整、容量和覆盖规则。
-- `application/`：输入门禁、workflow、复用、投影编排、失败与manifest-last发布；只依赖端口。
-- `infrastructure/`：ffprobe、pysubs2、文件/指纹和原子写入适配器，外部调用可注入fake。
-- `interfaces/`：command/outcome/handler及摘要，不泄漏pysubs2对象，不持有字幕业务规则。
-- 公共plan/manifest/report DTO、工件类型及规范文件名由 `archive_core` 定义。
-- 禁止跨模块import transcription/translation内部实现；仅消费公共契约。
-
-## 验证与发布
-
-- 当前v3硬门禁包括身份/指纹、完整文本与word覆盖、无错配/重叠/越界、英文实际2×42、
-  中文停顿边界和原始合并资格、投影回读一致；中文16/显示7秒/CPS是告警目标而非硬门禁。
-- 相同输入、profile、算法与工具版本的plan/SRT应字节一致；未知/损坏/过期工件不能因存在而跳过。
-- 全部临时输出QA后逐文件原子替换，成功manifest最后写；不宣称多文件整体事务。
-- 下游验证整套输出证据，混合代次不能因旧成功manifest仍存在而被接受；失败不静默清理资产。
-- 默认测试使用fake store/probe/process，不联网、不运行ffprobe或模型；落实ADR的gap与speaker回归矩阵。
-- 当前实现状态变化时在同一改动更新本文件；只有完整离线套件通过才可声明实现完成。
+- domain 只计算纯分组、指标和只读预算；application 验证源链及发布；infrastructure 持有
+  Stanza/pysubs2、本地文件能力；interfaces 暴露 SourceChunkingCommand、SrtProcessingCommand、
+  显式 factory 和只读 verify。
+- 导出仍用锁定 pysubs2 1.8.1，逐cue回读检查精确文本、时间、编号；不得把上游软指标升级为
+  硬门禁。文本不可精确序列化、词覆盖/来源/越界/实际重叠错误必须失败。
+- 工作区由 archive_core 定义。manifest-last；占用的部分、损坏、混合代次只读冲突，无兼容 loader。
+  成功复用重新验证严格 DTO、字节、hash、策略和报告；不运行句法模型，不改写任何正式输出。
+- 模块只保留隔离单元/纯契约；真实FS/codec/组装测试归 orchestration/integration。历史候选
+  算法及 runner 已退役，归档证据不代表当前样片验证。真实完整运行见 NB-08。

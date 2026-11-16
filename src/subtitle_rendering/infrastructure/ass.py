@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pysubs2
 
-from archive_core.interfaces import ASS_SERIALIZATION_VERSION, SubtitlePlanDTO, SubtitleRenderPlanDTO
+from archive_core.interfaces import ASS_SERIALIZATION_VERSION, FinalBilingualDraftDTO, SubtitleRenderPlanDTO
 
 
 WORD_JOINER = "\u2060"
@@ -49,7 +49,7 @@ def _english_override(plan: SubtitleRenderPlanDTO) -> str:
     return "{\\fs" + str(plan.scaled_style.english_font_size) + "\\1c" + plan.profile.english.primary_color + "&}"
 
 
-def _file(plan: SubtitleRenderPlanDTO, source: SubtitlePlanDTO) -> pysubs2.SSAFile:
+def _file(plan: SubtitleRenderPlanDTO, source: FinalBilingualDraftDTO) -> pysubs2.SSAFile:
     plan.validate_against_subtitle_plan(source)
     if plan.ass_serialization_version != ASS_SERIALIZATION_VERSION:
         raise AssGenerationError("The ASS plain-text serialization identity is unsupported.")
@@ -83,7 +83,7 @@ class Pysubs2AssCodec:
     version = ASS_SERIALIZATION_VERSION
     library_version = pysubs2.__version__
 
-    def encode(self, plan: SubtitleRenderPlanDTO, source: SubtitlePlanDTO) -> bytes:
+    def encode(self, plan: SubtitleRenderPlanDTO, source: FinalBilingualDraftDTO) -> bytes:
         try:
             data = _file(plan, source).to_string("ass").encode("utf-8")
             self.validate(data, plan, source)
@@ -93,7 +93,7 @@ class Pysubs2AssCodec:
         except (ValueError, TypeError, KeyError, OverflowError) as error:
             raise AssGenerationError("The canonical ASS could not be generated.") from error
 
-    def validate(self, data: bytes, plan: SubtitleRenderPlanDTO, source: SubtitlePlanDTO) -> None:
+    def validate(self, data: bytes, plan: SubtitleRenderPlanDTO, source: FinalBilingualDraftDTO) -> None:
         try:
             if not isinstance(data, bytes):
                 raise AssGenerationError("ASS validation requires canonical UTF-8 bytes.")

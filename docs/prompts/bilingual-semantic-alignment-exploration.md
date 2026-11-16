@@ -17,7 +17,7 @@
 - `docs/archive/decisions/0003-srt-processing-input-boundary.md`，特别v3修订及其质量限制；
 - `docs/decisions/0006-subtitle-rendering-ass-and-burn-in.md`；
 - `docs/archive/tasks/SP-09-agent-reference-evaluation.md`、SP-13/14/15及其链接报告；
-- `docs/tasks/SR-07-real-sample-acceptance.md`。
+- `docs/archive/tasks/SR-07-real-sample-acceptance.md`。
 
 归档表示实现/实验任务已经结束，不表示其质量缺陷消失或公共契约已自动失效。历史agent参考
 不是golden。不要先读旧planner/参考切法再把其结果包装成“GPT独立语义审阅”。

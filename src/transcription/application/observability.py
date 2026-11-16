@@ -244,6 +244,26 @@ class TranscriptionReport:
             data["failure_reason"] = self.failure_reason
         return data
 
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "TranscriptionReport":
+        required = {"schema_version", "asset_id", "status", "counts", "findings", "qa"}
+        if not isinstance(data, Mapping) or set(data) not in (required, required | {"failure_reason"}):
+            raise ValueError("transcription report fields do not match the current schema")
+        if data["schema_version"] != REPORT_SCHEMA_VERSION:
+            raise ValueError("unsupported transcription report schema")
+        _require_non_empty_string(data["asset_id"], "asset_id")
+        counts = data["counts"]
+        if not isinstance(counts, Mapping) or any(not isinstance(key, str) or type(value) is not int or value < 0 for key, value in counts.items()):
+            raise ValueError("transcription report counts are invalid")
+        findings = tuple(TranscriptionEvent(**{**entry, "code": EventCode(entry["code"]),
+                                               "severity": EventSeverity(entry["severity"])})
+                         for entry in data["findings"])
+        if any(item.asset_id != data["asset_id"] or item.severity not in {EventSeverity.WARNING, EventSeverity.ERROR}
+               for item in findings):
+            raise ValueError("transcription report finding is not bound to its asset")
+        return cls(data["asset_id"], ReportStatus(data["status"]), dict(counts), findings,
+                   tuple(QaResult(**entry) for entry in data["qa"]), data.get("failure_reason"))
+
 
 class TranscriptionReportAggregator:
     """Aggregate report counters and actionable findings from emitted events."""

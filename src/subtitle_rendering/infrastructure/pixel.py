@@ -7,7 +7,7 @@ from PIL import Image, ImageChops
 
 from archive_core.interfaces import (
     RenderBoundsDTO, RenderCueDTO, RenderFontIdentityDTO, RenderPixelResultDTO,
-    SubtitlePlanDTO, SubtitleRenderPlanDTO,
+    FinalBilingualDraftDTO, SubtitleRenderPlanDTO,
 )
 
 from .ass import AssGenerationError, Pysubs2AssCodec
@@ -107,7 +107,7 @@ def validate_frame(frame, plan: SubtitleRenderPlanDTO, cue: RenderCueDTO,
                                 bounds, expected_count, True, True)
 
 
-def preflight(plan: SubtitleRenderPlanDTO, source: SubtitlePlanDTO, ass_path: str | Path,
+def preflight(plan: SubtitleRenderPlanDTO, source: FinalBilingualDraftDTO, ass_path: str | Path,
               renderer) -> tuple[RenderPixelResultDTO, ...]:
     """Validate staged ASS, then render every cue on an independent transparent canvas."""
     try:

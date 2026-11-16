@@ -1,5 +1,11 @@
 # media_download AGENTS.md
 
+2026-11-06：media_download.interfaces 提供公开download/媒体派生命令与factory。
+派生从已验证的完整父资产按显式时间和章节选择，保父媒体，记录父hash/时间映射、
+子媒体验证及真实PTS；派生AAC是明确裁切行为，非最终渲染的音轨转码。直接资产可同阶段
+产生媒体边界；样本的360p限定不是通用规则。媒体边界验证ffprobe的v:0单流响应及原始duration字符串，
+不接受整数或布尔值。真实网络/文件集成归编排。
+
 ## 模块定位
 
 `media_download` 负责媒体 URL 解析、视频/音频下载工作流，以及下载工件的溯源。

@@ -34,7 +34,8 @@ def _call() -> ProviderCall:
             source_language="en",
             target_language="zh-Hans",
             section=TranslationRequestSection(id="sec1", title="Opening"),
-            items=(TranslationRequestItem(id="s1", text=SOURCE_TEXT),),
+            items=(TranslationRequestItem(id="k1", text=SOURCE_TEXT),),
+            translate_title=True,
         ),
         output_schema=translation_response_schema(),
         max_attempts=3,
@@ -49,7 +50,7 @@ def _completed_response(*, usage=SimpleNamespace(input_tokens=12, output_tokens=
         output_text=json.dumps(
             {
                 "section": {"id": "sec1", "translated_title": "开场"},
-                "items": [{"id": "s1", "translated_text": "完整译文。"}],
+                "items": [{"id": "k1", "translated_text": "完整译文。"}],
             }
         ),
         usage=usage,
@@ -80,11 +81,7 @@ def test_sends_exact_fixed_responses_payload_and_disables_sdk_retries(sdk):
         model="gpt-5.6-sol",
         reasoning={"effort": "high"},
         instructions="Translate without logging this full prompt.",
-        input=(
-            '{"items":[{"id":"s1","text":"A full private source payload."}],'
-            '"section":{"id":"sec1","title":"Opening"},'
-            '"source_language":"en","target_language":"zh-Hans"}'
-        ),
+        input=_call().request.canonical_json(),
         text={
             "format": {
                 "type": "json_schema",
@@ -108,7 +105,7 @@ def test_sends_exact_fixed_responses_payload_and_disables_sdk_retries(sdk):
     assert response.attempt_count == 1
     assert json.loads(canonical_json_bytes(response.output)) == {
         "section": {"id": "sec1", "translated_title": "开场"},
-        "items": [{"id": "s1", "translated_text": "完整译文。"}],
+        "items": [{"id": "k1", "translated_text": "完整译文。"}],
     }
     assert response.usage is not None
     assert response.usage.to_dict() == {"input_tokens": 12, "output_tokens": 7}

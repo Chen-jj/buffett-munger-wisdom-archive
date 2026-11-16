@@ -1,5 +1,17 @@
 # archive_core AGENTS.md
 
+## 2026-11-05 新路径公共契约开发交付（待负责人完整验收）
+
+`interfaces.bilingual` 已定义当前唯一新链路的 SourceChunkPlanDTO、ChunkTranslationResultDTO、
+FinalBilingualDraftDTO、StageManifestDTO，以及严格证据/实际帧PTS/保护跨度/只读预算。
+`interfaces.bilingual_timing` 统一冻结中文混排计数（unicode14-latin-word.v2）、含空格标点的
+英文码点计数、[start,end)实际帧间隔及可借上界。指标warning不由DTO升级为硬错误。
+转录schema已直接替换为transcription.source-alignment.v2，annotations必需序列化且无发音时间。
+新增规范工件及build_pipeline_run_path纯路径函数；不在core运行文件/工具/模型。
+开发过渡期间旧字幕/译文DTO待下游切换后移除，不宣称旧生产路径已替换完毕。
+本片定向325 passed / 1 skipped；完整离线与下游/真实集成尚待负责人与后续切片验收。
+实施直接替换旧版，不留兼容解析器；旧集成产物已按授权清理；后续由编排完整生成，不建设旧格式导入。
+
 ## 模块定位
 
 `archive_core` 持有全仓库共享的领域原语与契约，是其他所有模块都可以安全依赖的基础。
@@ -69,45 +81,18 @@
   prompt/glossary/provider/model/生成参数及本次执行计数和可空 token usage。生成参数是
   provider-neutral 的有限 JSON object，完整绑定 manifest provenance 与 checkpoint identity。
 
-## Subtitle 公共契约
+## 当前 Subtitle 公共契约（2026-11-06）
 
-- `ArtifactType` 统一定义 `subtitle_plan.json`、`bilingual.srt`、
-  `srt_processing_report.json` 与 `srt_processing_manifest.json`；沿用 `english.srt`、
-  `chinese.srt`，不新增路径层级。
-- `archive_core.interfaces` 发布 `subtitle.plan.v1` 的 `SubtitlePlanDTO`、cue/fragment、
-  media/rules/timing DTO。plan 只存逻辑中英正文、顺序 `c1..cN`、原始词/译文字符范围、
-  原 speaker（包括 `null`）、内容指纹和确定性规则身份；不含视觉 lines、finding 或执行时间。
-- `SubtitlePlanDTO.validate_against_inputs(alignment, translation)` 核对公共输入的句子/section、
-  源词与规范化中文范围顺序且恰好覆盖一次、正文重建、speaker 原值和词时间锚点。
-  中文多片段显示正文是各原始范围去首尾 ASCII 空格后直接连接；范围本身仍保留空白。
-- `subtitle_text` 的公共 `normalize_chinese_text()` 使用冻结布局空白表；
-  `character_boundaries()` 使用冻结 Unicode 14 mark 表保护组合标记、variation selector、
-  ZWJ 与 emoji modifier 序列。此边界保护不是完整 Unicode grapheme segmenter。
-  `is_combining_mark()`、`is_layout_whitespace()` 供消费方复用同一固定分类。
-- `srt-processing.report.v1` 保存严格 finding 定位、原始/最终时间、有限 JSON 观察值和固定
-  统计项；成功 report 不得包含 error。`srt-processing.manifest.v1` 只描述成功发布，固定
-  五项输入证据和五项输出证据，所有证据使用规范文件名、正大小和小写 SHA-256。
-- manifest 使用 `SubtitleProfileDTO` 保存完整且冻结的参数，`sha256` 按 UTF-8、
-  `ensure_ascii=False`、`sort_keys=True`、紧凑分隔符序列化计算；rules 必须匹配该参数身份。
-  另显式绑定媒体探测值、ffprobe 版本/配置、pysubs2 1.8.1 与固定 SRT 序列化配置。
-  `SrtProcessingManifestDTO.validate_against_plan()` 核对 plan 的输入指纹、规则、媒体和 cue 数。
-- SP-11 候选 profile `v2` 精确增加 `english_line_capacity`、`english_max_lines` 与中文
-  分词 engine/dictionary SHA-256/mode 三项身份；旧 `v1` 仍按原字段集合严格解析、序列化和
-  计算指纹，不能补默认字段把旧工件伪装为新版本。未知 profile 版本失败。
-- `SubtitleCodecDTO` 候选显式绑定 `serialization_version=word-wrap-english-2x42.v2`；
-  旧版缺该字段的形状仍可精确往返，但不等于候选身份。此扩展不改变 plan/manifest schema，
-  plan 正文仍无换行；英文一/两行和双语中文一行加英文一/两行仅属于 SRT 的计数行预算投影，
-  不代表字体、像素或烧录排版验收。
-- SP-14 候选 profile `v3` 以 `chinese_target_half_units`、`target_duration_ms` 替代旧
-  `chinese_capacity_half_units`、`maximum_duration_ms`，明确中文16与显示7秒仅为软目标；
-  不加入其他硬时长上限。`v1/v2` 仍精确保留原字段集合、指纹和序列化，不补别名或默认字段。
-  英文2×42仍硬限制，中文仍一逻辑行；分词身份和现有codec序列化身份沿用。
-- v3超目标观察值继续通过通用report finding表达，无需升级plan/report/manifest schema：
-  `reading.chinese_length`记录`half_units/target_half_units`，`timing.target_duration`记录
-  最终显示`duration_ms/target_duration_ms`。产生与重算warning是`srt_processing`的职责，
-  本模块仅验证结构，不把16、7秒或9CPS重新解释为公共DTO硬门禁。
-- 上述契约只负责公共结构、文本范围和机械交叉校验。容量、CPS、合并资格、动态规划及结束
-  时间调整业务仍属于 `srt_processing`；本模块不得反向 import 其实现。
+- `archive_core.interfaces.bilingual` 发布独立英文候选、分块初译、权威双语最终稿、
+  已识别保护范围、实际媒体帧、证据及阶段 manifest DTO，拒绝旧形状，不提供兼容分支。
+- `FinalBilingualDraftDTO` 是 SRT/ASS 唯一内容和毫秒权威，中文不要求等于旧译文切片。
+  词覆盖/锚点/时序/来源错误阻断；可读性指标 warning 不改变内容。
+- `archive_core.interfaces.subtitles` 当前仅保存严格 `SrtExportReportDTO`。旧比例 plan、
+  多版本 profile/codec 和 SRT 旧 manifest 已直接替换，不保留生产读取入口。
+- `bilingual_timing` 发布同一版本化计数和实际 decoded frame PTS 的半开区间规则；
+  决策算法仍归阶段模块。Rendering 继续发布独立视觉计划与执行报告，布局和像素 IO 不归 core。
+- 公共渲染计划绑定 `pixel-wrap.v4`（保留中文词边界软择优并保护紧密 `8盎司`/`8000万份`，分词依赖/词典绑定 measurement identity）；复验仅权威中文 cue 原有首码点 U+2026 可出现在
+  首视觉行。ASS 投影间隔告警定位仍绑定关联 cue 原始毫秒，投影证据放诊断。
 
 ## 当前实现状态（2026-10-23 04:07 CST）
 

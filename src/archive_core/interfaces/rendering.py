@@ -14,12 +14,13 @@ from typing import Any, Mapping, Sequence
 
 from archive_core.domain import ArtifactType, AssetId, canonical_filename
 
-from .subtitles import SubtitleCueDTO, SubtitlePlanDTO
+from .bilingual import FinalCueDTO, FinalBilingualDraftDTO
 
 
-SUBTITLE_RENDER_PLAN_SCHEMA_VERSION = "subtitle-rendering.plan.v1"
-SUBTITLE_RENDER_REPORT_SCHEMA_VERSION = "subtitle-rendering.report.v1"
-SUBTITLE_RENDER_MANIFEST_SCHEMA_VERSION = "subtitle-rendering.manifest.v1"
+SUBTITLE_RENDER_PLAN_SCHEMA_VERSION = "subtitle-rendering.plan.v2"
+SUBTITLE_RENDER_REPORT_SCHEMA_VERSION = "subtitle-rendering.report.v2"
+SUBTITLE_RENDER_MANIFEST_SCHEMA_VERSION = "subtitle-rendering.manifest.v2"
+RENDER_LAYOUT_VERSION = "pixel-wrap.v4"
 ASS_TIMING_POLICY = "nearest-centisecond-half-up.v1"
 ASS_SERIALIZATION_VERSION = "bilingual-ass.word-joiner.v1"
 RENDER_ERROR_CATEGORIES = frozenset((
@@ -28,7 +29,7 @@ RENDER_ERROR_CATEGORIES = frozenset((
     "render_validation_failed", "publication_failed", "subtitle_rendering_failed",
 ))
 _INPUT_TYPES = {"srt_processing_manifest": ArtifactType.SRT_PROCESSING_MANIFEST,
-                "subtitle_plan": ArtifactType.SUBTITLE_PLAN, "video": ArtifactType.SOURCE_VIDEO}
+                "subtitle_plan": ArtifactType.FINAL_BILINGUAL_DRAFT, "video": ArtifactType.SOURCE_VIDEO}
 _OUTPUT_TYPES = {"plan": ArtifactType.SUBTITLE_RENDER_PLAN, "ass": ArtifactType.BILINGUAL_ASS,
                  "video": ArtifactType.RENDERED_VIDEO, "report": ArtifactType.SUBTITLE_RENDER_REPORT}
 
@@ -258,7 +259,7 @@ class RenderStreamMappingDTO:
 class RenderProfileDTO:
     name: str = "bilingual-burnin.hiragino-640x360.v1"
     version: str = "v1"
-    layout_version: str = "pixel-wrap.v1"
+    layout_version: str = RENDER_LAYOUT_VERSION
     output_mode: str = "bilingual"
     reference_width: int = 640
     reference_height: int = 360
@@ -279,7 +280,7 @@ class RenderProfileDTO:
 
     def __post_init__(self) -> None:
         _string(self.name, "profile name")
-        if self.version != "v1" or self.layout_version != "pixel-wrap.v1" or self.output_mode != "bilingual":
+        if self.version != "v1" or self.layout_version != RENDER_LAYOUT_VERSION or self.output_mode != "bilingual":
             raise ValueError("unsupported rendering profile identity")
         for name in ("reference_width", "reference_height", "maximum_subtitle_height",
                      "maximum_chinese_lines", "maximum_english_lines", "maximum_total_lines", "alignment"):
@@ -636,6 +637,13 @@ def _offsets(value: object, name: str) -> tuple[int, ...]:
     return result
 
 
+def has_forbidden_leading_ellipsis(line: str, language: str, line_index: int) -> bool:
+    """Only a U+2026 at the start of authoritative Chinese text may start a line."""
+    return line.lstrip().startswith(("…", "...")) and not (
+        language == "chinese" and line_index == 0 and line.startswith("…")
+    )
+
+
 @dataclass(frozen=True)
 class RenderCueDTO:
     id: str
@@ -675,9 +683,9 @@ class RenderCueDTO:
             object.__setattr__(self, f"{language}_lines", lines)
         _typed(self.expected_bounds, RenderBoundsDTO, "expected_bounds")
 
-    def visual_lines(self, source_cue: SubtitleCueDTO) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    def visual_lines(self, source_cue: FinalCueDTO) -> tuple[tuple[str, ...], tuple[str, ...]]:
         """Return Chinese then English slices without deleting even boundary whitespace."""
-        _typed(source_cue, SubtitleCueDTO, "source_cue")
+        _typed(source_cue, FinalCueDTO, "source_cue")
         if (source_cue.id, source_cue.start_ms, source_cue.end_ms) != (self.id, self.start_ms, self.end_ms):
             raise ValueError("render cue must preserve authoritative ID and millisecond times")
         result = []
@@ -692,6 +700,8 @@ class RenderCueDTO:
             lines = tuple(text[start:end] for start, end in zip(boundaries, boundaries[1:]))
             if any(not line.strip() for line in lines) or "".join(lines) != text:
                 raise ValueError("visual lines must exactly reconstruct non-empty source logical text")
+            if any(has_forbidden_leading_ellipsis(line, language, index) for index, line in enumerate(lines)):
+                raise ValueError("visual line must not create or preserve a forbidden leading ellipsis")
             result.append(lines)
         return result[0], result[1]
 
@@ -788,13 +798,13 @@ class SubtitleRenderPlanDTO:
             previous_end, previous_ass_end = cue.end_ms, cue.ass_end_ms
         object.__setattr__(self, "cues", cues)
 
-    def validate_against_subtitle_plan(self, source: SubtitlePlanDTO) -> None:
-        _typed(source, SubtitlePlanDTO, "source subtitle plan")
-        if self.inputs["video"].sha256 != source.video_sha256 or len(self.cues) != len(source.cues):
+    def validate_against_subtitle_plan(self, source: FinalBilingualDraftDTO) -> None:
+        _typed(source, FinalBilingualDraftDTO, "source subtitle plan")
+        if self.inputs["video"].sha256 != source.media.video_sha256 or len(self.cues) != len(source.cues):
             raise ValueError("render plan must match source video fingerprint and cue count")
         for cue, source_cue in zip(self.cues, source.cues):
             cue.visual_lines(source_cue)
-            if cue.ass_end_ms > source.media.usable_duration_ms:
+            if cue.ass_end_ms > source.media.duration_ms:
                 raise ValueError("ASS projection must fit authoritative usable media duration")
 
     def to_dict(self) -> dict[str, Any]:

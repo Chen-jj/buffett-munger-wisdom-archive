@@ -7,7 +7,7 @@ import json
 from .glossary import TranslationGlossary
 
 
-PROMPT_VERSION = "translation.zh-hans.v1"
+PROMPT_VERSION = "translation.contextual-chunks.zh-hans.v5"
 GLOSSARY_PLACEHOLDER = "{{GLOSSARY_JSON}}"
 
 

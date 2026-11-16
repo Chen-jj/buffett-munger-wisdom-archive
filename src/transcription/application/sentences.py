@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Mapping, Sequence
 
@@ -36,6 +36,8 @@ from transcription.domain import (
     is_sentence_terminal,
     select_boundary_signal,
 )
+
+from transcription.domain.editorial import EDITORIAL_POLICY_VERSION, separate_editorial_breaks
 
 from .alignment import ForcedAlignmentResult
 from .audio_asr import (
@@ -434,7 +436,7 @@ class SentenceBoundaryService:
             workspace / canonical_filename(ArtifactType.SOURCE_ALIGNMENT)
         )
         cache_key = _cache_key(
-            "source_alignment.v1",
+            "source_alignment.v2",
             {
                 "sentence_input_sha256": input_sha256,
                 "fusion_mode": "official" if fusion.used_official else "identity",
@@ -442,6 +444,7 @@ class SentenceBoundaryService:
                 "boundary_policy": selected_boundary.to_dict(),
                 "section_policy": selected_section.to_dict(),
                 "chapter_input_sha256": chapters_sha256,
+                "editorial_policy": EDITORIAL_POLICY_VERSION,
             },
         )
         provenance = {
@@ -451,6 +454,7 @@ class SentenceBoundaryService:
             "boundary_policy": selected_boundary.to_dict(),
             "section_policy": selected_section.to_dict(),
             "chapter_input_sha256": chapters_sha256,
+                "editorial_policy": EDITORIAL_POLICY_VERSION,
         }
         cached = self._validated_cache(manifest, output_path, cache_key)
         if cached is not None:
@@ -510,12 +514,22 @@ class SentenceBoundaryService:
                 self._emit_section_publication(
                     asset_id, SectionFallbackReason.NO_DIRECT_CHAPTERS, ()
                 )
+            canonical_words, annotations = separate_editorial_breaks(
+                fusion.words, official_tokens, source=asset_id.source
+            )
+            word_positions = {word.id: index for index, word in enumerate(canonical_words)}
+            canonical_sentences = tuple(
+                replace(sentence, text=reconstruct_sentence_text(canonical_words[
+                    word_positions[sentence.first_word_id]:word_positions[sentence.last_word_id] + 1
+                ])) for sentence in plan.sentences
+            )
             alignment = SourceAlignmentDTO(
                 language="en",
                 audio_duration_ms=aligned.artifact.audio_duration_ms,
-                words=fusion.words,
-                sentences=plan.sentences,
+                words=canonical_words,
+                sentences=canonical_sentences,
                 sections=sections,
+                annotations=annotations,
             )
             # Exercise the public deserializer as the final pre-publication gate.
             if SourceAlignmentDTO.from_dict(alignment.to_dict()) != alignment:

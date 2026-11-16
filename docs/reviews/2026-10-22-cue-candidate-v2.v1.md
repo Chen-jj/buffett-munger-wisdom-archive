@@ -6,7 +6,7 @@
 
 ## 1. 先看全部97句，而非只看总cue数
 
-**主交付：** [全部97句易读Markdown](../../output/cue-evaluation/20261022-candidate-v2/review_v2/all_sentences.md)。每句包含：旧242、新224、原153的所有cue中英正文、英文实际v2换行、词ID/中文offset、时间、关联跨句组、硬兼容性、人工优/平/劣及具体原因/残余。对应JSONL/TSV和手写原始判断均保留：
+**主交付：** 全部97句易读Markdown（历史产物已授权删除；原路径：`../../output/cue-evaluation/20261022-candidate-v2/review_v2/all_sentences.md`）。每句包含：旧242、新224、原153的所有cue中英正文、英文实际v2换行、词ID/中文offset、时间、关联跨句组、硬兼容性、人工优/平/劣及具体原因/残余。对应JSONL/TSV和手写原始判断均保留：
 
 - `output/cue-evaluation/20261022-candidate-v2/manual_notes.v2.{txt,jsonl}`：97条逐句手写判断；v1保留，v2把s90明确改为词完整/谓语滞后相抵，不判整体优。
 - `review_v2/all_sentences.{md,jsonl,tsv}`、`review_v2/summary.json`：机械拼接证据，不自动推断语义。

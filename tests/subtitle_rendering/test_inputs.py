@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from subtitle_rendering.application.inputs import RenderingInputError, load_render_inputs, parse_json, validate_english_budget
+from subtitle_rendering.application.inputs import RenderingInputError, load_render_inputs, parse_json
 from tests.subtitle_rendering.workflow_fakes import WorkflowCase, encoded
 
 
@@ -28,7 +28,7 @@ def test_entire_explicit_chain_is_validated_and_snapshotted(chapters, download):
 
 @pytest.mark.parametrize("name", ["video.mp4", "audio.wav", "vad.json", "raw_asr.json", "aligned_asr.json", "transcript_fusion.json",
     "source_alignment.json", "transcription_report.json", "transcription.log", "transcription_manifest.json", "translation_manifest.json",
-    "translation_result.json", "subtitle_plan.json", "english.srt", "chinese.srt", "bilingual.srt", "srt_processing_report.json", "srt_processing_manifest.json"])
+    "translation_result.json", "final_bilingual_draft.json", "english.srt", "chinese.srt", "bilingual.srt", "srt_processing_report.json", "srt_processing_manifest.json"])
 @pytest.mark.parametrize("change", ["missing", "corrupt", "empty"])
 def test_every_explicit_file_is_required_and_hash_checked(name, change):
     case = WorkflowCase()
@@ -102,12 +102,12 @@ def test_signed_record_provenance_links_are_cross_checked(record, field, value):
 
 @pytest.mark.parametrize("name,change", [
     ("translation_manifest.json", lambda d: d.update(asset_id="other:asset:id")),
-    ("translation_manifest.json", lambda d: d["input"].update(sha256="f" * 64)),
+    ("translation_manifest.json", lambda d: d["inputs"]["source_alignment"].update(sha256="f" * 64)),
     ("translation_result.json", lambda d: d.update(source_alignment_sha256="f" * 64)),
-    ("subtitle_plan.json", lambda d: d.update(video_sha256="f" * 64)),
-    ("subtitle_plan.json", lambda d: d["cues"][0].update(english_text="rewritten authoritative text")),
+    ("final_bilingual_draft.json", lambda d: d["media"].update(video_sha256="f" * 64)),
+    ("final_bilingual_draft.json", lambda d: d["cues"][0].update(english_text="rewritten authoritative text")),
     ("srt_processing_report.json", lambda d: d.update(status="failed", error_code="failure")),
-    ("srt_processing_report.json", lambda d: d["summary"].update(extended_cue_count=0)),
+    ("srt_processing_report.json", lambda d: d["summary"].update(cue_count=0)),
     ("source_alignment.json", lambda d: d["words"][0].update(unrecognized=True)),
 ])
 def test_public_dto_and_source_coverage_revalidated_after_outer_resigning(name, change):
@@ -196,24 +196,120 @@ def test_snapshots_rechecked_after_initial_gate():
         inputs.verify_unchanged(case.store)
 
 
-@pytest.mark.parametrize("text", ["a" * 42 + " " + "b" * 42, "a\u0301" * 42 + "\t" + "b" * 42,
-    "a" * 42 + "\u3000" * 20 + "b" * 42, "👩\u200d💻" * 21 + " " + "👍🏽" * 42])
-def test_english_count_uses_frozen_visible_units_and_excludes_spacing(text):
-    validate_english_budget(text, {"english_capacity": 84, "english_line_capacity": 42, "english_max_lines": 2})
+@pytest.mark.parametrize(("text", "over_capacity"), [
+    ("a" * 43, False),
+    ("a" * 39 + " " + "b" * 40, False),
+    ("a" * 85, True),
+    ("a" * 42 + " " + "b" * 42, True),
+])
+def test_upstream_english_capacity_is_warning_not_render_input_budget(text, over_capacity):
+    from dataclasses import replace
+    from tests.support.current_bilingual import source_plan
+    from srt_processing.application.workflow import export_report
+    source = source_plan()
+    source = replace(source, cues=(replace(source.cues[0], english_text=text), source.cues[1]))
+    report = export_report(source)
+    assert any(item["code"] == "english.capacity" and item["severity"] == "warning"
+               for item in report["findings"]) is over_capacity
+    assert report["status"] == "succeeded"
 
 
-@pytest.mark.parametrize("text", ["a" * 43, "a" * 30 + " " + "b" * 30 + " " + "c" * 24])
-def test_english_rejects_single_long_word_and_capacity_with_no_two_line_packing(text):
-    with pytest.raises(ValueError):
-        validate_english_budget(text, {"english_capacity": 84, "english_line_capacity": 42, "english_max_lines": 2})
+def test_english_count_includes_spaces_and_punctuation_in_current_contract():
+    from archive_core.interfaces.bilingual_timing import english_characters
+    assert english_characters("A B.") == 4
 
 
-def test_historical_profile_keeps_own_single_line_budget():
-    with pytest.raises(ValueError):
-        validate_english_budget("a" * 30 + " " + "b" * 30, {"english_capacity": 42})
+def test_valid_asr_only_source_has_no_synthetic_official_fusion():
+    from dataclasses import replace
+    from archive_core.interfaces.transcription import MatchType, TextSource
+    from tests.support.current_bilingual import alignment, populate_current_chain
+    case = WorkflowCase()
+    source = alignment(sections=False)
+    source = replace(source, words=tuple(replace(word, official_token_ids=(), match_type=MatchType.ASR_ONLY, text_source=TextSource.ASR)
+                                        for word in source.words),
+                     sentences=tuple(replace(sentence, text_source=TextSource.ASR) for sentence in source.sentences))
+    case.put("source_alignment.json", source.to_dict())
+    manifest = case.read("transcription_manifest.json")
+    manifest["records"].pop("transcript_fusion")
+    manifest["records"]["source_alignment"].update(size_bytes=case.evidence("source_alignment.json")["size_bytes"],
+                                                    sha256=case.evidence("source_alignment.json")["sha256"])
+    manifest["records"]["source_alignment"]["provenance"]["sentence_input_sha256"] = manifest["records"]["aligned_asr"]["sha256"]
+    case.put("transcription_manifest.json", manifest)
+    populate_current_chain(case)
+    assert load(case).alignment == source
 
 
-def test_real_cnbc_c4_is_94_codepoints_but_within_frozen_visible_word_line_budget():
-    text = "In 1999, Berkshire Hathaway managed to produce a positive gain in net worth of one-half of 1%."
-    assert len(text) == 94
-    validate_english_budget(text, {"english_capacity": 84, "english_line_capacity": 42, "english_max_lines": 2})
+def case_with_many_to_one_fusion(*, interpolated=False, count_overrides=None, maximum_ratio=0.25):
+    from dataclasses import replace
+    from archive_core.interfaces.transcription import MatchType, TimingSource
+    from tests.support.current_bilingual import alignment, populate_current_chain
+
+    case = WorkflowCase()
+    manifest = case.read("transcription_manifest.json")
+    records = manifest["records"]
+
+    def replace_record(name, filename, data):
+        case.put(filename, data)
+        recorded = case.evidence(filename)
+        records[name].update(size_bytes=recorded["size_bytes"], sha256=recorded["sha256"])
+
+    acoustic = case.read("aligned_asr.json")
+    words = acoustic["words"]
+    if interpolated:
+        words[1].update(timing_source="interpolated", alignment_score=None,
+                        left_anchor_id="aw1", right_anchor_id="aw3")
+    last = words[-1]
+    words[-1:] = [
+        {**last, "text": "In", "end_ms": 1450},
+        {**last, "id": "aw4", "raw_word_id": "rw4", "text": "deed.", "start_ms": 1450},
+    ]
+    replace_record("aligned_asr", "aligned_asr.json", acoustic)
+
+    source = alignment()
+    canonical = (
+        replace(source.words[0], asr_word_ids=("aw1",)),
+        replace(source.words[1], asr_word_ids=("aw2",),
+                timing_source=TimingSource.INTERPOLATED if interpolated else TimingSource.ACOUSTIC_ALIGNMENT),
+        replace(source.words[2], asr_word_ids=("aw3", "aw4"), match_type=MatchType.MANY_TO_ONE,
+                timing_source=TimingSource.MERGED_ACOUSTIC_ALIGNMENT),
+    )
+    fusion = case.read("transcript_fusion.json")
+    fusion["aligned_asr_sha256"] = records["aligned_asr"]["sha256"]
+    fusion["words"] = [word.to_dict() for word in canonical]
+    records["transcript_fusion"]["provenance"]["aligned_asr_sha256"] = fusion["aligned_asr_sha256"]
+    replace_record("transcript_fusion", "transcript_fusion.json", fusion)
+    records["source_alignment"]["provenance"]["sentence_input_sha256"] = records["transcript_fusion"]["sha256"]
+    replace_record("source_alignment", "source_alignment.json", replace(source, words=canonical).to_dict())
+
+    report = case.read("transcription_report.json")
+    report["counts"].update(aligned=4 - int(interpolated), interpolated=int(interpolated), many_to_one=1)
+    report["counts"].update(count_overrides or {})
+    replace_record("transcription_report", "transcription_report.json", report)
+    manifest["workflow"]["summary"] = report["counts"]
+    manifest["workflow"]["qa_policy"]["max_interpolated_word_ratio"] = maximum_ratio
+    case.put("transcription_manifest.json", manifest)
+    populate_current_chain(case)
+    return case
+
+
+@pytest.mark.parametrize("interpolated", [False, True])
+def test_forced_alignment_counts_are_not_post_fusion_word_counts(interpolated):
+    case = case_with_many_to_one_fusion(interpolated=interpolated)
+    result = load(case)
+    assert len(case.read("aligned_asr.json")["words"]) == 4
+    assert len(result.alignment.words) == 3
+    assert result.alignment.words[-1].asr_word_ids == ("aw3", "aw4")
+    assert not case.store.writes
+
+
+@pytest.mark.parametrize("overrides,maximum_ratio", [
+    ({"aligned": 3}, 0.25),
+    ({"interpolated": 0}, 0.25),
+    ({}, 0.24),
+])
+def test_resigned_qa_counts_and_interpolation_limit_still_bind_acoustic_evidence(overrides, maximum_ratio):
+    # Use non-interpolated evidence for the first case: three is the incorrect post-fusion count.
+    case = case_with_many_to_one_fusion(interpolated="aligned" not in overrides,
+                                       count_overrides=overrides, maximum_ratio=maximum_ratio)
+    with pytest.raises(RenderingInputError, match="transcription QA summary differs"):
+        load(case)

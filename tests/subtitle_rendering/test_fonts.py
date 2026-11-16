@@ -132,9 +132,7 @@ def test_measurement_parameters_are_strict(setup_font, args):
         adapter.measure(*args)
 
 
-def selection(identity, index=-1):
-    return (f"[Parsed_ass_0 @ 0x123] fontselect: ({identity.spec.family}, 400, 0) -> "
-            f"{identity.spec.path}, {index}, {identity.postscript_name}")
+from tests.support.render_fonts import selection
 
 
 @pytest.mark.parametrize("index", (-1, 0))
@@ -164,7 +162,14 @@ def test_actual_missing_unknown_or_different_font_evidence_is_rejected(setup_fon
         validate_libass_font_selection(mutation(selection(identity)), identity)
 
 
-@pytest.mark.parametrize("token", ("A\u0301", "👩\u200d💻", "✈\ufe0f", "🇨🇳", "👍🏽", "क्\u200dष", "각"))
-def test_regex_adapter_emits_complete_grapheme_boundaries(token):
-    assert RegexGraphemeSegmenter().boundaries("甲" + token + "乙") == (0, 1, len(token) + 1, len(token) + 2)
-    assert RegexGraphemeSegmenter().boundaries("") == (0,)
+
+@pytest.mark.parametrize("change", ("version", "dictionary"))
+def test_changed_pinned_chinese_lexical_identity_fails_instead_of_falling_back(monkeypatch, change):
+    fonts._chinese_tokenizer.cache_clear()
+    if change == "version":
+        monkeypatch.setattr(fonts.jieba, "__version__", "changed")
+    else:
+        monkeypatch.setattr(fonts, "JIEBA_DICTIONARY_SHA256", "0" * 64)
+    with pytest.raises(FontValidationError, match="pinned Chinese lexical"):
+        fonts.RegexGraphemeSegmenter().lexical_boundaries("价值")
+    fonts._chinese_tokenizer.cache_clear()

@@ -9,7 +9,7 @@ from typing import Any, Mapping, Sequence
 from .models import ProviderResponse, ProviderStatus, TranslationRequest
 
 
-RESPONSE_SCHEMA_VERSION = "translation.response.v1"
+RESPONSE_SCHEMA_VERSION = "translation.chunk-response.v1"
 
 TRANSLATION_RESPONSE_JSON_SCHEMA: dict[str, object] = {
     "type": "object",
@@ -140,10 +140,10 @@ def validate_provider_response(
 
     raw_section = output["section"]
     translated_section: TranslatedSection | None
-    if request.section is None:
+    if not request.translate_title:
         if raw_section is not None:
             raise TranslationResponseValidationError(
-                "document request response section must be null"
+                "request without title task requires null response section"
             )
         translated_section = None
     else:
@@ -199,9 +199,10 @@ def validate_provider_response(
                 "response item IDs must exactly match request order and coverage"
             )
         translated_text = raw_item["translated_text"]
-        if not isinstance(translated_text, str) or not translated_text.strip():
+        if (not isinstance(translated_text, str) or not translated_text.strip()
+                or any(character in translated_text for character in "\r\n\x00")):
             raise TranslationResponseValidationError(
-                "translated_text must be a non-blank string"
+                "translated_text must be non-blank logical text"
             )
         translated_items.append(
             TranslatedItem(id=request_item.id, translated_text=translated_text)

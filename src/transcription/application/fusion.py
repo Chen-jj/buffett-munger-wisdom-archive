@@ -462,7 +462,13 @@ def _substitution_is_explicitly_allowed(
         " ".join(normalize_token(asr_word.text, normalization)),
         " ".join(official_token.normalized),
     )
-    return candidate in matching.allowed_substitutions
+    if candidate in matching.allowed_substitutions:
+        return True
+    official_spelling = official_token.text.casefold().replace("’", "'").strip(".,!?;:—")
+    return (
+        "'" in official_spelling
+        and (candidate[0], official_spelling) in matching.allowed_substitutions
+    )
 
 
 def _same_official_context(

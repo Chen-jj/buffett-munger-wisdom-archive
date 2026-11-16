@@ -1,11 +1,23 @@
 # 历史任务图（2026-10-24归档）
 
 本文件保留TA/SP任务线的原始依赖与验收记录，不是当前待办。TA-10仍为superseded而非验收通过。
-本目录另含已验收SR-01..06；其余当前事项见[进行中任务](../../tasks/README.md)。
+本目录另含已验收SR-01..06，以及2026-11-05移入的SR-00/SR-07技术交付与未通过记录。
+现行方案见[任务入口](../../tasks/README.md)，本目录不是待办。
+
+## 2026-11-17归档的NB技术交付/固定实验/诊断
+
+仅按已交付技术记录或已结束的固定实验归档，**不是全局质量通过**；[NB-12](../../tasks/NB-12-chunking-quality-iteration.md)仍为当前质量入口。
+
+- [NB-00实施地图](NB-00-implementation-map.md)、[NB-01公共契约](NB-01-contracts.md)、[NB-02源分组](NB-02-source-chunking.md)、[NB-03/04翻译/编辑迁移](NB-03-04-translation.md)：原始阶段状态/失败/待验保留，后续真实闭环见NB-08/09。
+- [NB-05最终稿导出/渲染](NB-05-final-export-rendering.md)、[NB-06编排](NB-06-orchestration.md)、[NB-07测试盘点](NB-07-test-inventory.md)：技术交付记录；不冒称旧断言全部等价或语义已通过。
+- [NB-08全新真实验收](NB-08-full-fresh-acceptance.md)、[NB-09固定样片迭代](NB-09-editorial-quality-iteration.md)、[NB-09测试映射](NB-09-editorial-test-mapping.md)：实验/技术交付完成，未核听及质量限制仍保留。
+- [NB-10反馈诊断/术语](NB-10-cue-feedback-diagnosis.md)：诊断交付完成，不表示全部反馈或P1～P4已实现。
 
 ## 渲染任务入口
 
-- [ADR-0006 rendering任务图（SR-00）](../../tasks/SR-00-rendering-task-map.md)：本轮负责人拆解、子agent实施与独立验收。用户确认只落实ADR-0006，“两份”为口误。
+- [ADR-0006 rendering任务图（SR-00）](SR-00-rendering-task-map.md)：本轮负责人拆解、子agent实施与独立验收。用户确认只落实ADR-0006，“两份”为口误。
+- [SR-07 技术交付与质量未通过记录](SR-07-real-sample-acceptance.md)。
+- [SR-07 runner 历史设计](SR-07-sample-runner-design.md)：代码已实现，不再作为待实现任务。
 - 下文TA/SP保留历史任务、依赖与验收记录。
 
 # ADR-0004 / ADR-0002 / ADR-0005 implementation task map

@@ -86,7 +86,7 @@ class LocalCheckpointStore:
 
 class LocalTranslationArtifactStore:
     def exists(self, path: str) -> bool:
-        return Path(path).exists()
+        return Path(path).exists() or Path(path).is_symlink()
 
     def size(self, path: str) -> int:
         return Path(path).stat().st_size
@@ -118,30 +118,45 @@ class LocalTranslationArtifactStore:
         result_sha256 = hashlib.sha256(result_bytes).hexdigest()
         manifest_bytes = _json_bytes(manifest_factory(len(result_bytes), result_sha256))
         staged: dict[Path, Path] = {}
-        backups: dict[Path, Path] = {}
-        installed: list[Path] = []
-        try:
-            staged[result] = _stage(result, result_bytes)
-            staged[manifest] = _stage(manifest, manifest_bytes)
-            for target in (result, manifest):
-                if target.exists():
-                    backups[target] = _stage(target, target.read_bytes())
-            for target in (result, manifest):
-                staged[target].replace(target)
-                installed.append(target)
-            return len(result_bytes), result_sha256
-        except Exception:
-            for target in reversed(installed):
-                backup = backups.get(target)
-                if backup is not None and backup.exists():
-                    backup.replace(target)
-                elif target.exists():
-                    target.unlink()
-            raise
-        finally:
-            for temporary in (*staged.values(), *backups.values()):
-                if temporary.exists():
-                    temporary.unlink()
+        # Retain staged files and partial generations on failure. The manifest is last;
+        # it never makes a mixed pair valid, and no automatic cleanup deletes evidence.
+        staged[result] = _stage(result, result_bytes)
+        staged[manifest] = _stage(manifest, manifest_bytes)
+        for target, temporary in staged.items():
+            if json.loads(temporary.read_bytes()) != json.loads(
+                result_bytes if target == result else manifest_bytes
+            ):
+                raise ValueError("staged publication readback differs")
+        for target in (result, manifest):
+            if target.exists() and not overwrite:
+                raise FileExistsError("publication target appeared during staging")
+            staged[target].replace(target)
+        return len(result_bytes), result_sha256
+
+    def publish_json_bundle(self, bodies, manifest_path, manifest_factory, *, output_names, overwrite):
+        from archive_core.interfaces.bilingual import ArtifactEvidenceDTO
+        targets = [Path(path) for path in (*bodies, manifest_path)]
+        if len({path.parent for path in targets}) != 1:
+            raise ValueError("bundle files must share a canonical workspace")
+        if not overwrite and any(path.exists() or path.is_symlink() for path in targets):
+            raise FileExistsError("Refusing to overwrite postprocessing outputs")
+        targets[0].parent.mkdir(parents=True, exist_ok=True)
+        staged, outputs = {}, {}
+        for path, value in bodies.items():
+            data = _json_bytes(value)
+            staged[path] = _stage(Path(path), data)
+            if staged[path].read_bytes() != data:
+                raise ValueError("bundle staged readback differs")
+            outputs[output_names[path]] = ArtifactEvidenceDTO(path, len(data), hashlib.sha256(data).hexdigest())
+        data = _json_bytes(manifest_factory(outputs))
+        staged[manifest_path] = _stage(Path(manifest_path), data)
+        if staged[manifest_path].read_bytes() != data:
+            raise ValueError("manifest staged readback differs")
+        for path, temporary in staged.items():
+            if (Path(path).exists() or Path(path).is_symlink()) and not overwrite:
+                raise FileExistsError("bundle output appeared during staging")
+            temporary.replace(path)
+
 
 
 class SystemSleeper:
@@ -160,30 +175,16 @@ class NullMetadataLogger:
 
 
 def _stage(target: Path, data: bytes) -> Path:
-    temporary: Path | None = None
-    try:
-        with NamedTemporaryFile(
-            "wb",
-            dir=target.parent,
-            prefix=f".{target.name}.",
-            suffix=".tmp",
-            delete=False,
-        ) as stream:
-            stream.write(data)
-            temporary = Path(stream.name)
-        return temporary
-    except Exception:
-        if temporary is not None and temporary.exists():
-            temporary.unlink()
-        raise
+    with NamedTemporaryFile("wb", dir=target.parent, prefix=f".{target.name}.",
+                            suffix=".tmp", delete=False) as stream:
+        stream.write(data)
+        return Path(stream.name)
 
 
 def _atomic_write(target: Path, data: bytes, *, overwrite: bool) -> None:
     if target.exists() and not overwrite:
         raise FileExistsError(f"Refusing to overwrite file: {target}")
     temporary = _stage(target, data)
-    try:
-        temporary.replace(target)
-    finally:
-        if temporary.exists():
-            temporary.unlink()
+    if temporary.read_bytes() != data:
+        raise ValueError("checkpoint staging readback differs")
+    temporary.replace(target)

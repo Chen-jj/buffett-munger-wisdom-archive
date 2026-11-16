@@ -32,7 +32,7 @@ def test_success_has_real_stage_order_and_manifest_last(case):
     upstream = dict(case.store.files)
     result = case.run()
     assert result.status == "succeeded" and result.action == "render"
-    assert result.cue_count == 2 and result.warning_count == 1
+    assert result.cue_count == 2 and result.warning_count == 0
     assert result.command == case.renderer.calls[0][0]
     assert case.clock.calls == 1 and len(case.pixel_calls) == 1
     assert [Path(path).name for op, path in case.store.writes if op == "stage"] == [
@@ -283,3 +283,34 @@ def test_handler_rejects_wrong_command_without_running_workflow(case):
 def test_handler_validates_boolean_flags(case, flag, value):
     result = case.outcome(**{flag: value})
     assert result.error_category == "input_invalid" and not case.store.writes
+
+
+@pytest.mark.parametrize(("timestamps", "expected_code", "expected_count"), [
+    ((1217000, 1250000, 1300000, 1301000), "ass.short_frame_gap", "1"),
+    (None, "ass.frame_gap_unverified", "unverified"),
+])
+def test_ass_projected_gap_warning_reports_original_cue_interval(timestamps, expected_code, expected_count):
+    from types import SimpleNamespace
+
+    from archive_core.interfaces import SubtitleRenderReportDTO
+    from subtitle_rendering.application.workflow import _successful_report
+    from tests.support.current_bilingual import source_plan
+    from tests.support.render_contracts import render_plan, report as fixture_report
+
+    source = source_plan()
+    source = replace(source, media=replace(source.media, frame_timestamps_us=timestamps),
+                     cues=(source.cues[0], replace(source.cues[1], start_ms=1304)))
+    plan = render_plan()
+    plan = replace(plan, cues=(plan.cues[0], replace(plan.cues[1], start_ms=1304, start_delta_ms=-4)))
+    plan.validate_against_subtitle_plan(source)
+
+    # The original [1216, 1304) gap has four PTS; the projected [1220, 1300) has one.
+    inputs = SimpleNamespace(source_plan=source, srt_report={"findings": []})
+    report = _successful_report(inputs, plan, fixture_report().pixel_results)
+    assert report.status == "succeeded" and report.summary.warning_count == 1
+    finding, = report.findings
+    assert finding.code == expected_code and finding.severity == "warning"
+    assert (finding.cue_id, finding.start_ms, finding.end_ms) == ("c1", 100, 1216)
+    assert "[1220, 1300)" in finding.diagnostic
+    assert finding.diagnostic.endswith(expected_count)
+    SubtitleRenderReportDTO.from_dict(report.to_dict()).validate_against_plan(plan)

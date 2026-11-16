@@ -1,0 +1,1008 @@
+{
+  "schema_version": "documentation-relocation-preservation.v1",
+  "date": "2026-11-17 Asia/Shanghai",
+  "scope": "document relocation, local links, truthful navigation/status; no production Python/model/generated asset changes",
+  "authorization": "User explicitly authorized archival and commit/push of all local code/test/document changes; root alone performs git writes. Historical no-commit constraints remain historical. Ignored output/models/media excluded.",
+  "maintained_markdown_scope": [
+    "root/*.md",
+    "docs/**/*.md",
+    "src/**/*.md",
+    "tests/**/*.md"
+  ],
+  "excluded_immutable_or_environment_scopes": [
+    "output/",
+    "input/",
+    ".git/",
+    ".venv/",
+    ".pytest_cache/"
+  ],
+  "local_link_baseline": {
+    "maintained_markdown_files": 113,
+    "local_links": 268,
+    "broken": 0,
+    "frozen_output_preexisting_broken": 110
+  },
+  "retained_active": [
+    {
+      "path": "docs/tasks/NB-12-chunking-quality-iteration.md",
+      "status": "quality_iteration_open_global_semantics_publication_NOT_PASSED"
+    },
+    {
+      "path": "docs/decisions/0006-subtitle-rendering-ass-and-burn-in.md",
+      "status": "overall_rendering_acceptance_open"
+    },
+    {
+      "path": "docs/decisions/0013-typed-chunking-quality-and-regression.md",
+      "status": "quality_iteration_open"
+    }
+  ],
+  "documents": [
+    {
+      "old_path": "docs/decisions/0007-bilingual-semantic-alignment.md",
+      "new_path": "docs/archive/decisions/0007-bilingual-semantic-alignment.md",
+      "classification": "terminated_superseded_unimplemented",
+      "archive_scope": "superseded历史候选，未实施；按被替代路线归档，不冒称技术或质量完成。",
+      "before_sha256": "f595ac98fb644afc583bbeaecabf5274ae2b3a3bef57ced9d251cb870d8bf0b7",
+      "before_size_bytes": 9301,
+      "archive_note_added": "\n> 2026-11-17归档说明：superseded历史候选，未实施；按被替代路线归档，不冒称技术或质量完成。 原路径`docs/decisions/0007-bilingual-semantic-alignment.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。\n",
+      "local_link_rewrites": [
+        {
+          "before": "../reviews/2026-10-28-industry-bilingual-subtitle-pipelines.md",
+          "after": "../../reviews/2026-10-28-industry-bilingual-subtitle-pipelines.md"
+        },
+        {
+          "before": "../reviews/2026-10-24-bilingual-semantic-alignment-design.md",
+          "after": "../../reviews/2026-10-24-bilingual-semantic-alignment-design.md"
+        },
+        {
+          "before": "../reviews/2026-10-24-independent-bilingual-semantic-audit.md",
+          "after": "../../reviews/2026-10-24-independent-bilingual-semantic-audit.md"
+        },
+        {
+          "before": "../reviews/2026-10-24-semantic-contract-and-experiments.md",
+          "after": "../../reviews/2026-10-24-semantic-contract-and-experiments.md"
+        }
+      ],
+      "repository_path_reference_rewrites": [],
+      "after_sha256": "95751781263b7c688e6e7eea5874be8471b724d64b35efec2b7a6e065d535dd7",
+      "after_size_bytes": 9729,
+      "history_body_preserved_except_authorized_path_rewrites": true
+    },
+    {
+      "old_path": "docs/decisions/0008-local-orchestration-and-integration-tests.md",
+      "new_path": "docs/archive/decisions/0008-local-orchestration-and-integration-tests.md",
+      "classification": "completed_technical_contract_still_effective",
+      "archive_scope": "已实施的技术方案归档，未被后续ADR明确替代的现行契约继续生效；语义/核听/出版未通过不因归档改变。",
+      "before_sha256": "3cd9ed9b21b78d128dbfa945520cf581a2fa475e2af12f18d60e5396d3965019",
+      "before_size_bytes": 25182,
+      "archive_note_added": "\n> 2026-11-17归档说明：已实施的技术方案归档，未被后续ADR明确替代的现行契约继续生效；语义/核听/出版未通过不因归档改变。 原路径`docs/decisions/0008-local-orchestration-and-integration-tests.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。\n",
+      "local_link_rewrites": [
+        {
+          "before": "../reviews/2026-10-28-industry-bilingual-subtitle-pipelines.md",
+          "after": "../../reviews/2026-10-28-industry-bilingual-subtitle-pipelines.md"
+        },
+        {
+          "before": "0006-subtitle-rendering-ass-and-burn-in.md",
+          "after": "../../decisions/0006-subtitle-rendering-ass-and-burn-in.md"
+        },
+        {
+          "before": "../reviews/2026-10-24-semantic-contract-and-experiments.md",
+          "after": "../../reviews/2026-10-24-semantic-contract-and-experiments.md"
+        }
+      ],
+      "repository_path_reference_rewrites": [],
+      "after_sha256": "1691bd48ae0080c46c0f422e0a9ffda9a60b3ad71e128bdc5d81d4b99a95f559",
+      "after_size_bytes": 25676,
+      "history_body_preserved_except_authorized_path_rewrites": true
+    },
+    {
+      "old_path": "docs/decisions/0009-cnbc-editorial-break-annotations.md",
+      "new_path": "docs/archive/decisions/0009-cnbc-editorial-break-annotations.md",
+      "classification": "completed_technical_contract_still_effective",
+      "archive_scope": "已实施的技术方案归档，未被后续ADR明确替代的现行契约继续生效；语义/核听/出版未通过不因归档改变。",
+      "before_sha256": "be49e47d4e00be9c57a543e3593ab3bf7f8f28a876fad64d54791a138209580d",
+      "before_size_bytes": 9545,
+      "archive_note_added": "\n> 2026-11-17归档说明：已实施的技术方案归档，未被后续ADR明确替代的现行契约继续生效；语义/核听/出版未通过不因归档改变。 原路径`docs/decisions/0009-cnbc-editorial-break-annotations.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。\n",
+      "local_link_rewrites": [
+        {
+          "before": "../../src/transcription/domain/alignment.py",
+          "after": "../../../src/transcription/domain/alignment.py"
+        },
+        {
+          "before": "../../src/transcription/application/fusion.py",
+          "after": "../../../src/transcription/application/fusion.py"
+        },
+        {
+          "before": "../../src/archive_core/interfaces/transcription.py",
+          "after": "../../../src/archive_core/interfaces/transcription.py"
+        }
+      ],
+      "repository_path_reference_rewrites": [],
+      "after_sha256": "57055ea74df3b26793cac8a20499d859091cc9047e5d90467dd55fe00fe2fa11",
+      "after_size_bytes": 10017,
+      "history_body_preserved_except_authorized_path_rewrites": true
+    },
+    {
+      "old_path": "docs/decisions/0010-source-chunking.md",
+      "new_path": "docs/archive/decisions/0010-source-chunking.md",
+      "classification": "completed_technical_contract_still_effective",
+      "archive_scope": "已实施的技术方案归档，未被后续ADR明确替代的现行契约继续生效；语义/核听/出版未通过不因归档改变。",
+      "before_sha256": "0dcff222945b13fa016fd2ebce3d265063ab17b722010b32cac587d1dba191d6",
+      "before_size_bytes": 30746,
+      "archive_note_added": "\n> 2026-11-17归档说明：已实施的技术方案归档，未被后续ADR明确替代的现行契约继续生效；语义/核听/出版未通过不因归档改变。 原路径`docs/decisions/0010-source-chunking.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。\n",
+      "local_link_rewrites": [
+        {
+          "before": "0013-typed-chunking-quality-and-regression.md",
+          "after": "../../decisions/0013-typed-chunking-quality-and-regression.md"
+        },
+        {
+          "before": "../tasks/NB-12-chunking-quality-iteration.md",
+          "after": "../../tasks/NB-12-chunking-quality-iteration.md"
+        },
+        {
+          "before": "0013-typed-chunking-quality-and-regression.md",
+          "after": "../../decisions/0013-typed-chunking-quality-and-regression.md"
+        },
+        {
+          "before": "../tasks/NB-12-chunking-quality-iteration.md",
+          "after": "../../tasks/NB-12-chunking-quality-iteration.md"
+        },
+        {
+          "before": "../../src/srt_processing/infrastructure/stanza_model_lock.json",
+          "after": "../../../src/srt_processing/infrastructure/stanza_model_lock.json"
+        }
+      ],
+      "repository_path_reference_rewrites": [],
+      "after_sha256": "2c45948ff8fed110f78329a4ec3ba30a60ea25e9c35b4ab01c7430118f1450b4",
+      "after_size_bytes": 31233,
+      "history_body_preserved_except_authorized_path_rewrites": true
+    },
+    {
+      "old_path": "docs/decisions/0011-contextual-chunk-translation.md",
+      "new_path": "docs/archive/decisions/0011-contextual-chunk-translation.md",
+      "classification": "completed_technical_contract_still_effective",
+      "archive_scope": "已实施的技术方案归档，未被后续ADR明确替代的现行契约继续生效；语义/核听/出版未通过不因归档改变。",
+      "before_sha256": "4fd7d258791f539b3d66b30f2adb24bab23d635ed6de35c4cb0d21a78be137d1",
+      "before_size_bytes": 6853,
+      "archive_note_added": "\n> 2026-11-17归档说明：已实施的技术方案归档，未被后续ADR明确替代的现行契约继续生效；语义/核听/出版未通过不因归档改变。 原路径`docs/decisions/0011-contextual-chunk-translation.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。\n",
+      "local_link_rewrites": [],
+      "repository_path_reference_rewrites": [],
+      "after_sha256": "0fd68613197ae33f4e00d3ba26c5d8bbc9a108b54803c69725b84f434f6dfd89",
+      "after_size_bytes": 7312,
+      "history_body_preserved_except_authorized_path_rewrites": true
+    },
+    {
+      "old_path": "docs/decisions/0012-bilingual-translation-postprocessing.md",
+      "new_path": "docs/archive/decisions/0012-bilingual-translation-postprocessing.md",
+      "classification": "completed_technical_contract_still_effective",
+      "archive_scope": "已实施的技术方案归档，未被后续ADR明确替代的现行契约继续生效；语义/核听/出版未通过不因归档改变。",
+      "before_sha256": "8a4fb88c51e3ad3cbd3bdada2c966bca5193e78e6ec2a0f10bcbc899a8bf361e",
+      "before_size_bytes": 7821,
+      "archive_note_added": "\n> 2026-11-17归档说明：已实施的技术方案归档，未被后续ADR明确替代的现行契约继续生效；语义/核听/出版未通过不因归档改变。 原路径`docs/decisions/0012-bilingual-translation-postprocessing.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。\n",
+      "local_link_rewrites": [
+        {
+          "before": "0006-subtitle-rendering-ass-and-burn-in.md",
+          "after": "../../decisions/0006-subtitle-rendering-ass-and-burn-in.md"
+        }
+      ],
+      "repository_path_reference_rewrites": [],
+      "after_sha256": "91b9ba697b68f8ecb5beb2291fd32c5f4c88cc901da2ba2097c76ef6158d05d9",
+      "after_size_bytes": 8304,
+      "history_body_preserved_except_authorized_path_rewrites": true
+    },
+    {
+      "old_path": "docs/tasks/NB-00-implementation-map.md",
+      "new_path": "docs/archive/tasks/NB-00-implementation-map.md",
+      "classification": "completed_technical_or_fixed_experiment_record",
+      "archive_scope": "初版实施地图与技术迁移记录已交付；后续真实技术闭环见NB-08/NB-09。旧待验/失败记录保留，不将所有质量项判完成。",
+      "before_sha256": "515bd2d0c647206fbb60007e91e6479e0ca9e639d71f5c2e1b2e3228f6945cb8",
+      "before_size_bytes": 6152,
+      "archive_note_added": "\n> 2026-11-17归档说明：初版实施地图与技术迁移记录已交付；后续真实技术闭环见NB-08/NB-09。旧待验/失败记录保留，不将所有质量项判完成。 原路径`docs/tasks/NB-00-implementation-map.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。\n",
+      "local_link_rewrites": [
+        {
+          "before": "../reviews/2026-11-06-new-bilingual-pipeline-self-review.md",
+          "after": "../../reviews/2026-11-06-new-bilingual-pipeline-self-review.md"
+        }
+      ],
+      "repository_path_reference_rewrites": [],
+      "after_sha256": "47f2e65d7153aa65ed7ce7689b996dfc4105f2097f164db2f504dc596b2a3ad4",
+      "after_size_bytes": 6617,
+      "history_body_preserved_except_authorized_path_rewrites": true
+    },
+    {
+      "old_path": "docs/tasks/NB-01-contracts.md",
+      "new_path": "docs/archive/tasks/NB-01-contracts.md",
+      "classification": "completed_technical_or_fixed_experiment_record",
+      "archive_scope": "公共契约/编辑标记技术切片已交付，并由后续NB-08真实链路验收接续；原待验头部和过程结果保留。",
+      "before_sha256": "55007d26ff962dca342dc60790c6f954179430c8ec14b02206f8710c529e03db",
+      "before_size_bytes": 5206,
+      "archive_note_added": "\n> 2026-11-17归档说明：公共契约/编辑标记技术切片已交付，并由后续NB-08真实链路验收接续；原待验头部和过程结果保留。 原路径`docs/tasks/NB-01-contracts.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。\n",
+      "local_link_rewrites": [],
+      "repository_path_reference_rewrites": [],
+      "after_sha256": "929fa42b53743c63cf727265395e0478059c023a534e4419b6f9ff0edbce26e6",
+      "after_size_bytes": 5635,
+      "history_body_preserved_except_authorized_path_rewrites": true
+    },
+    {
+      "old_path": "docs/tasks/NB-02-source-chunking.md",
+      "new_path": "docs/archive/tasks/NB-02-source-chunking.md",
+      "classification": "completed_technical_or_fixed_experiment_record",
+      "archive_scope": "初版源语chunking技术交付及本地模型验证归档；旧容量/评分过程保留，当前84/typed修订以ADR-0013为准。",
+      "before_sha256": "ca5ac2c8bf5a0693abc8353a5905721c57c3fc27b03b6298add841ecb25b3401",
+      "before_size_bytes": 3120,
+      "archive_note_added": "\n> 2026-11-17归档说明：初版源语chunking技术交付及本地模型验证归档；旧容量/评分过程保留，当前84/typed修订以ADR-0013为准。 原路径`docs/tasks/NB-02-source-chunking.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。\n",
+      "local_link_rewrites": [],
+      "repository_path_reference_rewrites": [],
+      "after_sha256": "93ce14753b597ba1964d6d653d2de5c1a1cb2c9a7e15b844c221f318ed1e179a",
+      "after_size_bytes": 3556,
+      "history_body_preserved_except_authorized_path_rewrites": true
+    },
+    {
+      "old_path": "docs/tasks/NB-03-04-translation.md",
+      "new_path": "docs/archive/tasks/NB-03-04-translation.md",
+      "classification": "completed_technical_or_fixed_experiment_record",
+      "archive_scope": "初版翻译/修订迁移技术交付归档；机械修订已被NB-09有界编辑生成替代，原过程与限制不删除。",
+      "before_sha256": "01392f90f230da8165fe30fc011956dab8821776327ef79bea39bab254a7c570",
+      "before_size_bytes": 5198,
+      "archive_note_added": "\n> 2026-11-17归档说明：初版翻译/修订迁移技术交付归档；机械修订已被NB-09有界编辑生成替代，原过程与限制不删除。 原路径`docs/tasks/NB-03-04-translation.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。\n",
+      "local_link_rewrites": [],
+      "repository_path_reference_rewrites": [],
+      "after_sha256": "2c69bd4c939212cefe129c838e4247213ec5d300441e30e0697ddf9d9c639622",
+      "after_size_bytes": 5626,
+      "history_body_preserved_except_authorized_path_rewrites": true
+    },
+    {
+      "old_path": "docs/tasks/NB-05-final-export-rendering.md",
+      "new_path": "docs/archive/tasks/NB-05-final-export-rendering.md",
+      "classification": "completed_technical_or_fixed_experiment_record",
+      "archive_scope": "权威稿导出/渲染接入技术交付及后续NB-08真实恢复已留证；渲染整体质量仍未通过。",
+      "before_sha256": "be9eed079019bbe2d6fb646f650871ebbedae358af60668deb3e7d0479d73252",
+      "before_size_bytes": 4442,
+      "archive_note_added": "\n> 2026-11-17归档说明：权威稿导出/渲染接入技术交付及后续NB-08真实恢复已留证；渲染整体质量仍未通过。 原路径`docs/tasks/NB-05-final-export-rendering.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。\n",
+      "local_link_rewrites": [],
+      "repository_path_reference_rewrites": [],
+      "after_sha256": "4a5bad7b8be98ae69699bee2b2a6a0318827f7f1ea5985e94023adb1c2bdbcfa",
+      "after_size_bytes": 4863,
+      "history_body_preserved_except_authorized_path_rewrites": true
+    },
+    {
+      "old_path": "docs/tasks/NB-06-orchestration.md",
+      "new_path": "docs/archive/tasks/NB-06-orchestration.md",
+      "classification": "completed_technical_or_fixed_experiment_record",
+      "archive_scope": "生产编排/公共入口技术交付及NB-08真实恢复/复用已留证；不把未核听或语义问题改为通过。",
+      "before_sha256": "65d35b71be83095abb67be2d3f93a854172fc575b82650cd966e66a2afcc16b9",
+      "before_size_bytes": 5458,
+      "archive_note_added": "\n> 2026-11-17归档说明：生产编排/公共入口技术交付及NB-08真实恢复/复用已留证；不把未核听或语义问题改为通过。 原路径`docs/tasks/NB-06-orchestration.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。\n",
+      "local_link_rewrites": [],
+      "repository_path_reference_rewrites": [],
+      "after_sha256": "cb17a1aa16b0b121e295b3c7aa7a174e1ee266d00500b7ac6f5949be300826c6",
+      "after_size_bytes": 5880,
+      "history_body_preserved_except_authorized_path_rewrites": true
+    },
+    {
+      "old_path": "docs/tasks/NB-07-test-inventory.md",
+      "new_path": "docs/archive/tasks/NB-07-test-inventory.md",
+      "classification": "completed_technical_or_fixed_experiment_record",
+      "archive_scope": "逐nodeid测试迁移与盘点已交付；明示退役、未等价断言及历史失败记录原样保留。",
+      "before_sha256": "ff2ca9c5ed7295d24b136e44c63f1c8c2c8c4704188a7c9b3776c625a76f906f",
+      "before_size_bytes": 14511,
+      "archive_note_added": "\n> 2026-11-17归档说明：逐nodeid测试迁移与盘点已交付；明示退役、未等价断言及历史失败记录原样保留。 原路径`docs/tasks/NB-07-test-inventory.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。\n",
+      "local_link_rewrites": [
+        {
+          "before": "../../tests/orchestration/integration/inventory.json",
+          "after": "../../../tests/orchestration/integration/inventory.json"
+        }
+      ],
+      "repository_path_reference_rewrites": [],
+      "after_sha256": "d2ab4b7287c4d6ecb4869b6b287085bed9a63e78c8d0cf19c6dde67e9159088c",
+      "after_size_bytes": 14924,
+      "history_body_preserved_except_authorized_path_rewrites": true
+    },
+    {
+      "old_path": "docs/tasks/NB-08-full-fresh-acceptance.md",
+      "new_path": "docs/archive/tasks/NB-08-full-fresh-acceptance.md",
+      "classification": "completed_technical_or_fixed_experiment_record",
+      "archive_scope": "固定样本真实技术闭环/样片/复用实验已交付；语义残余、未核听及无人类出版签字不变。",
+      "before_sha256": "a7ef6c46b31846548217fb8f7d7dc80a3253e9f62d980abfd90f522dee082a5f",
+      "before_size_bytes": 4557,
+      "archive_note_added": "\n> 2026-11-17归档说明：固定样本真实技术闭环/样片/复用实验已交付；语义残余、未核听及无人类出版签字不变。 原路径`docs/tasks/NB-08-full-fresh-acceptance.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。\n",
+      "local_link_rewrites": [
+        {
+          "before": "../reviews/2026-11-06-new-bilingual-pipeline-self-review.md",
+          "after": "../../reviews/2026-11-06-new-bilingual-pipeline-self-review.md"
+        },
+        {
+          "before": "../reviews/2026-11-06-new-bilingual-pipeline-self-review.md",
+          "after": "../../reviews/2026-11-06-new-bilingual-pipeline-self-review.md"
+        },
+        {
+          "before": "../reviews/2026-11-06-new-bilingual-pipeline-independent-review.md",
+          "after": "../../reviews/2026-11-06-new-bilingual-pipeline-independent-review.md"
+        }
+      ],
+      "repository_path_reference_rewrites": [],
+      "after_sha256": "5c4ac9165dac370939d0154311821a1d73b41aab3da0a464cd507c7a070cee18",
+      "after_size_bytes": 4994,
+      "history_body_preserved_except_authorized_path_rewrites": true
+    },
+    {
+      "old_path": "docs/tasks/NB-09-editorial-quality-iteration.md",
+      "new_path": "docs/archive/tasks/NB-09-editorial-quality-iteration.md",
+      "classification": "completed_technical_or_fixed_experiment_record",
+      "archive_scope": "固定样本编辑迭代及测试映射已交付；当时有限评审结论保留，不替代NB-10反馈及NB-12未通过结论。",
+      "before_sha256": "e422d3bd29c3c7f9c968de12ccdd8337b9a54dc1a10b1b568e32f56e3bcf353b",
+      "before_size_bytes": 17381,
+      "archive_note_added": "\n> 2026-11-17归档说明：固定样本编辑迭代及测试映射已交付；当时有限评审结论保留，不替代NB-10反馈及NB-12未通过结论。 原路径`docs/tasks/NB-09-editorial-quality-iteration.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。\n",
+      "local_link_rewrites": [
+        {
+          "before": "../reviews/2026-11-07-nb09-d2-self-review.md",
+          "after": "../../reviews/2026-11-07-nb09-d2-self-review.md"
+        },
+        {
+          "before": "../reviews/2026-11-07-nb09-d2-independent-review.md",
+          "after": "../../reviews/2026-11-07-nb09-d2-independent-review.md"
+        },
+        {
+          "before": "../reviews/2026-11-07-nb09-v2-self-review.md",
+          "after": "../../reviews/2026-11-07-nb09-v2-self-review.md"
+        }
+      ],
+      "repository_path_reference_rewrites": [],
+      "after_sha256": "97cf2c193e66ff785c94268426053103589ed376f5651356d8febf1eb711797b",
+      "after_size_bytes": 17835,
+      "history_body_preserved_except_authorized_path_rewrites": true
+    },
+    {
+      "old_path": "docs/tasks/NB-09-editorial-test-mapping.md",
+      "new_path": "docs/archive/tasks/NB-09-editorial-test-mapping.md",
+      "classification": "completed_technical_or_fixed_experiment_record",
+      "archive_scope": "固定样本编辑迭代及测试映射已交付；当时有限评审结论保留，不替代NB-10反馈及NB-12未通过结论。",
+      "before_sha256": "c8c7b16b0287a5d3e7bddcf41e9a55bc2bd19ae4eacc75a168abbbb9ac35d0f2",
+      "before_size_bytes": 2333,
+      "archive_note_added": "\n> 2026-11-17归档说明：固定样本编辑迭代及测试映射已交付；当时有限评审结论保留，不替代NB-10反馈及NB-12未通过结论。 原路径`docs/tasks/NB-09-editorial-test-mapping.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。\n",
+      "local_link_rewrites": [],
+      "repository_path_reference_rewrites": [],
+      "after_sha256": "469fb4998253300415c256802c87d7a752de830b4af563780809e5a6c12aec1f",
+      "after_size_bytes": 2773,
+      "history_body_preserved_except_authorized_path_rewrites": true
+    },
+    {
+      "old_path": "docs/tasks/NB-10-cue-feedback-diagnosis.md",
+      "new_path": "docs/archive/tasks/NB-10-cue-feedback-diagnosis.md",
+      "classification": "completed_diagnosis_not_all_issues_resolved",
+      "archive_scope": "反馈溯源/术语交付已完成；不表示全部反馈或候选P1～P4已解决，后续质量工作仍在NB-12。",
+      "before_sha256": "90566b53552eb7fd3e0be9ef9e8cb2da654637aa00a450f05e8f7065c32fb4bf",
+      "before_size_bytes": 13953,
+      "archive_note_added": "\n> 2026-11-17归档说明：反馈溯源/术语交付已完成；不表示全部反馈或候选P1～P4已解决，后续质量工作仍在NB-12。 原路径`docs/tasks/NB-10-cue-feedback-diagnosis.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。\n",
+      "local_link_rewrites": [],
+      "repository_path_reference_rewrites": [],
+      "after_sha256": "26a90156969fcd000966dbe1bd175ad2a135b824ac2da7a139084087e53ec09e",
+      "after_size_bytes": 14381,
+      "history_body_preserved_except_authorized_path_rewrites": true
+    }
+  ],
+  "all_maintained_markdown_before_sha256": {
+    "AGENTS.md": "223bbd02fb3c11bd106f6017343c66474d5ca5680338008df34bf8a0c3200cdf",
+    "README.md": "41d46630756d02471f3bbfa3790e25e629eb6aa39b45bc1eb6b5ec53846d823e",
+    "docs/README.md": "6e40f9d289cead6e7a142a050c676ef97edab730820c856595ef21f463dda340",
+    "docs/archive/README.md": "29671001300e513d84d4e37dfebebec190008d9bfe92718f07e25b2a1162b26d",
+    "docs/archive/adr-0001-transcription-sentence-level-alignment/decision.md": "e8781aa753184dc883f53caa73cb22e5e6ea4e52db9bfc004ede46946edbfba9",
+    "docs/archive/adr-0001-transcription-sentence-level-alignment/tasks/README.md": "5a3e353a3afa92c871a2ce1f1623183929e7fe2ca458a7dc40a01b7a994efe4e",
+    "docs/archive/adr-0001-transcription-sentence-level-alignment/tasks/acquisition-structured-transcript-contract.md": "3e16b12a6640a15f5912f5562498a0c7da91559596b146a95676eb0caa686bb6",
+    "docs/archive/adr-0001-transcription-sentence-level-alignment/tasks/archive-core-transcription-contracts.md": "3be019c9ed5899096fcbcd8e0dfefdfac7fd76c0a59a91c15fa5c4f428df663a",
+    "docs/archive/adr-0001-transcription-sentence-level-alignment/tasks/media-download-validate-existing-artifact-before-skip.md": "a694e0f83563a231e9623874ab6e3ca3bda6b7cad8c287e5ef6c6285627adcb9",
+    "docs/archive/adr-0001-transcription-sentence-level-alignment/tasks/transcription-audio-vad-asr.md": "960811697bb8392434db6825e2aa8000a2a91df69970ae18c718b0e6ca6e51b5",
+    "docs/archive/adr-0001-transcription-sentence-level-alignment/tasks/transcription-forced-alignment.md": "d497abfdf845f277eaffc4676f4b612db2bf0859946e5ad490cbebec0b3bca27",
+    "docs/archive/adr-0001-transcription-sentence-level-alignment/tasks/transcription-observability.md": "70b9c0956be5648b9716d54fb8d3c90df3fc7095611d105fd1545c20995fba65",
+    "docs/archive/adr-0001-transcription-sentence-level-alignment/tasks/transcription-official-transcript-fusion.md": "7b6008726f533e89265b68da37fe1d0573586ae4e459641fb5c89f46e553bc58",
+    "docs/archive/adr-0001-transcription-sentence-level-alignment/tasks/transcription-sentence-boundaries.md": "799d10d90a65e9356bf3cef46436a400b6ab266b6964bd85b88a4c28c8446e06",
+    "docs/archive/adr-0001-transcription-sentence-level-alignment/tasks/transcription-workflow-manifest-integration.md": "e3087cb219c0f1cc988676d9363fb6d0932e85df77fa1fab32a8a57956606abe",
+    "docs/archive/decisions/0002-translation-sentence-units.md": "6ec92012c28004403d2c043600a58c25c872e95b001609ac7e465b36e98f3bb7",
+    "docs/archive/decisions/0003-srt-processing-input-boundary.md": "c0f3e4e4b5e9110874815d37880e794513514a50bbe6a50eddf10cc2c1e4fdb2",
+    "docs/archive/decisions/0004-transcription-source-sections.md": "65355cf245e8c203e9e4d483758041b06962377736383a04619bb4428f0a52fc",
+    "docs/archive/decisions/0005-translation-codex-cli-chatgpt-provider.md": "2b9116845a7c31177a993fc4aa9b247fde105f88691ea19686ab1b546ef9c37d",
+    "docs/archive/tasks/README.md": "0f99b47909d5ed20aab55a0d092cf9f961c092d32df02a88693f99e3ec29fd7c",
+    "docs/archive/tasks/SP-01-public-subtitle-contracts.md": "ef22ba4fe6227d4f58c01791c9bbd7bf0aa9c8e8fc6044d935496580cd7fc3d5",
+    "docs/archive/tasks/SP-02-profile-text-timing-rules.md": "c74824f92bef98e287d6e0862f1b9e45ec434aa91b9f53e0e2be680c1343a383",
+    "docs/archive/tasks/SP-03-deterministic-bilingual-planner.md": "5f2117fc292d07a2f1ea586d2b0761acc2673c94539fb6edee6ca60b6103444e",
+    "docs/archive/tasks/SP-04-input-gates-and-media-probe.md": "0b869ea6eaebcf8b266c18dc9e89ba00e9a83779dae4c26b5c05e323bc3a8764",
+    "docs/archive/tasks/SP-05-srt-codec-and-local-store.md": "f5fae8f680b2462768b41c5f29c92baa3d804734674819e1bbcf5b12fb60e060",
+    "docs/archive/tasks/SP-06-workflow-reuse-publication.md": "3c0d76581345dd426c282b0c09c48ce861bf115be17dc15f69dce7b21c273d59",
+    "docs/archive/tasks/SP-07-integration-and-adversarial-acceptance.md": "31db631b48661980e0b1dc0b35a1d443bdab3cd2eb1e4a921f5d0e1948ebd983",
+    "docs/archive/tasks/SP-08-real-sample-and-final-status.md": "66b350f2133546f8dae44f5f03e29132dc966df7b4871a0fbf53160c428ca5be",
+    "docs/archive/tasks/SP-08A-prepare-persistent-cnbc-translation.md": "db008ed07c0039aa3e7302ff97c0e3d3c29522b4275ced649a8a5d4e3c2d2455",
+    "docs/archive/tasks/SP-09-agent-reference-evaluation.md": "20c957fbd9ce589199896b67bc890ef70dbcb8c157263690a20e036467da7c3c",
+    "docs/archive/tasks/SP-10-candidate-v2-rules.md": "da9b4dcbee201bfc96584a58d2bceda8666ae25e251dc8621ee4145b860121a9",
+    "docs/archive/tasks/SP-11-candidate-v2-projection.md": "acccdddb32dac17fb607894a0d2d1ce6b94f047e04b18a4b4fadbb7cb1b0f614",
+    "docs/archive/tasks/SP-12-candidate-v2-comparison.md": "ac1dea88d7f0de94211493d8945539000794f60b68dbdb888e79c618fe346be1",
+    "docs/archive/tasks/SP-13-candidate-v3-pause-planner.md": "85f4b0417f6a686ad08269f12e226537b5e4441ba9d57350b2a0543107b13c7b",
+    "docs/archive/tasks/SP-14-candidate-v3-contracts.md": "3f746fd238b0d3416384e8b3773942b561fd46837a06d69e2f860fb736f5aca2",
+    "docs/archive/tasks/SP-15-candidate-v3-comparison.md": "803794f7e7d37526de27fb109127b9f1e667984a5b8252e2457239b95d000a5a",
+    "docs/archive/tasks/SR-00-rendering-task-map.md": "a24c9264e9a14ecdf1363e638b1b47fc14ed94373c02950058739fe7993b3c33",
+    "docs/archive/tasks/SR-01-public-rendering-contracts.md": "576b15c97d78c6826b5086fcb41ea5c64db300611ce3d61fc456eefb746179a3",
+    "docs/archive/tasks/SR-02-profile-and-layout.md": "b7de979de1d66521538187e6f87efc1b292d84293a1997fde339f670977a5627",
+    "docs/archive/tasks/SR-03-fonts-and-ass.md": "dd0b128650b3bde5426ca123fe0c5330cb2742210dded1f71c06c5558deedcd6",
+    "docs/archive/tasks/SR-04-media-adapters.md": "ef89e1d11562a222ea4eb7565d1e28f339927422db0f5c4a744f204b8fa8a738",
+    "docs/archive/tasks/SR-05-workflow-and-publication.md": "e550b61bf78d84beeb337c5e56561ff4ee22c9b3c99fe1abf4ce6c2d6f99a2a8",
+    "docs/archive/tasks/SR-06-offline-acceptance.md": "334c5b3cf98bf16605ee7a644bb9b31dc5764791e2a1267a07b0eceaab38e0dd",
+    "docs/archive/tasks/SR-07-real-sample-acceptance.md": "547561e7463f790def687adb9a1e927b4e0a13653c76e26663970a8299d0236f",
+    "docs/archive/tasks/SR-07-sample-runner-design.md": "8665c3c16bf38f078efd9ee09dc8e9518286ef6eefe701c7dba664d609836d3e",
+    "docs/archive/tasks/TA-01-source-section-public-contract.md": "eab26a7d26a2c1f0072adbc43e764400cf5879cf5966dc93d1df635869d999b3",
+    "docs/archive/tasks/TA-02-transcription-section-rules.md": "10c1e4630e01f552704311b63a9375644d620f2189940f43e44cf52efe1fa2b2",
+    "docs/archive/tasks/TA-03-transcription-section-workflow.md": "89c479e21055ceb289152f764eb3b49007a089fd18293eb6926d3e17ea8d881d",
+    "docs/archive/tasks/TA-03A-forced-alignment-trailing-punctuation.md": "51229b71c6ac25e6d56b6008a1ef605c78859db625dc28b76838c024e711aec2",
+    "docs/archive/tasks/TA-04-transcription-live-migration.md": "a30913b0b21814cb101107b8f604ca1c1b3942ad398838bf9a03be3a2c2ce538",
+    "docs/archive/tasks/TA-05-translation-public-contracts.md": "e8f9da802f72c99886a5723def483811b59a0cd97ecfe976de7ded27f6a459ab",
+    "docs/archive/tasks/TA-06-translation-domain.md": "5c1cec5ea850ab2bcd84d5f23feff380af4c48b73ffd2d2f1d4b72830c245315",
+    "docs/archive/tasks/TA-07-translation-application.md": "19df8115aebbe7532462e0348b35a893a02275eb5419d3bbf1c0c2d9c1301bcf",
+    "docs/archive/tasks/TA-08-openai-responses-adapter.md": "bb242d30f428c7675b74c51ca16a282ee3e611b39079828ee6f09bc94971f289",
+    "docs/archive/tasks/TA-09-configuration-and-status.md": "501afa0ecf5cb6d00b1bad9336e8c5fd8d3261246c19fbe990af3adefa6d574f",
+    "docs/archive/tasks/TA-10-translation-live-integration.md": "b3fd1bb2499b951b75dc73635b963faf6651cf53d75835af06d51acf05170a90",
+    "docs/archive/tasks/TA-11-provider-neutral-generation-parameters.md": "b661f5febeea7f87f41344914be2a1a8ef599326e9701aace3ff8a691c86a0f4",
+    "docs/archive/tasks/TA-12-process-runner-stdin.md": "9fcaf73e07f7cbbfcd000b88f8822973f076a4f677358603861ec34e64917063",
+    "docs/archive/tasks/TA-13-codex-cli-preflight.md": "033fc46d3b50894c8e31285adc6a0ffb239fc0b0decd1763bc622658c4227379",
+    "docs/archive/tasks/TA-14-codex-cli-provider.md": "7447a6860221614e91ef140cdb5902c6b1959b904e37468dc090ed9d99005007",
+    "docs/archive/tasks/TA-15-provider-configuration-composition.md": "f7a7c01d84ce4b26c10ff79f2bfda2276a67de85c3d2af006b34243de9a62951",
+    "docs/archive/tasks/TA-16-codex-cli-live-integration.md": "db77e45371b75ebbd4173058748feb439b09335092f4cddff16ecf2147598fae",
+    "docs/decisions/0006-subtitle-rendering-ass-and-burn-in.md": "a66ac14280ce49c4c997fef35581bf7b98367d6c3b4449a4babfafeb567219b5",
+    "docs/decisions/0007-bilingual-semantic-alignment.md": "f595ac98fb644afc583bbeaecabf5274ae2b3a3bef57ced9d251cb870d8bf0b7",
+    "docs/decisions/0008-local-orchestration-and-integration-tests.md": "3cd9ed9b21b78d128dbfa945520cf581a2fa475e2af12f18d60e5396d3965019",
+    "docs/decisions/0009-cnbc-editorial-break-annotations.md": "be49e47d4e00be9c57a543e3593ab3bf7f8f28a876fad64d54791a138209580d",
+    "docs/decisions/0010-source-chunking.md": "0dcff222945b13fa016fd2ebce3d265063ab17b722010b32cac587d1dba191d6",
+    "docs/decisions/0011-contextual-chunk-translation.md": "4fd7d258791f539b3d66b30f2adb24bab23d635ed6de35c4cb0d21a78be137d1",
+    "docs/decisions/0012-bilingual-translation-postprocessing.md": "8a4fb88c51e3ad3cbd3bdada2c966bca5193e78e6ec2a0f10bcbc899a8bf361e",
+    "docs/decisions/0013-typed-chunking-quality-and-regression.md": "fc42a529199a316e4f56d2ddd4c2ed2d3af6ebf9e5db64b63d3f6fd37486f604",
+    "docs/decisions/README.md": "3c4f38a2d0ce4433a6e8d0ecb71113bd8242f4837c42e52d0afb945d121d0b1b",
+    "docs/prompts/bilingual-semantic-alignment-exploration.md": "197561b71b5064f6c88dcaf979540190b7a115e337a99dd76d6b07b3fb993a91",
+    "docs/reviews/2026-10-22-cue-agent-vs-dp.md": "3594a53fc4569e868e040b626b4c5ed95a9e81257cfa4f2d7d1402af7e9afba8",
+    "docs/reviews/2026-10-22-cue-agent-vs-dp.v1.md": "e5ee6a756c83616a53549f1f570a27baf72c9f35579b467fade13253363b30b0",
+    "docs/reviews/2026-10-22-cue-candidate-v2.md": "99c519593e81c1ed61f1fe871abc5c335c12124c56291c96c58496051f7f185e",
+    "docs/reviews/2026-10-22-cue-candidate-v2.v1.md": "6fc5787375a0de407b6945870175ae0fa6ae45764d9c104fa02da7d16167cca0",
+    "docs/reviews/2026-10-23-cue-candidate-v3.md": "ea5628f77246c2508651de7b0b2ccdd6b2b342caf9183e8b3f3ec57bb4260d79",
+    "docs/reviews/2026-10-24-bilingual-semantic-alignment-design.md": "f8431b46edbdf2377b1bda68152bf83934daeb0c71548964c0dfa1a010a47119",
+    "docs/reviews/2026-10-24-independent-bilingual-semantic-audit.md": "921c46206c28001a7ba4ea40e5dd0454a1be6dd625a4212e9f6784519a5df22a",
+    "docs/reviews/2026-10-24-rendering-technical-and-semantic-review.md": "accafb21d83aef0e8f9a6615ef7bd081d2f5792a780370056d0e458eb1c8737f",
+    "docs/reviews/2026-10-24-semantic-contract-and-experiments.md": "834934dcf0566cf204bb306265f958a3073ff90c15613a1138de6a759b3d6621",
+    "docs/reviews/2026-10-28-industry-bilingual-subtitle-pipelines.md": "9c96fcca8c050570a719630ec664d99c0bfc59cf272a92354bd4f66a78fa768d",
+    "docs/reviews/2026-11-06-new-bilingual-pipeline-independent-review.md": "7e6637f1a6249dcd7534d0987fc1e3412a89f4d7fce8b3a744753f3497a7eaf9",
+    "docs/reviews/2026-11-06-new-bilingual-pipeline-self-review.md": "d544ed2c38aa92fe388d2ae6ddbf46a51764a81b92b4b1188cb87cc36d4a029c",
+    "docs/reviews/2026-11-07-nb09-d2-independent-review.md": "1d4d482a68f7bdaf2042e66783ab16b9095f894794f518cecd5bc132c9d55a0b",
+    "docs/reviews/2026-11-07-nb09-d2-self-review.md": "08d79805e8c31e6a97fba3fa83d989c27973174e4408bdc3fdff53486170c0e1",
+    "docs/reviews/2026-11-07-nb09-v2-independent-review.md": "6027a6e226d7125ed0d81e802c92d896a9478958e4ac3e91d0ca7069e7a7f763",
+    "docs/reviews/2026-11-07-nb09-v2-self-review.md": "a5ddaa6543b8b90bd4dc623a866030364045e71ea404789ca5d96023788abe13",
+    "docs/tasks/NB-00-implementation-map.md": "515bd2d0c647206fbb60007e91e6479e0ca9e639d71f5c2e1b2e3228f6945cb8",
+    "docs/tasks/NB-01-contracts.md": "55007d26ff962dca342dc60790c6f954179430c8ec14b02206f8710c529e03db",
+    "docs/tasks/NB-02-source-chunking.md": "ca5ac2c8bf5a0693abc8353a5905721c57c3fc27b03b6298add841ecb25b3401",
+    "docs/tasks/NB-03-04-translation.md": "01392f90f230da8165fe30fc011956dab8821776327ef79bea39bab254a7c570",
+    "docs/tasks/NB-05-final-export-rendering.md": "be9eed079019bbe2d6fb646f650871ebbedae358af60668deb3e7d0479d73252",
+    "docs/tasks/NB-06-orchestration.md": "65d35b71be83095abb67be2d3f93a854172fc575b82650cd966e66a2afcc16b9",
+    "docs/tasks/NB-07-test-inventory.md": "ff2ca9c5ed7295d24b136e44c63f1c8c2c8c4704188a7c9b3776c625a76f906f",
+    "docs/tasks/NB-08-full-fresh-acceptance.md": "a7ef6c46b31846548217fb8f7d7dc80a3253e9f62d980abfd90f522dee082a5f",
+    "docs/tasks/NB-09-editorial-quality-iteration.md": "e422d3bd29c3c7f9c968de12ccdd8337b9a54dc1a10b1b568e32f56e3bcf353b",
+    "docs/tasks/NB-09-editorial-test-mapping.md": "c8c7b16b0287a5d3e7bddcf41e9a55bc2bd19ae4eacc75a168abbbb9ac35d0f2",
+    "docs/tasks/NB-10-cue-feedback-diagnosis.md": "90566b53552eb7fd3e0be9ef9e8cb2da654637aa00a450f05e8f7065c32fb4bf",
+    "docs/tasks/NB-12-chunking-quality-iteration.md": "f6bced74d93accdabc403659f589e5d9df70be4a180bec97a750b1993fa02331",
+    "docs/tasks/README.md": "7f1df7039819e2745ecfb886ae4357d73bdf883da1f4efe102f84d2b9c06e43f",
+    "src/acquisition/AGENTS.md": "e96df9a29c6b5669f2f42472801e55af876fef4c98a64835a3643cccaec90763",
+    "src/archive_core/AGENTS.md": "cc59d73af2580b952b9d82d1deb9a9743d94aa63b17a5f0ba0afdd38da2b7cab",
+    "src/cli/AGENTS.md": "7f44d3039fd17341a22962127d591bbc4d7ab732eebac5e67134e735c60afd6f",
+    "src/infrastructure/AGENTS.md": "dc8911ee1fb35ee2395fa8e659fd7f9ca54a5ee8a88777fe4e87e319c40f4ab5",
+    "src/media_download/AGENTS.md": "83e132616dc6f6f8ef352e0e31880c1687c6982573fcb1124496096bc11542d7",
+    "src/orchestration/AGENTS.md": "3b331766e97e49256328733d072045f1fd8a813687279050c350222effee211f",
+    "src/srt_processing/AGENTS.md": "70487929a6d713034efd13379fdd464487be61c756ffe8c54b583218de565e68",
+    "src/subtitle_rendering/AGENTS.md": "46f3d3cf13673442ddf55fe2dc47128d448738890e79ebe0acb23560a9cb363d",
+    "src/transcription/AGENTS.md": "cd2fd98c8d9ea4d9df889fb543165fa6dfd38091adbb4b8f9aa6bdd3b7482ebf",
+    "src/translation/AGENTS.md": "2c7d2882c1ed5a1ba0796be649c1b2c5223e311d10e9544a91939609c2ad3f6c",
+    "src/webui/AGENTS.md": "d03f812fa367fdee5eaca21722e5114529feed633d323dc19c4539eb503bebd9",
+    "tests/transcription/AGENTS.md": "b28b21c3723db9641f1cf67db80ab3d498aa0e28af8aa0f9d2362878ba30814c"
+  },
+  "rewritten_other_markdown": [
+    {
+      "path": "AGENTS.md",
+      "local_link_rewrites": [
+        {
+          "before": "docs/tasks/NB-10-cue-feedback-diagnosis.md",
+          "after": "docs/archive/tasks/NB-10-cue-feedback-diagnosis.md"
+        },
+        {
+          "before": "docs/tasks/NB-09-editorial-quality-iteration.md",
+          "after": "docs/archive/tasks/NB-09-editorial-quality-iteration.md"
+        },
+        {
+          "before": "docs/tasks/NB-08-full-fresh-acceptance.md",
+          "after": "docs/archive/tasks/NB-08-full-fresh-acceptance.md"
+        },
+        {
+          "before": "docs/decisions/0010-source-chunking.md",
+          "after": "docs/archive/decisions/0010-source-chunking.md"
+        },
+        {
+          "before": "docs/tasks/NB-00-implementation-map.md",
+          "after": "docs/archive/tasks/NB-00-implementation-map.md"
+        }
+      ],
+      "repository_path_reference_rewrites": []
+    },
+    {
+      "path": "docs/README.md",
+      "local_link_rewrites": [
+        {
+          "before": "decisions/0008-local-orchestration-and-integration-tests.md",
+          "after": "archive/decisions/0008-local-orchestration-and-integration-tests.md"
+        }
+      ],
+      "repository_path_reference_rewrites": []
+    },
+    {
+      "path": "docs/archive/tasks/SR-00-rendering-task-map.md",
+      "local_link_rewrites": [
+        {
+          "before": "../../decisions/0008-local-orchestration-and-integration-tests.md",
+          "after": "../decisions/0008-local-orchestration-and-integration-tests.md"
+        }
+      ],
+      "repository_path_reference_rewrites": []
+    },
+    {
+      "path": "docs/archive/tasks/SR-07-real-sample-acceptance.md",
+      "local_link_rewrites": [
+        {
+          "before": "../../decisions/0008-local-orchestration-and-integration-tests.md",
+          "after": "../decisions/0008-local-orchestration-and-integration-tests.md"
+        }
+      ],
+      "repository_path_reference_rewrites": []
+    },
+    {
+      "path": "docs/archive/tasks/SR-07-sample-runner-design.md",
+      "local_link_rewrites": [
+        {
+          "before": "../../decisions/0008-local-orchestration-and-integration-tests.md",
+          "after": "../decisions/0008-local-orchestration-and-integration-tests.md"
+        }
+      ],
+      "repository_path_reference_rewrites": []
+    },
+    {
+      "path": "docs/decisions/0006-subtitle-rendering-ass-and-burn-in.md",
+      "local_link_rewrites": [
+        {
+          "before": "0012-bilingual-translation-postprocessing.md",
+          "after": "../archive/decisions/0012-bilingual-translation-postprocessing.md"
+        }
+      ],
+      "repository_path_reference_rewrites": []
+    },
+    {
+      "path": "docs/decisions/0013-typed-chunking-quality-and-regression.md",
+      "local_link_rewrites": [
+        {
+          "before": "0008-local-orchestration-and-integration-tests.md",
+          "after": "../archive/decisions/0008-local-orchestration-and-integration-tests.md"
+        },
+        {
+          "before": "0010-source-chunking.md",
+          "after": "../archive/decisions/0010-source-chunking.md"
+        },
+        {
+          "before": "0012-bilingual-translation-postprocessing.md",
+          "after": "../archive/decisions/0012-bilingual-translation-postprocessing.md"
+        }
+      ],
+      "repository_path_reference_rewrites": []
+    },
+    {
+      "path": "docs/decisions/README.md",
+      "local_link_rewrites": [
+        {
+          "before": "0008-local-orchestration-and-integration-tests.md",
+          "after": "../archive/decisions/0008-local-orchestration-and-integration-tests.md"
+        },
+        {
+          "before": "../tasks/NB-09-editorial-quality-iteration.md",
+          "after": "../archive/tasks/NB-09-editorial-quality-iteration.md"
+        },
+        {
+          "before": "../tasks/NB-08-full-fresh-acceptance.md",
+          "after": "../archive/tasks/NB-08-full-fresh-acceptance.md"
+        },
+        {
+          "before": "0008-local-orchestration-and-integration-tests.md",
+          "after": "../archive/decisions/0008-local-orchestration-and-integration-tests.md"
+        },
+        {
+          "before": "0009-cnbc-editorial-break-annotations.md",
+          "after": "../archive/decisions/0009-cnbc-editorial-break-annotations.md"
+        },
+        {
+          "before": "0010-source-chunking.md",
+          "after": "../archive/decisions/0010-source-chunking.md"
+        },
+        {
+          "before": "0011-contextual-chunk-translation.md",
+          "after": "../archive/decisions/0011-contextual-chunk-translation.md"
+        },
+        {
+          "before": "0012-bilingual-translation-postprocessing.md",
+          "after": "../archive/decisions/0012-bilingual-translation-postprocessing.md"
+        },
+        {
+          "before": "0007-bilingual-semantic-alignment.md",
+          "after": "../archive/decisions/0007-bilingual-semantic-alignment.md"
+        }
+      ],
+      "repository_path_reference_rewrites": []
+    },
+    {
+      "path": "docs/reviews/2026-10-24-bilingual-semantic-alignment-design.md",
+      "local_link_rewrites": [
+        {
+          "before": "../decisions/0007-bilingual-semantic-alignment.md",
+          "after": "../archive/decisions/0007-bilingual-semantic-alignment.md"
+        },
+        {
+          "before": "../decisions/0008-local-orchestration-and-integration-tests.md",
+          "after": "../archive/decisions/0008-local-orchestration-and-integration-tests.md"
+        }
+      ],
+      "repository_path_reference_rewrites": []
+    },
+    {
+      "path": "docs/reviews/2026-10-24-semantic-contract-and-experiments.md",
+      "local_link_rewrites": [
+        {
+          "before": "../decisions/0007-bilingual-semantic-alignment.md",
+          "after": "../archive/decisions/0007-bilingual-semantic-alignment.md"
+        },
+        {
+          "before": "../decisions/0008-local-orchestration-and-integration-tests.md",
+          "after": "../archive/decisions/0008-local-orchestration-and-integration-tests.md"
+        }
+      ],
+      "repository_path_reference_rewrites": []
+    },
+    {
+      "path": "docs/reviews/2026-11-06-new-bilingual-pipeline-independent-review.md",
+      "local_link_rewrites": [
+        {
+          "before": "../decisions/0008-local-orchestration-and-integration-tests.md#7-逐阶段产物审核样片交付与独立回归",
+          "after": "../archive/decisions/0008-local-orchestration-and-integration-tests.md#7-逐阶段产物审核样片交付与独立回归"
+        }
+      ],
+      "repository_path_reference_rewrites": []
+    },
+    {
+      "path": "docs/tasks/NB-12-chunking-quality-iteration.md",
+      "local_link_rewrites": [
+        {
+          "before": "../decisions/0008-local-orchestration-and-integration-tests.md",
+          "after": "../archive/decisions/0008-local-orchestration-and-integration-tests.md"
+        },
+        {
+          "before": "NB-10-cue-feedback-diagnosis.md",
+          "after": "../archive/tasks/NB-10-cue-feedback-diagnosis.md"
+        }
+      ],
+      "repository_path_reference_rewrites": []
+    },
+    {
+      "path": "docs/tasks/README.md",
+      "local_link_rewrites": [
+        {
+          "before": "../decisions/0008-local-orchestration-and-integration-tests.md",
+          "after": "../archive/decisions/0008-local-orchestration-and-integration-tests.md"
+        },
+        {
+          "before": "NB-00-implementation-map.md",
+          "after": "../archive/tasks/NB-00-implementation-map.md"
+        },
+        {
+          "before": "NB-09-editorial-quality-iteration.md",
+          "after": "../archive/tasks/NB-09-editorial-quality-iteration.md"
+        },
+        {
+          "before": "NB-10-cue-feedback-diagnosis.md",
+          "after": "../archive/tasks/NB-10-cue-feedback-diagnosis.md"
+        }
+      ],
+      "repository_path_reference_rewrites": []
+    },
+    {
+      "path": "src/orchestration/AGENTS.md",
+      "local_link_rewrites": [
+        {
+          "before": "../../docs/tasks/NB-08-full-fresh-acceptance.md",
+          "after": "../../docs/archive/tasks/NB-08-full-fresh-acceptance.md"
+        }
+      ],
+      "repository_path_reference_rewrites": []
+    },
+    {
+      "path": "src/translation/AGENTS.md",
+      "local_link_rewrites": [
+        {
+          "before": "../../docs/decisions/0011-contextual-chunk-translation.md",
+          "after": "../../docs/archive/decisions/0011-contextual-chunk-translation.md"
+        },
+        {
+          "before": "../../docs/decisions/0012-bilingual-translation-postprocessing.md",
+          "after": "../../docs/archive/decisions/0012-bilingual-translation-postprocessing.md"
+        },
+        {
+          "before": "../../docs/decisions/0008-local-orchestration-and-integration-tests.md",
+          "after": "../../docs/archive/decisions/0008-local-orchestration-and-integration-tests.md"
+        },
+        {
+          "before": "../../docs/tasks/NB-03-04-translation.md",
+          "after": "../../docs/archive/tasks/NB-03-04-translation.md"
+        }
+      ],
+      "repository_path_reference_rewrites": []
+    }
+  ],
+  "approved_fixture_path_metadata_only": {
+    "path": "tests/orchestration/integration/fixtures/nb12_reviewed_labels.json",
+    "before_sha256": "806508863efbcfff30b48327791ce9d88e2de3649d883a0e66125fdb72b28bbf",
+    "after_sha256": "53efbaefa2831752c1553ba27f59eab3b4d09c611b8cba563a53f7e8136a9609",
+    "before_reference": "docs/tasks/NB-10-cue-feedback-diagnosis.md",
+    "after_reference": "docs/archive/tasks/NB-10-cue-feedback-diagnosis.md",
+    "parsed_document_exact_except_single_reference": true,
+    "schema_role_items_source_alignment_sha256_unchanged": true,
+    "frozen_output_labels_and_hashes_not_modified": true
+  },
+  "final_link_validation": {
+    "method": "Independent read-only MarkdownIt CommonMark link parsing; URL decoding and filesystem target existence. Fences/inline-code pseudo-links, web/mail and pure anchors excluded from local existence checks; anchor-target semantics not asserted.",
+    "maintained_markdown_files_before": 113,
+    "maintained_markdown_files_after": 113,
+    "maintained_local_links_before": 268,
+    "maintained_local_links_after": 336,
+    "maintained_broken_before": 0,
+    "maintained_broken_after": 0,
+    "new_maintained_broken": 0,
+    "all_repository_markdown_files_before": 262,
+    "all_repository_markdown_files_after": 262,
+    "all_repository_local_links_before": 406,
+    "all_repository_local_links_after": 474,
+    "preexisting_frozen_output_broken_before": 110,
+    "preexisting_frozen_output_broken_after": 110,
+    "frozen_output_broken_file_line_url_set_exactly_identical": true,
+    "new_broken_anywhere": 0,
+    "external_link_count_unchanged": 97,
+    "pure_anchor_count_unchanged": 104,
+    "ignored_output_snapshots_not_rewritten": true
+  },
+  "original_text_preservation_validation": {
+    "completed_before_report_compaction": true,
+    "all_17_original_utf8_sha256_and_sizes_match": true,
+    "all_17_archive_notes_exactly_once": true,
+    "all_17_history_bodies_reconstructed_with_only_recorded_path_rewrites_exact": true,
+    "all_17_destination_hashes_match": true,
+    "original_full_text_not_embedded_in_committed_report": "Removed only from this newly created JSON report after independent verification, as root requested; actual archived Markdown bodies are unchanged. A temporary full verification copy was retained outside the repository.",
+    "unnecessary_absolute_output_trailing_slash_normalization_reverted": true
+  },
+  "changed_markdown_after": [
+    {
+      "before_path": "AGENTS.md",
+      "after_path": "AGENTS.md",
+      "before_sha256": "223bbd02fb3c11bd106f6017343c66474d5ca5680338008df34bf8a0c3200cdf",
+      "after_sha256": "b2ed68fc273391b6c51b5a6c7db1fbac8463f7bc33a4c8bd8325a6bc07e2dc33"
+    },
+    {
+      "before_path": "docs/README.md",
+      "after_path": "docs/README.md",
+      "before_sha256": "6e40f9d289cead6e7a142a050c676ef97edab730820c856595ef21f463dda340",
+      "after_sha256": "6bf263ef8fa497c3e3d77aa40ee68164b56c0578cf58f86831927dbdfe906d04"
+    },
+    {
+      "before_path": "docs/archive/README.md",
+      "after_path": "docs/archive/README.md",
+      "before_sha256": "29671001300e513d84d4e37dfebebec190008d9bfe92718f07e25b2a1162b26d",
+      "after_sha256": "30d08147c683bd00439c364a7a457c1d8b197e212c63a1374f56a98838d85a55"
+    },
+    {
+      "before_path": "docs/archive/tasks/README.md",
+      "after_path": "docs/archive/tasks/README.md",
+      "before_sha256": "0f99b47909d5ed20aab55a0d092cf9f961c092d32df02a88693f99e3ec29fd7c",
+      "after_sha256": "78dc29cbbc584ac4e366dd86a95690c311701e26d481b80286cf342f1d276bcb"
+    },
+    {
+      "before_path": "docs/archive/tasks/SR-00-rendering-task-map.md",
+      "after_path": "docs/archive/tasks/SR-00-rendering-task-map.md",
+      "before_sha256": "a24c9264e9a14ecdf1363e638b1b47fc14ed94373c02950058739fe7993b3c33",
+      "after_sha256": "6c08cc8208fab5de30712cb108a701ccc52515460bd53c6d93a9a3775f7496ee"
+    },
+    {
+      "before_path": "docs/archive/tasks/SR-07-real-sample-acceptance.md",
+      "after_path": "docs/archive/tasks/SR-07-real-sample-acceptance.md",
+      "before_sha256": "547561e7463f790def687adb9a1e927b4e0a13653c76e26663970a8299d0236f",
+      "after_sha256": "14719dc47e196b67e21543fcf71484802a5a79ed466d18bd6ee56e6cbddbb364"
+    },
+    {
+      "before_path": "docs/archive/tasks/SR-07-sample-runner-design.md",
+      "after_path": "docs/archive/tasks/SR-07-sample-runner-design.md",
+      "before_sha256": "8665c3c16bf38f078efd9ee09dc8e9518286ef6eefe701c7dba664d609836d3e",
+      "after_sha256": "ec5a7e195b4591a3b9a5fd254e8b76656226a165b29c71022de5b1d80363331a"
+    },
+    {
+      "before_path": "docs/decisions/0006-subtitle-rendering-ass-and-burn-in.md",
+      "after_path": "docs/decisions/0006-subtitle-rendering-ass-and-burn-in.md",
+      "before_sha256": "a66ac14280ce49c4c997fef35581bf7b98367d6c3b4449a4babfafeb567219b5",
+      "after_sha256": "392737405102958605169b19e01a4e1678fb09840dc0c10190d3b5f3647ddb00"
+    },
+    {
+      "before_path": "docs/decisions/0007-bilingual-semantic-alignment.md",
+      "after_path": "docs/archive/decisions/0007-bilingual-semantic-alignment.md",
+      "before_sha256": "f595ac98fb644afc583bbeaecabf5274ae2b3a3bef57ced9d251cb870d8bf0b7",
+      "after_sha256": "95751781263b7c688e6e7eea5874be8471b724d64b35efec2b7a6e065d535dd7"
+    },
+    {
+      "before_path": "docs/decisions/0008-local-orchestration-and-integration-tests.md",
+      "after_path": "docs/archive/decisions/0008-local-orchestration-and-integration-tests.md",
+      "before_sha256": "3cd9ed9b21b78d128dbfa945520cf581a2fa475e2af12f18d60e5396d3965019",
+      "after_sha256": "1691bd48ae0080c46c0f422e0a9ffda9a60b3ad71e128bdc5d81d4b99a95f559"
+    },
+    {
+      "before_path": "docs/decisions/0009-cnbc-editorial-break-annotations.md",
+      "after_path": "docs/archive/decisions/0009-cnbc-editorial-break-annotations.md",
+      "before_sha256": "be49e47d4e00be9c57a543e3593ab3bf7f8f28a876fad64d54791a138209580d",
+      "after_sha256": "57055ea74df3b26793cac8a20499d859091cc9047e5d90467dd55fe00fe2fa11"
+    },
+    {
+      "before_path": "docs/decisions/0010-source-chunking.md",
+      "after_path": "docs/archive/decisions/0010-source-chunking.md",
+      "before_sha256": "0dcff222945b13fa016fd2ebce3d265063ab17b722010b32cac587d1dba191d6",
+      "after_sha256": "2c45948ff8fed110f78329a4ec3ba30a60ea25e9c35b4ab01c7430118f1450b4"
+    },
+    {
+      "before_path": "docs/decisions/0011-contextual-chunk-translation.md",
+      "after_path": "docs/archive/decisions/0011-contextual-chunk-translation.md",
+      "before_sha256": "4fd7d258791f539b3d66b30f2adb24bab23d635ed6de35c4cb0d21a78be137d1",
+      "after_sha256": "0fd68613197ae33f4e00d3ba26c5d8bbc9a108b54803c69725b84f434f6dfd89"
+    },
+    {
+      "before_path": "docs/decisions/0012-bilingual-translation-postprocessing.md",
+      "after_path": "docs/archive/decisions/0012-bilingual-translation-postprocessing.md",
+      "before_sha256": "8a4fb88c51e3ad3cbd3bdada2c966bca5193e78e6ec2a0f10bcbc899a8bf361e",
+      "after_sha256": "91b9ba697b68f8ecb5beb2291fd32c5f4c88cc901da2ba2097c76ef6158d05d9"
+    },
+    {
+      "before_path": "docs/decisions/0013-typed-chunking-quality-and-regression.md",
+      "after_path": "docs/decisions/0013-typed-chunking-quality-and-regression.md",
+      "before_sha256": "fc42a529199a316e4f56d2ddd4c2ed2d3af6ebf9e5db64b63d3f6fd37486f604",
+      "after_sha256": "9ae3485aa17a1199e5b766dd001f414065288999e77f67cd28f0b3f0bfb68651"
+    },
+    {
+      "before_path": "docs/decisions/README.md",
+      "after_path": "docs/decisions/README.md",
+      "before_sha256": "3c4f38a2d0ce4433a6e8d0ecb71113bd8242f4837c42e52d0afb945d121d0b1b",
+      "after_sha256": "c3b55d9c29d2df69dd0c690de26a7ae43755d51b1205161fd6a3b1afcc4a0209"
+    },
+    {
+      "before_path": "docs/reviews/2026-10-24-bilingual-semantic-alignment-design.md",
+      "after_path": "docs/reviews/2026-10-24-bilingual-semantic-alignment-design.md",
+      "before_sha256": "f8431b46edbdf2377b1bda68152bf83934daeb0c71548964c0dfa1a010a47119",
+      "after_sha256": "a432cc94c9cd8ed44e2fa19cc4a24a598511a6bd172725e94cd7fe560ace2105"
+    },
+    {
+      "before_path": "docs/reviews/2026-10-24-semantic-contract-and-experiments.md",
+      "after_path": "docs/reviews/2026-10-24-semantic-contract-and-experiments.md",
+      "before_sha256": "834934dcf0566cf204bb306265f958a3073ff90c15613a1138de6a759b3d6621",
+      "after_sha256": "2f7b050b945c4c95112f80309ec1d1f7f883a23498a2866dec3fb9a25efa26b7"
+    },
+    {
+      "before_path": "docs/reviews/2026-11-06-new-bilingual-pipeline-independent-review.md",
+      "after_path": "docs/reviews/2026-11-06-new-bilingual-pipeline-independent-review.md",
+      "before_sha256": "7e6637f1a6249dcd7534d0987fc1e3412a89f4d7fce8b3a744753f3497a7eaf9",
+      "after_sha256": "aa9d0c0a4b90b762c7bf78503bea7df5a263ac7a6349a52684e6538e0acb1b3d"
+    },
+    {
+      "before_path": "docs/tasks/NB-00-implementation-map.md",
+      "after_path": "docs/archive/tasks/NB-00-implementation-map.md",
+      "before_sha256": "515bd2d0c647206fbb60007e91e6479e0ca9e639d71f5c2e1b2e3228f6945cb8",
+      "after_sha256": "47f2e65d7153aa65ed7ce7689b996dfc4105f2097f164db2f504dc596b2a3ad4"
+    },
+    {
+      "before_path": "docs/tasks/NB-01-contracts.md",
+      "after_path": "docs/archive/tasks/NB-01-contracts.md",
+      "before_sha256": "55007d26ff962dca342dc60790c6f954179430c8ec14b02206f8710c529e03db",
+      "after_sha256": "929fa42b53743c63cf727265395e0478059c023a534e4419b6f9ff0edbce26e6"
+    },
+    {
+      "before_path": "docs/tasks/NB-02-source-chunking.md",
+      "after_path": "docs/archive/tasks/NB-02-source-chunking.md",
+      "before_sha256": "ca5ac2c8bf5a0693abc8353a5905721c57c3fc27b03b6298add841ecb25b3401",
+      "after_sha256": "93ce14753b597ba1964d6d653d2de5c1a1cb2c9a7e15b844c221f318ed1e179a"
+    },
+    {
+      "before_path": "docs/tasks/NB-03-04-translation.md",
+      "after_path": "docs/archive/tasks/NB-03-04-translation.md",
+      "before_sha256": "01392f90f230da8165fe30fc011956dab8821776327ef79bea39bab254a7c570",
+      "after_sha256": "2c69bd4c939212cefe129c838e4247213ec5d300441e30e0697ddf9d9c639622"
+    },
+    {
+      "before_path": "docs/tasks/NB-05-final-export-rendering.md",
+      "after_path": "docs/archive/tasks/NB-05-final-export-rendering.md",
+      "before_sha256": "be9eed079019bbe2d6fb646f650871ebbedae358af60668deb3e7d0479d73252",
+      "after_sha256": "4a5bad7b8be98ae69699bee2b2a6a0318827f7f1ea5985e94023adb1c2bdbcfa"
+    },
+    {
+      "before_path": "docs/tasks/NB-06-orchestration.md",
+      "after_path": "docs/archive/tasks/NB-06-orchestration.md",
+      "before_sha256": "65d35b71be83095abb67be2d3f93a854172fc575b82650cd966e66a2afcc16b9",
+      "after_sha256": "cb17a1aa16b0b121e295b3c7aa7a174e1ee266d00500b7ac6f5949be300826c6"
+    },
+    {
+      "before_path": "docs/tasks/NB-07-test-inventory.md",
+      "after_path": "docs/archive/tasks/NB-07-test-inventory.md",
+      "before_sha256": "ff2ca9c5ed7295d24b136e44c63f1c8c2c8c4704188a7c9b3776c625a76f906f",
+      "after_sha256": "d2ab4b7287c4d6ecb4869b6b287085bed9a63e78c8d0cf19c6dde67e9159088c"
+    },
+    {
+      "before_path": "docs/tasks/NB-08-full-fresh-acceptance.md",
+      "after_path": "docs/archive/tasks/NB-08-full-fresh-acceptance.md",
+      "before_sha256": "a7ef6c46b31846548217fb8f7d7dc80a3253e9f62d980abfd90f522dee082a5f",
+      "after_sha256": "5c4ac9165dac370939d0154311821a1d73b41aab3da0a464cd507c7a070cee18"
+    },
+    {
+      "before_path": "docs/tasks/NB-09-editorial-quality-iteration.md",
+      "after_path": "docs/archive/tasks/NB-09-editorial-quality-iteration.md",
+      "before_sha256": "e422d3bd29c3c7f9c968de12ccdd8337b9a54dc1a10b1b568e32f56e3bcf353b",
+      "after_sha256": "97cf2c193e66ff785c94268426053103589ed376f5651356d8febf1eb711797b"
+    },
+    {
+      "before_path": "docs/tasks/NB-09-editorial-test-mapping.md",
+      "after_path": "docs/archive/tasks/NB-09-editorial-test-mapping.md",
+      "before_sha256": "c8c7b16b0287a5d3e7bddcf41e9a55bc2bd19ae4eacc75a168abbbb9ac35d0f2",
+      "after_sha256": "469fb4998253300415c256802c87d7a752de830b4af563780809e5a6c12aec1f"
+    },
+    {
+      "before_path": "docs/tasks/NB-10-cue-feedback-diagnosis.md",
+      "after_path": "docs/archive/tasks/NB-10-cue-feedback-diagnosis.md",
+      "before_sha256": "90566b53552eb7fd3e0be9ef9e8cb2da654637aa00a450f05e8f7065c32fb4bf",
+      "after_sha256": "26a90156969fcd000966dbe1bd175ad2a135b824ac2da7a139084087e53ec09e"
+    },
+    {
+      "before_path": "docs/tasks/NB-12-chunking-quality-iteration.md",
+      "after_path": "docs/tasks/NB-12-chunking-quality-iteration.md",
+      "before_sha256": "f6bced74d93accdabc403659f589e5d9df70be4a180bec97a750b1993fa02331",
+      "after_sha256": "85d045c969ade11e8012061b2f92a2737d895fb1b6f42d5a11abc46ba27273a5"
+    },
+    {
+      "before_path": "docs/tasks/README.md",
+      "after_path": "docs/tasks/README.md",
+      "before_sha256": "7f1df7039819e2745ecfb886ae4357d73bdf883da1f4efe102f84d2b9c06e43f",
+      "after_sha256": "c5952c0bf2ea639a8c137dbe0e09bb81ecb1ad4067cf583cafe0cca76eb1fcbe"
+    },
+    {
+      "before_path": "src/orchestration/AGENTS.md",
+      "after_path": "src/orchestration/AGENTS.md",
+      "before_sha256": "3b331766e97e49256328733d072045f1fd8a813687279050c350222effee211f",
+      "after_sha256": "6e9dc2b76f65fba105bb2d264c886cf3b67438d92cd50594dda03a312106c372"
+    },
+    {
+      "before_path": "src/translation/AGENTS.md",
+      "after_path": "src/translation/AGENTS.md",
+      "before_sha256": "2c7d2882c1ed5a1ba0796be649c1b2c5223e311d10e9544a91939609c2ad3f6c",
+      "after_sha256": "eac035ea70abacb8baba625759be7a44c131e5c13bb89f039f9630c46a1b1f89"
+    }
+  ],
+  "git_diff_check": "passed",
+  "classification_summary": {
+    "completed_technical_fixed_experiment_or_diagnosis_records": 16,
+    "terminated_superseded_unimplemented_records": 1,
+    "retained_current_quality_documents": 3,
+    "qualification": "Completed describes delivery of the record/technical slice, not global semantic, listening or publication acceptance."
+  },
+  "independent_post_compaction_recheck": {
+    "maintained_markdown_files": 113,
+    "maintained_local_links": 336,
+    "maintained_broken": 0,
+    "all_markdown_files": 262,
+    "all_local_links": 474,
+    "preexisting_output_broken_exact_set": 110,
+    "new_broken": 0,
+    "all_17_original_bodies_and_before_after_hashes_reconstructed_exact_from_temporary_validation_copy": true,
+    "errors": 0,
+    "reviewer": "evaluation_audit/archive_link_audit read-only independent audit"
+  }
+}

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Mapping, Protocol
 
 from archive_core.interfaces import RenderLineMetricsDTO, RenderProfileDTO
+from archive_core.interfaces.rendering import RENDER_LAYOUT_VERSION
 
 
 class LayoutError(ValueError):
@@ -27,6 +28,10 @@ class GraphemeSegmenter(Protocol):
         """Return complete Unicode grapheme boundaries, including 0 and len(text)."""
         ...
 
+    def lexical_boundaries(self, text: str) -> tuple[int, ...]:
+        """Return preferred Chinese word boundaries, including 0 and len(text)."""
+        ...
+
 
 @dataclass(frozen=True)
 class VisualLayout:
@@ -43,5 +48,5 @@ def profile_from_config(parameters: Mapping[str, object]) -> RenderProfileDTO:
         raise ValueError("subtitle_rendering configuration must not override profile identity fields")
     data["name"] = data.pop("profile")
     data["version"] = "v1"
-    data["layout_version"] = "pixel-wrap.v1"
+    data["layout_version"] = RENDER_LAYOUT_VERSION
     return RenderProfileDTO.from_dict(data)

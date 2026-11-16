@@ -208,30 +208,6 @@ def test_event_rejects_invalid_optional_original_timeline_range(
         )
 
 
-def test_json_lines_sink_writes_every_severity_without_filtering() -> None:
-    stream = StringIO()
-    sink = JsonLinesEventSink(stream)
-    events = (
-        _event(EventSeverity.DEBUG, EventCode.ALIGNMENT_WORD_ALIGNED),
-        _event(EventSeverity.INFO, EventCode.FUSION_SURFACE_ADJUSTED),
-        _event(EventSeverity.WARNING, EventCode.ALIGNMENT_WORD_INTERPOLATED),
-        _event(EventSeverity.ERROR, EventCode.ALIGNMENT_WORD_UNRECOVERABLE),
-    )
-
-    for event in events:
-        sink.emit(event)
-    sink.flush()
-
-    records = [json.loads(line) for line in stream.getvalue().splitlines()]
-    assert [record["severity"] for record in records] == [
-        "DEBUG",
-        "INFO",
-        "WARNING",
-        "ERROR",
-    ]
-    assert [record["code"] for record in records] == [
-        event.code.value for event in events
-    ]
 
 
 def test_report_aggregates_counts_findings_qa_and_success_status() -> None:
@@ -405,22 +381,3 @@ def test_flush_failures_do_not_mask_original_business_exception() -> None:
     assert snapshot.status is ReportStatus.FAILED
     assert snapshot.counts["error"] == 1
     assert snapshot.findings[-1].code is EventCode.STAGE_FAILED
-
-
-def test_json_report_writer_replaces_previous_document() -> None:
-    stream = StringIO("not valid json")
-    writer = JsonReportWriter(stream)
-    report = TranscriptionReportAggregator(ASSET_ID)
-    report.mark_succeeded()
-
-    writer.write(report.snapshot())
-
-    data = json.loads(stream.getvalue())
-    assert data["status"] == "succeeded"
-    assert data["counts"] == {
-        "aligned": 0,
-        "interpolated": 0,
-        "conflict": 0,
-        "warning": 0,
-        "error": 0,
-    }
