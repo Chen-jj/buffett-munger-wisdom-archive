@@ -1,6 +1,6 @@
 # ADR-0011：带上下文的分批 chunk 翻译
 
-> 2026-11-17归档说明：已实施的技术方案归档，未被后续ADR明确替代的现行契约继续生效；语义/核听/出版未通过不因归档改变。 原路径`docs/decisions/0011-contextual-chunk-translation.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。
+> 2026-11-17归档说明：已实施的技术方案归档，未被后续ADR明确替代的现行契约继续生效；语义/核听/出版未通过不因归档改变。 原路径`docs/decisions/0011-contextual-chunk-translation.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](0013-typed-chunking-quality-and-regression.md)。
 
 - 日期：2026-11-04（Asia/Shanghai）。
 - 状态：**accepted / 翻译行为设计已接受，NB-03 初译已实现并通过离线定向；真实全链和字幕质量验收未完成**。

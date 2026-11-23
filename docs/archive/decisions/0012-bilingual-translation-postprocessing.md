@@ -1,6 +1,6 @@
 # ADR-0012：双语译文后处理与最终排时
 
-> 2026-11-17归档说明：已实施的技术方案归档，未被后续ADR明确替代的现行契约继续生效；语义/核听/出版未通过不因归档改变。 原路径`docs/decisions/0012-bilingual-translation-postprocessing.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。
+> 2026-11-17归档说明：已实施的技术方案归档，未被后续ADR明确替代的现行契约继续生效；语义/核听/出版未通过不因归档改变。 原路径`docs/decisions/0012-bilingual-translation-postprocessing.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](0013-typed-chunking-quality-and-regression.md)。
 
 - 日期：2026-11-04（Asia/Shanghai）；2026-11-05 收敛处理行为。
 - 状态：**accepted / NB-09已直接替换为有界双语编辑生成与统一排时；真实固定样片文本/排版已复核，核听/人类出版签字未验证（2026-11-07）**。
@@ -16,7 +16,7 @@
 后处理作为 `translation` 的独立用例，模型提出中文和分组，纯规则试算、验证并决定最终逻辑时间。
 新路径中 `srt_processing` 在上游仍负责源语 chunking，在下游只校验并投影最终稿，不另行拆并、
 延时或比例分配。后处理输出是唯一权威双语稿，SRT 与 rendering 均从该稿投影；
-rendering 负责视觉排版，接入见 [ADR-0006](../../decisions/0006-subtitle-rendering-ass-and-burn-in.md)。公共工件归 `archive_core`；不新增顶层模块，不跨模块
+rendering 负责视觉排版，接入见 [ADR-0006](0006-subtitle-rendering-ass-and-burn-in.md)。公共工件归 `archive_core`；不新增顶层模块，不跨模块
 调用私有规则；按 ADR-0008 直接替换旧路径，不保留多套契约或算法。
 
 ## 2. 2026-11-07 NB-09 编辑生成修订（取代机械触发方案）

@@ -1,6 +1,6 @@
 # ADR-0010：英文源语 chunking，不换行、不借时间
 
-> 2026-11-17归档说明：已实施的技术方案归档，未被后续ADR明确替代的现行契约继续生效；语义/核听/出版未通过不因归档改变。 原路径`docs/decisions/0010-source-chunking.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。
+> 2026-11-17归档说明：已实施的技术方案归档，未被后续ADR明确替代的现行契约继续生效；语义/核听/出版未通过不因归档改变。 原路径`docs/decisions/0010-source-chunking.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](0013-typed-chunking-quality-and-regression.md)。
 
 - 状态：**accepted / 行为已实现、定向离线验证及固定本地模型三例推理通过（2026-11-06）**。真实全链产物/出版质量另验；以下设计期“未实施”陈述为历史记录。
 - 日期：2026-11-01（Asia/Shanghai）。
@@ -15,9 +15,9 @@
 
 > **NB-09 A3 `english-comma-first-two-pass.v4`：** 仅在 Stanza 已选的连续三块有两个经实际 PTS 验证不足两帧的内部切点时，可在原中块内用一个已有句法候选替代这两个切点。新切点须满足保护跨度及两帧，两侧新块均须符合 80 字符、834–7000ms、20 CPS；按原句法代价、空帧数、源词偏移稳定择优。此举不移源词锚或外部边界，不因帧间隔驱动初次裁切；无合格方案或未核实帧信息时保留原结果。逗号优先路径不变。
 
-> **2026-11-14当前状态：** [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)的84逻辑cue、typed统一DP及最小保护已实现，完整离线及comparison-v1～v4回放已留证；整体源语质量仍未通过。B/U/S/US隔离试验后已选择US唯一目标并证明实现等价；后续CF/v5已留证，独立NomOf软附着离线通过、comparison-v6质量待审，未调用真实翻译/新渲染；最新执行见[NB-12](../../tasks/NB-12-chunking-quality-iteration.md)。下方13日计划及更早规则为历史状态，不与现行实现并存。
+> **2026-11-14当前状态：** [ADR-0013](0013-typed-chunking-quality-and-regression.md)的84逻辑cue、typed统一DP及最小保护已实现，完整离线及comparison-v1～v4回放已留证；整体源语质量仍未通过。B/U/S/US隔离试验后已选择US唯一目标并证明实现等价；后续CF/v5已留证，独立NomOf软附着离线通过、comparison-v6质量待审，未调用真实翻译/新渲染；最新执行见[NB-12](../tasks/NB-12-chunking-quality-iteration.md)。下方13日计划及更早规则为历史状态，不与现行实现并存。
 
-> **2026-11-13修订入口：** 用户已授权[ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)及[NB-12](../../tasks/NB-12-chunking-quality-iteration.md)实施84字符项目容量、完整句Stanza统一DP和防退化评测。当前尚未实现，生产仍为NB-09的80/逗号优先v4；本节以下旧42及80决策保留历史。新规则不改源词/词时，不重跑ASR，不把84称为单行行业规范；实施/实验/新根样片状态只按NB-12实际更新。
+> **2026-11-13修订入口：** 用户已授权[ADR-0013](0013-typed-chunking-quality-and-regression.md)及[NB-12](../tasks/NB-12-chunking-quality-iteration.md)实施84字符项目容量、完整句Stanza统一DP和防退化评测。当前尚未实现，生产仍为NB-09的80/逗号优先v4；本节以下旧42及80决策保留历史。新规则不改源词/词时，不重跑ASR，不把84称为单行行业规范；实施/实验/新根样片状态只按NB-12实际更新。
 
 ## 1. 已确认的边界
 

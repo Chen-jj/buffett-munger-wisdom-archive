@@ -1,6 +1,6 @@
 # NB-02 英文源语 chunking
 
-> 2026-11-17归档说明：初版源语chunking技术交付及本地模型验证归档；旧容量/评分过程保留，当前84/typed修订以ADR-0013为准。 原路径`docs/tasks/NB-02-source-chunking.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。
+> 2026-11-17归档说明：初版源语chunking技术交付及本地模型验证归档；旧容量/评分过程保留，当前84/typed修订以ADR-0013为准。 原路径`docs/tasks/NB-02-source-chunking.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](NB-12-chunking-quality-iteration.md) / [ADR-0013](../decisions/0013-typed-chunking-quality-and-regression.md)。
 
 - 负责人切片：NB-00；行为唯一依据 ADR-0010；2026-11-05 实施中。
 - 假设：权威 words/sentences 已由 source alignment DTO 验证；只消费无辅助编辑符号的英文正文。

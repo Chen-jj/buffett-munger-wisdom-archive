@@ -1,8 +1,8 @@
 # buffett-munger-wisdom-archive
 
-Local media pipeline for collecting Buffett and Munger archive videos, generating subtitles, rendering review videos, and serving review assets.
+Local media pipeline for collecting Buffett and Munger archive videos, generating bilingual subtitles, and rendering review videos.
 
-See [documentation](docs/README.md) for active work, archived implementation decisions, and current subtitle quality limits.
+See [project progress](PROGRESS.md) for current capabilities, subtitle quality limits, and next steps, or [documentation](docs/README.md) for decisions and implementation records.
 
 ## Quick Start
 
@@ -57,7 +57,7 @@ python -m pip install -r requirements.txt -r requirements-dev.txt
 Run the offline test suite:
 
 ```bash
-python -m pytest tests/ -q
+python -m pytest tests/ -q -m "not live"
 ```
 
 For ASR/alignment workflows, `faster-whisper` and `whisperx` may download model files on first real use.

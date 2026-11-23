@@ -1,6 +1,6 @@
 # NB-03/04 分批初译、有界修订与唯一最终稿
 
-> 2026-11-17归档说明：初版翻译/修订迁移技术交付归档；机械修订已被NB-09有界编辑生成替代，原过程与限制不删除。 原路径`docs/tasks/NB-03-04-translation.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。
+> 2026-11-17归档说明：初版翻译/修订迁移技术交付归档；机械修订已被NB-09有界编辑生成替代，原过程与限制不删除。 原路径`docs/tasks/NB-03-04-translation.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](NB-12-chunking-quality-iteration.md) / [ADR-0013](../decisions/0013-typed-chunking-quality-and-regression.md)。
 
 状态：NB-03/04与翻译侧NB-07开发交付，待负责人完整真实验收；2026-11-06（Asia/Shanghai）。依赖 NB-01 公共契约与 NB-02 候选块。
 

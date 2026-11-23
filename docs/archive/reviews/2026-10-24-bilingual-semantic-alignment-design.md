@@ -22,8 +22,8 @@
 
 - [独立 GPT 语义审读](2026-10-24-independent-bilingual-semantic-audit.md)：先读原句与译文，未读旧 plan/参考。
 - [数据契约与实验协议](2026-10-24-semantic-contract-and-experiments.md)。
-- [ADR-0007 草案：语义证据与联合规划](../archive/decisions/0007-bilingual-semantic-alignment.md)。
-- [ADR-0008 草案：本地编排与集成测试唯一归属](../archive/decisions/0008-local-orchestration-and-integration-tests.md)。
+- [ADR-0007 草案：语义证据与联合规划](../decisions/0007-bilingual-semantic-alignment.md)。
+- [ADR-0008 草案：本地编排与集成测试唯一归属](../decisions/0008-local-orchestration-and-integration-tests.md)。
 - 依赖任务图（旧 SA-00 未实施任务已按用户要求移除；现行入口为 ADR-0008）。
 
 这不是把“中文优先”改成“英文优先”：两种语言的边界必须由**意义关系**限制，不再按长度配对。

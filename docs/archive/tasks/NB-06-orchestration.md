@@ -1,6 +1,6 @@
 # NB-06 生产公共入口、媒体派生与同步编排
 
-> 2026-11-17归档说明：生产编排/公共入口技术交付及NB-08真实恢复/复用已留证；不把未核听或语义问题改为通过。 原路径`docs/tasks/NB-06-orchestration.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。
+> 2026-11-17归档说明：生产编排/公共入口技术交付及NB-08真实恢复/复用已留证；不把未核听或语义问题改为通过。 原路径`docs/tasks/NB-06-orchestration.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](NB-12-chunking-quality-iteration.md) / [ADR-0013](../decisions/0013-typed-chunking-quality-and-regression.md)。
 
 状态：生产开发与默认离线验证已交付（2026-11-06 Asia/Shanghai）；负责人真实运行及音画/语义审核另记 NB-08。
 

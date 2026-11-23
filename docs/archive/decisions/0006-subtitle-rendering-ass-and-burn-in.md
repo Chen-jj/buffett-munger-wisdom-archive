@@ -1,5 +1,7 @@
 # ADR-0006：subtitle_rendering 的确定性 ASS 排版与硬字幕烧录契约
 
+> 2026-11-23 归档：渲染契约已实施，未被替代的条款继续生效。归档不代表整体字幕质量验收通过；最新状态见 [PROGRESS.md](../../../PROGRESS.md)。
+
 - 状态：已接受；新版权威稿已完成真实烧录、275条实际像素检查和两种复用（2026-11-06）；语义残余及未核听见 NB-08。旧 SR-07 技术样片已交付、最终质量未通过（历史）。
 - 日期：2026-10-23
 - 集成测试补充确认：2026-10-23，复用 transcription/translation/srt_processing 真实集成产物并持久输出样片。
@@ -17,7 +19,7 @@
 
 ## 新版双语稿接入（已实现并通过定向离线测试，2026-11-06）
 
-按 ADR-0008 的单套替换政策直接改写输入契约，不保留旧路径。渲染消费 [ADR-0012](../archive/decisions/0012-bilingual-translation-postprocessing.md)
+按 ADR-0008 的单套替换政策直接改写输入契约，不保留旧路径。渲染消费 [ADR-0012](0012-bilingual-translation-postprocessing.md)
 的版本化权威双语稿，核验源词、最终中文、媒体及 manifest 链，不再要求中文来自旧句级译文切片；
 与 SRT 使用同一权威稿，不从 SRT 反推正文或时间。上游指标 warning 不因进入渲染而升级为输入拒绝，
 不跳过现有字体、实际布局和媒体安全校验；无法合法布局时报告渲染失败，不改写内容或时间。
@@ -670,7 +672,7 @@ python -m pytest tests/ -q
 | 来源阶段 | 本模块使用的产物 | 当前真实来源 |
 |---|---|---|
 | transcription 集成 | `video.mp4`、`source_alignment.json`、`transcription_manifest.json` 及证据链引用工件 | `tests/transcription/test_integration_live.py` 的持久 CNBC workspace：`output/transcription-integration/cnbc_2000_morning/`。 |
-| translation 真实集成验收 | `translation_result.json`、`translation_manifest.json` | [SP-08A](../archive/tasks/SP-08A-prepare-persistent-cnbc-translation.md) 已通过现有生产 workflow 在同一 CNBC alignment 上生成并持久保存的97句/2 sections译文。 |
+| translation 真实集成验收 | `translation_result.json`、`translation_manifest.json` | [SP-08A](../tasks/SP-08A-prepare-persistent-cnbc-translation.md) 已通过现有生产 workflow 在同一 CNBC alignment 上生成并持久保存的97句/2 sections译文。 |
 | srt_processing 集成 | `subtitle_plan.json`、三份 SRT、`srt_processing_report.json`、`srt_processing_manifest.json` | `tests.srt_processing.candidate_v3_runner` 的隔离 workspace：`output/cue-evaluation/20261023-candidate-v3/workspaces/cnbc_2000_morning/`，当前163 cues。 |
 
 `tests/translation/test_integration_live.py` 当前使用 `synthetic:translation:live` 合成 alignment，
@@ -817,7 +819,7 @@ feat(subtitle_rendering): render and validate review videos
 
 ### 24.1 当前状态（2026-10-24）
 
-- SR-01..06已验收并移入[归档任务目录](../archive/tasks/README.md)，公共契约、确定性布局、
+- SR-01..06已验收并移入[归档任务目录](../tasks/README.md)，公共契约、确定性布局、
   字体/ASS/像素/媒体adapter、工作流与独立对抗测试均已实现。
 - SR-07 runner及显式本地集成已实现；623秒/163cue同源完整样片已持久生成并通过
   `succeeded → reused → reused`、逐cue像素/媒体QA、零写复用与全部上游不变检查。

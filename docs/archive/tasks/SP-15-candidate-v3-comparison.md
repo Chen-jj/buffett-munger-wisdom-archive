@@ -23,12 +23,12 @@
 - 完整离线pytest全绿后，真实生成→即时复用→独立新进程复用；六输出bytes/mtime不变、复用0写入；原件不变。
 - 完整词/中文覆盖、speaker/section/null、单调时间/媒体边界、最多500ms延长、EN实际2×42、中文一行与停顿边界验证。
 - >16、>7秒、>9CPS按本轮软目标分别计数/告警，不能沿用旧硬合规指标。不能以告警数量更少等同质量更好。
-- 交付全97句v1/v2/agent/v3对照（含sentence-local fragment范围及跨句关联说明）、机器指标、用户偏好验收表、可复跑命令、版本/耗时/复用/保全证据及docs/reviews报告。
+- 交付全97句v1/v2/agent/v3对照（含sentence-local fragment范围及跨句关联说明）、机器指标、用户偏好验收表、可复跑命令、版本/耗时/复用/保全证据及 docs/archive/reviews 报告。
 - 负责人独立重跑并审读后才accepted；不代表音画/像素/烧录/出版级人类签字通过。
 
 ## 实施/验收记录
 
-已完成。精确证据与限制见[负责人报告](../../reviews/2026-10-23-cue-candidate-v3.md)。
+已完成。精确证据与限制见[负责人报告](../reviews/2026-10-23-cue-candidate-v3.md)。
 
 - 真实163 cues，succeeded→reused耗时4.231/0.696s；新进程0.727/0.724s，再由负责人独立
   reused→reused为0.725/0.686s。六输出bytes/mtime不变、复用0写；三SRT独立回读通过。

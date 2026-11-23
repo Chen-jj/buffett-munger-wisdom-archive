@@ -1,6 +1,6 @@
 # NB-01 公共契约与转录编辑标记
 
-> 2026-11-17归档说明：公共契约/编辑标记技术切片已交付，并由后续NB-08真实链路验收接续；原待验头部和过程结果保留。 原路径`docs/tasks/NB-01-contracts.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。
+> 2026-11-17归档说明：公共契约/编辑标记技术切片已交付，并由后续NB-08真实链路验收接续；原待验头部和过程结果保留。 原路径`docs/tasks/NB-01-contracts.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](NB-12-chunking-quality-iteration.md) / [ADR-0013](../decisions/0013-typed-chunking-quality-and-regression.md)。
 
 状态：工程接口冻结，实施中（2026-11-05 Asia/Shanghai）。依据 ADR-0008～0012；不增加兼容路径。
 

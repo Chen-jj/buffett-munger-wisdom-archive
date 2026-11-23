@@ -1,6 +1,6 @@
 # NB-09 编辑生成测试替代映射
 
-> 2026-11-17归档说明：固定样本编辑迭代及测试映射已交付；当时有限评审结论保留，不替代NB-10反馈及NB-12未通过结论。 原路径`docs/tasks/NB-09-editorial-test-mapping.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。
+> 2026-11-17归档说明：固定样本编辑迭代及测试映射已交付；当时有限评审结论保留，不替代NB-10反馈及NB-12未通过结论。 原路径`docs/tasks/NB-09-editorial-test-mapping.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](NB-12-chunking-quality-iteration.md) / [ADR-0013](../decisions/0013-typed-chunking-quality-and-regression.md)。
 
 2026-11-07：仅修改现有测试文件，不删除测试/生产文件。机械告警触发和候选必须改善告警的产品规则
 由用户授权的新编辑生成取代；不将下列旧断言改名后假称继续验证同一规则。

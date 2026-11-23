@@ -2,8 +2,8 @@
 
 - 状态：proposed；未增加 ArtifactType、DTO、provider、planner 或测试入口。
 - 配套：[根因与方案](2026-10-24-bilingual-semantic-alignment-design.md)、
-  [ADR-0007](../archive/decisions/0007-bilingual-semantic-alignment.md)、
-  [编排 ADR-0008](../archive/decisions/0008-local-orchestration-and-integration-tests.md)。
+  [ADR-0007](../decisions/0007-bilingual-semantic-alignment.md)、
+  [编排 ADR-0008](../decisions/0008-local-orchestration-and-integration-tests.md)。
 - 下述名字/JSON是待冻结的契约提案，不是当前代码已接受的工件格式。模型审阅资料与真实样片
   放在获批后的 gitignored 唯一实验目录，不提交生成资产；本轮文档中的审读摘录用于解释设计。
 

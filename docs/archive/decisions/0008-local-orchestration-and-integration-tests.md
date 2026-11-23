@@ -1,11 +1,11 @@
 # ADR-0008：新双语流水线总方案、编排与集成验收
 
-> 2026-11-17归档说明：已实施的技术方案归档，未被后续ADR明确替代的现行契约继续生效；语义/核听/出版未通过不因归档改变。 原路径`docs/decisions/0008-local-orchestration-and-integration-tests.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。
+> 2026-11-17归档说明：已实施的技术方案归档，未被后续ADR明确替代的现行契约继续生效；语义/核听/出版未通过不因归档改变。 原路径`docs/decisions/0008-local-orchestration-and-integration-tests.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](0013-typed-chunking-quality-and-regression.md)。
 
 - 状态：**生产编排与集中测试已落地；真实端到端经恢复发布并通过两种复用，语义及核听不视为通过**（2026-11-06）。
 - 更新：2026-11-05；本 ADR 是唯一方案入口，采用单套替换和逐阶段产物审核。
 - 2026-10-28历史补记：原语义流水线方案依用户要求暂缓并重新比较；本ADR的集成测试唯一归属目标
-  保留，具体阶段DAG、输入绑定和迁移顺序待[业界调研](../../reviews/2026-10-28-industry-bilingual-subtitle-pipelines.md)
+  保留，具体阶段DAG、输入绑定和迁移顺序待[业界调研](../reviews/2026-10-28-industry-bilingual-subtitle-pipelines.md)
   后的路线验证再定，不把旧草案依赖当作当前实施授权。
 - 日期：2026-10-24；影响：`orchestration`、`archive_core`、各阶段公共入口及测试/指南。
 - 需求：集成各模块测试与真实样片来源链；迁移完成后除编排外不保留集成测试；用其产物做独立
@@ -34,7 +34,7 @@
 | 3 | srt_processing：源语候选块及只读预算 | [ADR-0010](0010-source-chunking.md) |
 | 4 | translation：上下文分批初译与术语输入 | [ADR-0011](0011-contextual-chunk-translation.md) |
 | 5 | translation：有限修订、最终分组和排时 | [ADR-0012](0012-bilingual-translation-postprocessing.md) |
-| 6 | srt_processing：验证并导出；subtitle_rendering：布局烧录 | ADR-0012、[ADR-0006](../../decisions/0006-subtitle-rendering-ass-and-burn-in.md) |
+| 6 | srt_processing：验证并导出；subtitle_rendering：布局烧录 | ADR-0012、[ADR-0006](0006-subtitle-rendering-ass-and-burn-in.md) |
 | 7 | orchestration：集中集成测试、产物与样片审核记录 | 本 ADR §6～8 |
 
 ### 0.1 直接替换，不并存多套实现
@@ -237,7 +237,7 @@ RUN_SUBTITLE_RENDERING_INTEGRATION不隐式触发新入口；迁移完成后移�
 
 用户要求的“用该集成产出的样片再用agent验证”明确为后续验收：非作者agent先独立看原文译文，
 再核真实输出链/关键意义/边界/像素/媒体/复用；报告实际看帧/核听覆盖，不能只抄runner结果。
-无法听音则该轴pending，最终人类完整播放。回归如实报告，不新增语义自动发布门禁。详见[实验协议§6.3](../../reviews/2026-10-24-semantic-contract-and-experiments.md)。
+无法听音则该轴pending，最终人类完整播放。回归如实报告，不新增语义自动发布门禁。详见[实验协议§6.3](../reviews/2026-10-24-semantic-contract-and-experiments.md)。
 旧样片已删除；不能用历史报告或图表冒充新样片回归。
 
 ### 7.1 实施 agent 的逐阶段审核责任

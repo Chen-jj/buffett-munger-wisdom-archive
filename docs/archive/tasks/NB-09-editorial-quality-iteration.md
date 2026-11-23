@@ -1,11 +1,11 @@
 # NB-09 同源双语字幕编辑质量迭代
 
-> 2026-11-17归档说明：固定样本编辑迭代及测试映射已交付；当时有限评审结论保留，不替代NB-10反馈及NB-12未通过结论。 原路径`docs/tasks/NB-09-editorial-quality-iteration.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。
+> 2026-11-17归档说明：固定样本编辑迭代及测试映射已交付；当时有限评审结论保留，不替代NB-10反馈及NB-12未通过结论。 原路径`docs/tasks/NB-09-editorial-quality-iteration.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](NB-12-chunking-quality-iteration.md) / [ADR-0013](../decisions/0013-typed-chunking-quality-and-regression.md)。
 
 状态：本轮实现、真实集成与固定样片文本/视觉验收完成（2026-11-07）；未核听或取得人类出版签字。总方案仍由 ADR-0008 进入。用户确认全局英文每 cue 80 字符、逗号优先切分及补充样片中的人名/公司术语，授权继续按实测调整算法和指标。保留 NB-08 原始产物、独立稿和所有失败记录，未commit/push。下方逐轮记录为实际时间线，旧的“未完成/待验”不代表最终状态。
 
 最终入口：
-- [负责人自审](../../reviews/2026-11-07-nb09-d2-self-review.md)、[独立agent复审](../../reviews/2026-11-07-nb09-d2-independent-review.md)、[旧v2未通过报告](../../reviews/2026-11-07-nb09-v2-self-review.md)。
+- [负责人自审](../reviews/2026-11-07-nb09-d2-self-review.md)、[独立agent复审](../reviews/2026-11-07-nb09-d2-independent-review.md)、[旧v2未通过报告](../reviews/2026-11-07-nb09-v2-self-review.md)。
 - 成片：`/Users/drchan/Codebase/buffett-munger-wisdom-archive/output/orchestration-integration/NB09-20261107-iteration-v2/cnbc_2000_morning-ch6-7/video_中文字幕.mp4`，623秒/163 cues，SHA-256 `75b8a1eae0a7fecd621fd5095fdbdbfdc7ba76f6ac2f180c3816999764d33ca3`；同目录为完整真实阶段工件和三份SRT/ASS。
 - 最终权威稿 `06bbcea7a2af4e1c92753676037d221c94ffd0c7808fc4360b881539e0d404d9`；双语SRT `33e2d54ef5326b65710c40d4bda21e84467e76cd46265e9cabbbabfd6ad802dd`。全97句对照见 `output/subtitle-editorial-comparison/NB09-D2-final-review/all-97-sentences.md`。
 - 负责人最终完整离线：`.venv/bin/python -m pytest tests/ -q` → **2448 passed / 7 skipped（13.05s）**；`git diff --check`通过。

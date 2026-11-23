@@ -1,6 +1,6 @@
 # NB-05 权威最终稿导出与渲染接入
 
-> 2026-11-17归档说明：权威稿导出/渲染接入技术交付及后续NB-08真实恢复已留证；渲染整体质量仍未通过。 原路径`docs/tasks/NB-05-final-export-rendering.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。
+> 2026-11-17归档说明：权威稿导出/渲染接入技术交付及后续NB-08真实恢复已留证；渲染整体质量仍未通过。 原路径`docs/tasks/NB-05-final-export-rendering.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](NB-12-chunking-quality-iteration.md) / [ADR-0013](../decisions/0013-typed-chunking-quality-and-regression.md)。
 
 状态：待开发；2026-11-05。依赖 NB-04，公共字段见 NB-01。
 

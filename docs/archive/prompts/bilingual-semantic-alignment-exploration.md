@@ -1,5 +1,7 @@
 # 给新 agent 的探索 prompt
 
+> 历史探索稿，不是当前任务或 agent 指令。现行流程见 [AGENTS.md](../../../AGENTS.md)。
+
 你是一名双语字幕、语义对齐和媒体管线架构研究负责人。请在本仓库探索“英文音轨准确，但中文
 字幕内容跟不上当前讲话”的完整解决方案。**本轮先研究、独立审读、设计可验证实验和提出方案，
 不要直接修改生产算法或把某一建议当作已经接受的决策。**
@@ -12,10 +14,10 @@
 
 再读：
 
-- `docs/reviews/2026-10-24-rendering-technical-and-semantic-review.md`；
+- `docs/archive/reviews/2026-10-24-rendering-technical-and-semantic-review.md`；
 - `docs/archive/decisions/0002-translation-sentence-units.md`；
 - `docs/archive/decisions/0003-srt-processing-input-boundary.md`，特别v3修订及其质量限制；
-- `docs/decisions/0006-subtitle-rendering-ass-and-burn-in.md`；
+- `docs/archive/decisions/0006-subtitle-rendering-ass-and-burn-in.md`；
 - `docs/archive/tasks/SP-09-agent-reference-evaluation.md`、SP-13/14/15及其链接报告；
 - `docs/archive/tasks/SR-07-real-sample-acceptance.md`。
 

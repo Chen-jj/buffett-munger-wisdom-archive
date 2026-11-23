@@ -16,7 +16,7 @@
 
 对153-cue参考**按候选新word计数与2x42重新审计**，不改其原断点/时间/文件；保留旧口径历史指标，不把旧98超限结论沿用为新规则下结论。两种计数下的CPS不可不标口径直接比较。报告仍不具备像素/音画或人类签字证据。
 
-交付可复跑集成/比较入口及离线测试、全部97句Markdown/JSONL/TSV或等效可读对照、机器指标、候选三SRT/plan/report/manifest、版本/耗时/复用/原件不变证据和`docs/reviews/2026-10-22-cue-candidate-v2.md`。全部新增文件不静默覆盖；本轮不自动commit。
+交付可复跑集成/比较入口及离线测试、全部97句Markdown/JSONL/TSV或等效可读对照、机器指标、候选三SRT/plan/report/manifest、版本/耗时/复用/原件不变证据和`docs/archive/reviews/2026-10-22-cue-candidate-v2.md`。全部新增文件不静默覆盖；本轮不自动commit。
 
 ## 最终判据
 
@@ -29,6 +29,6 @@
 - 独立重算全部97句三方数据/metrics，并重新拼接97条手写判断；JSONL/TSV/Markdown与审计交付逐字节一致。负责人通读全部97句候选正文与逐句审读。三例固定路径成本工具也独立复跑JSON/MD一致，没有搜索/改断点。
 - 候选224较旧242少18，原153按新profile重审73 cue不兼容（其中5也不可排2x42），不是历史98。候选硬不兼容0，但短cue从2增9，新口径中文CPS超9从旧11增17；9处较旧文本回归均记录。26句与参考同断点不等于语义全面接近。
 - 完整离线负责人复跑1329 passed / 5 deselected（6.15s），开发/审计独立完整套件也全绿；新增runner10项负责人独立通过，diff check通过。无自动commit/delete、无像素/音画验收。
-- 主交付：`output/cue-evaluation/20261022-candidate-v2/review_v2/all_sentences.md`及JSONL/TSV；[最终报告](../../reviews/2026-10-22-cue-candidate-v2.md)与独立目录README含规则、16+案例、失败证据和全部复跑命令。
+- 主交付：`output/cue-evaluation/20261022-candidate-v2/review_v2/all_sentences.md`及JSONL/TSV；[最终报告](../reviews/2026-10-22-cue-candidate-v2.md)与独立目录README含规则、16+案例、失败证据和全部复跑命令。
 
 结论：SP-10/11候选实现、SP-12真实集成和97句比较交付验收通过；**不建议将224版定为最终字幕质量通过**。用户要求的这一版已冻结，等待其看完逐句差异后决定下一步；不擅自修改本版或原153参考。

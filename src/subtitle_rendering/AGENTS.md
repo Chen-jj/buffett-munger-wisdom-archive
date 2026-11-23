@@ -25,9 +25,9 @@ NB-12已真实交付623秒/166 cue诊断候选，像素/字形/ASS/媒体技术�
 截至 2026-10-24 21:02 CST，SR-01..06公共契约/实现与独立跨层/重签/发布故障验收均已通过并归档。
 SR-07 runner已实现，完整离线最近验收2580 passed / 6 skipped；完整623秒/163-cue样片首次编码、
 逐cue像素、媒体QA与两次零写复用通过。用户人类播放发现双语语义同步问题，最终验收未通过；
-模块整体不标完成。见[复审报告](../../docs/reviews/2026-10-24-rendering-technical-and-semantic-review.md)。
+模块整体不标完成。见[复审报告](../../docs/archive/reviews/2026-10-24-rendering-technical-and-semantic-review.md)。
 当前探索保留正确的英文时间锚点，调查中文语义块与英文词区间对应；rendering不能私自改上游cue掩盖问题。
-用户已接受 [ADR-0006](../../docs/decisions/0006-subtitle-rendering-ass-and-burn-in.md)；此前待决策项
+用户已接受 [ADR-0006](../../docs/archive/decisions/0006-subtitle-rendering-ass-and-burn-in.md)；此前待决策项
 均采用推荐方案：v1只发布双语硬字幕成片，中文/英文各最多两条视觉行、总计最多四行，固定
 字号下超出安全区域受控失败；使用精确Hiragino字体文件/face/hash且禁止fallback；libx264
 CRF18 medium/yuv420p，复制全部音频，不使用硬件编码。ADR接受不代表实现完成。

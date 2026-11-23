@@ -1,6 +1,6 @@
 # NB-07 集成测试逐 nodeid 基线与迁移记录
 
-> 2026-11-17归档说明：逐nodeid测试迁移与盘点已交付；明示退役、未等价断言及历史失败记录原样保留。 原路径`docs/tasks/NB-07-test-inventory.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。
+> 2026-11-17归档说明：逐nodeid测试迁移与盘点已交付；明示退役、未等价断言及历史失败记录原样保留。 原路径`docs/tasks/NB-07-test-inventory.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](NB-12-chunking-quality-iteration.md) / [ADR-0013](../decisions/0013-typed-chunking-quality-and-regression.md)。
 
 - 盘点基线：2026-11-05（Asia/Shanghai）。以下每文件计数是开工时状态；实际迁移见末尾记录与 inventory.json。
 - 依据：ADR-0008 §6；真实 FS/codec/library/production composition、集成 runner 支持均归编排，纯 DTO/算法/全部外部边界 fake 的单用例留模块。

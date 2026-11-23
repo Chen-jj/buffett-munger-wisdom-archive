@@ -1,8 +1,10 @@
 # NB-12 源语切分评价改良、保好回归与新根样片
 
+> 2026-11-23 归档：本轮实现、诊断样片交付与复用验收已收尾；整体语义/出版质量未通过，未核听。下方保留当时记录，不是当前开发任务或授权；复审入口见 [PROGRESS.md](../../../PROGRESS.md)。
+
 - 日期：2026-11-13（Asia/Shanghai）；2026-11-15核对v7证据并授权adapter-only v8。
 - 状态：**v9实现/开发集有限取舍及真实source精确证明已验；真实166cue最终稿已全97句独审，整体语义同步/出版质量未通过。当前仅放行诊断候选样片供用户复审，不改稿/重置额度，真实诊断渲染及五阶段复用已留证，负责人仅目视18抽帧，未全面观看/核听；双破折号视觉断行残余披露不修。**
-- 行为依据：[ADR-0013](../decisions/0013-typed-chunking-quality-and-regression.md)，总入口仍是[ADR-0008](../archive/decisions/0008-local-orchestration-and-integration-tests.md)。
+- 行为依据：[ADR-0013](../decisions/0013-typed-chunking-quality-and-regression.md)，总入口仍是[ADR-0008](../decisions/0008-local-orchestration-and-integration-tests.md)。
 - 角色：负责人只拆解/调度/读diff/验收/回归，不编写生产或测试代码；编码子agent实施，独立子agent质量复审。文档作者不因此获得编码权限。
 - 保全：现有dirty改动是开工基线，不回滚、不删除任何文件/资产、不覆盖旧输出；2026-11-17用户已明确授权全部本地代码/测试/文档commit与push，由负责人执行，旧阶段禁止提交记录保留为历史。只复用校验通过的媒体/转录，**不重跑ASR/词对齐**。候选/失败/账本/样片保存在新独立根。
 
@@ -14,7 +16,7 @@
 - `output/orchestration-integration/NB09-20261107-iteration-v2/cnbc_2000_morning-ch6-7/`：媒体、alignment、chunks、初译、权威稿及样片。
 - `output/subtitle-editorial-comparison/NB11-20261109-boundary-score-audit-v1/`：12句301边界评分、97句重放验证；未核听，不是gold。
 - `output/subtitle-editorial-comparison/NB09-D2-final-review/all-97-sentences.md`及`NB08-reference-v1/`：冻结对照，允许多解，不是盲测结论。
-- [NB-10](../archive/tasks/NB-10-cue-feedback-diagnosis.md)：c70/c114允许结果与源切分/最终编辑分责，不能全部当必改项。
+- [NB-10](NB-10-cue-feedback-diagnosis.md)：c70/c114允许结果与源切分/最终编辑分责，不能全部当必改项。
 
 ## 2. 分阶段依赖、负责角色与验收
 

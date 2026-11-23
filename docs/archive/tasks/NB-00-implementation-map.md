@@ -1,6 +1,6 @@
 # NB-00 新双语流水线实施与验收地图
 
-> 2026-11-17归档说明：初版实施地图与技术迁移记录已交付；后续真实技术闭环见NB-08/NB-09。旧待验/失败记录保留，不将所有质量项判完成。 原路径`docs/tasks/NB-00-implementation-map.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。
+> 2026-11-17归档说明：初版实施地图与技术迁移记录已交付；后续真实技术闭环见NB-08/NB-09。旧待验/失败记录保留，不将所有质量项判完成。 原路径`docs/tasks/NB-00-implementation-map.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](NB-12-chunking-quality-iteration.md) / [ADR-0013](../decisions/0013-typed-chunking-quality-and-regression.md)。
 
 - 核对：2026-11-05（Asia/Shanghai）；负责人只拆解、调度、验收及回归，编码由子 agent 完成。
 - 唯一行为入口：[ADR-0008](../decisions/0008-local-orchestration-and-integration-tests.md)，分段依据 ADR-0009～0012 与 ADR-0006。
@@ -42,7 +42,7 @@ NB-01 先发布供其他 agent 使用的字段/入口说明；公共定义只由
 - 基线：2580 passed / 6 skipped（13.07s）；Python 3.11.16；FFmpeg-full 9.0.1含ass/subtitles；Codex CLI 0.154.0。
 - 文件移除授权：用户已同意NB-07列出的29个测试/helper路径迁移移除；另已同意移除列出的4个旧生产实现文件及后来单独确认的旧平均帧率适配器，未延伸至资产。
 - full-fresh：2026-11-06首轮从空根真实开始，遇 provider 及渲染问题并保留失败记录；经恢复最终发布623秒/275 cue样片。最终只执行渲染，前八阶段全复用，后续同进程/独立新进程均九阶段全复用。
-- 本人已审核采集、父/派生媒体、97句转录与23标记、275块候选；见 [负责人审核](../../reviews/2026-11-06-new-bilingual-pipeline-self-review.md)。初译/最终稿/三SRT亦已审；正式MP4已播放抽查，独立报告见 NB-08；audio_sync未验证，语义残余和human_release不标通过。
+- 本人已审核采集、父/派生媒体、97句转录与23标记、275块候选；见 [负责人审核](../reviews/2026-11-06-new-bilingual-pipeline-self-review.md)。初译/最终稿/三SRT亦已审；正式MP4已播放抽查，独立报告见 NB-08；audio_sync未验证，语义残余和human_release不标通过。
 
 ### 负责人切片复验
 

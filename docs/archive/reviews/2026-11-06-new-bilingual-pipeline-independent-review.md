@@ -1,6 +1,6 @@
 # NB-08 新双语集成：独立工件与成片回归
 
-- 2026-11-06（Asia/Shanghai），由未参与实现的 agent 执行。按 [ADR-0008 §7](../archive/decisions/0008-local-orchestration-and-integration-tests.md#7-逐阶段产物审核样片交付与独立回归)，先独立审本次原文、初译、修订及 SRT，未参考负责人自审或历史质量报告。仅用本地工件、只读 `ffprobe` 和独立 Python 复算；未运行编排、未调用 provider、未改动代码或资产。
+- 2026-11-06（Asia/Shanghai），由未参与实现的 agent 执行。按 [ADR-0008 §7](../decisions/0008-local-orchestration-and-integration-tests.md#7-逐阶段产物审核样片交付与独立回归)，先独立审本次原文、初译、修订及 SRT，未参考负责人自审或历史质量报告。仅用本地工件、只读 `ffprobe` 和独立 Python 复算；未运行编排、未调用 provider、未改动代码或资产。
 - 审核根：`/Users/drchan/Codebase/buffett-munger-wisdom-archive/output/orchestration-integration/NB08-20261106-fresh-v1/`。下文 `A` 指 `cnbc_2000_morning/`，`B` 指 `cnbc_2000_morning-ch6-7/`。**采集至三份 SRT 的工件绑定、词覆盖和时轴投影通过；正式成片的技术证据、抽帧与两次复用证据见文末补审。** 已见文字及换屏语义问题，未达到质量定版；独立核听、全片视觉及用户完整播放待验。
 
 ## 逐阶段证据

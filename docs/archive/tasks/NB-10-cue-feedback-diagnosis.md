@@ -1,6 +1,6 @@
 # NB-10 用户逐 cue 反馈溯源
 
-> 2026-11-17归档说明：反馈溯源/术语交付已完成；不表示全部反馈或候选P1～P4已解决，后续质量工作仍在NB-12。 原路径`docs/tasks/NB-10-cue-feedback-diagnosis.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。
+> 2026-11-17归档说明：反馈溯源/术语交付已完成；不表示全部反馈或候选P1～P4已解决，后续质量工作仍在NB-12。 原路径`docs/tasks/NB-10-cue-feedback-diagnosis.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](NB-12-chunking-quality-iteration.md) / [ADR-0013](../decisions/0013-typed-chunking-quality-and-regression.md)。
 
 状态：2026-11-08，18项诊断及两个术语补充完成；其他算法/稿件问题尚未修正。用户本轮要求解释结果，不擅自重生成翻译或覆盖样片。
 

@@ -1,9 +1,11 @@
 # ADR-0013：有类型的源语切分评价与防退化迭代
 
+> 2026-11-23 归档：生产切分 policy v8、comparison-v9 和 NB-12 诊断样片已完成本轮技术交付；未被替代的契约继续生效。整体语义/出版质量未通过，未核听；最新状态见 [PROGRESS.md](../../../PROGRESS.md)。
+
 - 日期：2026-11-13（Asia/Shanghai）；2026-11-14恢复实施并修正cut根因收费锚；2026-11-15完成v7离线/实验并授权adapter-only两类predicate core。
 - 状态：**v9实现/开发集有限取舍及真实source精确证明已验；真实166cue最终稿已全97句独审，整体语义同步/出版质量未通过。当前仅放行诊断候选样片供用户复审，不改稿/重置额度，真实诊断渲染及五阶段复用已留证，负责人仅目视18抽帧，未全面观看/核听；双破折号视觉断行残余披露不修。**
-- 归属：总方案仍是 [ADR-0008](../archive/decisions/0008-local-orchestration-and-integration-tests.md)。本决策修订 [ADR-0010](../archive/decisions/0010-source-chunking.md) 的候选生成、容量、评分及确定性救援，不新建总方案或模块；下游编辑/排时继续遵守 [ADR-0012](../archive/decisions/0012-bilingual-translation-postprocessing.md)。
-- 实施入口：[NB-12](../tasks/NB-12-chunking-quality-iteration.md)。负责人仅拆解、调度、验收、回归；生产及测试代码由子 agent 实施；2026-11-17用户授权全部本地代码/测试/文档commit与push，由负责人执行，历史阶段不提交约束不再覆盖此次授权。
+- 归属：总方案仍是 [ADR-0008](0008-local-orchestration-and-integration-tests.md)。本决策修订 [ADR-0010](0010-source-chunking.md) 的候选生成、容量、评分及确定性救援，不新建总方案或模块；下游编辑/排时继续遵守 [ADR-0012](0012-bilingual-translation-postprocessing.md)。
+- 实施记录：[NB-12](../tasks/NB-12-chunking-quality-iteration.md)。负责人仅拆解、调度、验收、回归；生产及测试代码由子 agent 实施。2026-11-17 的提交/推送授权仅适用于当时整理批次。
 - 安全边界：保留已有全部 dirty 改动和资产；不回滚、不删除、不覆盖旧输入/输出；本次复用已验证转录及媒体，**不重跑 ASR、词对齐或伪造时间**。所有候选、账本、译文、样片及失败证据写独立新根。
 
 ## 1. 目标与不做的事

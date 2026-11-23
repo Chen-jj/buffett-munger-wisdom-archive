@@ -1,9 +1,9 @@
 # NB-08 全新真实集成、复用与样片审核
 
-> 2026-11-17归档说明：固定样本真实技术闭环/样片/复用实验已交付；语义残余、未核听及无人类出版签字不变。 原路径`docs/tasks/NB-08-full-fresh-acceptance.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。
+> 2026-11-17归档说明：固定样本真实技术闭环/样片/复用实验已交付；语义残余、未核听及无人类出版签字不变。 原路径`docs/tasks/NB-08-full-fresh-acceptance.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](NB-12-chunking-quality-iteration.md) / [ADR-0013](../decisions/0013-typed-chunking-quality-and-regression.md)。
 
 状态：真实生产技术链路经恢复完成、样片已发布；2026-11-06（Asia/Shanghai）。启动前负责人完整离线 2260 passed / 7 skipped，最终 2361 passed / 7 skipped。
-首轮生产 run `20261105T181558-57a5dbc3148e`；逐阶段见 [负责人审核](../../reviews/2026-11-06-new-bilingual-pipeline-self-review.md)。
+首轮生产 run `20261105T181558-57a5dbc3148e`；逐阶段见 [负责人审核](../reviews/2026-11-06-new-bilingual-pipeline-self-review.md)。
 
 ## 固定样本与执行
 
@@ -25,7 +25,7 @@
 - 最终生产 run `20261106T111813-59ffececf426`，前八阶段全复用、渲染一次编码；失败报告/暂存原样保留。
 - 正式样片：`/Users/drchan/Codebase/buffett-munger-wisdom-archive/output/orchestration-integration/NB08-20261106-fresh-v1/cnbc_2000_morning-ch6-7/video_中文字幕.mp4`；623秒、275 cues；SHA-256 `ac007b4f9b90b77855feb7c815d9b4923a8b6d85654174e50d1668f657ec88a8`。
 - 同进程 `20261106T112032-253beb5efa11`、新进程 `20261106T112050-427c550a13f9` 全复用，阶段零改写/零昂贵调用，78项保护集不变，verify零写。
-- [负责人自审](../../reviews/2026-11-06-new-bilingual-pipeline-self-review.md) 包含逐阶段证据与本人实际播放覆盖；[独立报告](../../reviews/2026-11-06-new-bilingual-pipeline-independent-review.md) 单列非作者复审。未核听、未作人类发布签字，语义残余及302条权威稿告警、122条ASS投影间隔告警不隐去。
+- [负责人自审](../reviews/2026-11-06-new-bilingual-pipeline-self-review.md) 包含逐阶段证据与本人实际播放覆盖；[独立报告](../reviews/2026-11-06-new-bilingual-pipeline-independent-review.md) 单列非作者复审。未核听、未作人类发布签字，语义残余及302条权威稿告警、122条ASS投影间隔告警不隐去。
 
 ## 实跑命令与结果
 

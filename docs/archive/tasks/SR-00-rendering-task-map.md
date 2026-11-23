@@ -7,7 +7,7 @@
 
 - **Status:** archived / superseded；技术工作已交付，最终质量未通过，转由新方案处理
 - **Owner:** 技术负责人（只写任务/验收文档、调度和运行验收，不编写实现或测试代码）
-- **决策来源:** `docs/decisions/0006-subtitle-rendering-ass-and-burn-in.md`
+- **决策来源:** `docs/archive/decisions/0006-subtitle-rendering-ass-and-burn-in.md`
 - **开工基线:** 2026-10-23，`.venv/bin/python -m pytest tests/ -q`：1404 passed / 5 skipped，5.74s。
 - 用户已确认“两份ADR”为口误，本次只落实ADR-0006。已读0003作为现有输入契约，不重开已完成SP线。
 - 当前：SR-01..06已验收并归档；SR-07技术样片已交付，但用户人类播放发现语义同步问题，最终未通过。
@@ -66,6 +66,6 @@ SR-01 公共契约 -> SR-02 profile/纯布局 ─┬─> SR-03 字体/ASS ─┐
 - 10:51 CST：SR-06负责人独立269 passed、完整2559 passed / 5 skipped（12.10s），审独立LocalStore/真实ASS/重签前置自验/故障commit-point与offline guard，accepted；放行SR-07编码与首次真实样片。
 - SR-07技术交付：同源623秒/163cue全片、163实际像素预检、两次0写复用、上游保护集不变，
   负责人独立完整2580 passed / 6 skipped、真实集成1 passed。用户实际播放发现双语语义同步
-  问题，最终验收未通过，不能关闭本任务图或归档ADR-0006。见[复审报告](../../reviews/2026-10-24-rendering-technical-and-semantic-review.md)。
+  问题，最终验收未通过，不能关闭本任务图或归档ADR-0006。见[复审报告](../reviews/2026-10-24-rendering-technical-and-semantic-review.md)。
 - 2026-10-24文档整理：已实现ADR-0002..0005及TA/SP/SR-01..06归档；当前问题交给
-  [新agent探索prompt](../../prompts/bilingual-semantic-alignment-exploration.md)，没有直接实施新算法。
+  [新agent探索prompt](../prompts/bilingual-semantic-alignment-exploration.md)，没有直接实施新算法。

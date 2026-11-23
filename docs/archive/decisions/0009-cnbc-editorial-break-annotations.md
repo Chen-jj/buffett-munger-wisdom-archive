@@ -1,6 +1,6 @@
 # ADR-0009：CNBC 逐字稿编辑破折号的结构化标记
 
-> 2026-11-17归档说明：已实施的技术方案归档，未被后续ADR明确替代的现行契约继续生效；语义/核听/出版未通过不因归档改变。 原路径`docs/decisions/0009-cnbc-editorial-break-annotations.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。
+> 2026-11-17归档说明：已实施的技术方案归档，未被后续ADR明确替代的现行契约继续生效；语义/核听/出版未通过不因归档改变。 原路径`docs/decisions/0009-cnbc-editorial-break-annotations.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](0013-typed-chunking-quality-and-regression.md)。
 
 - 状态：**accepted / 已开发实现，待负责人完整离线及编排真实产物验收**（2026-11-05）。
   公共source-alignment.v2 annotations与canonical投影已接入，实际声画/全样本尚未审核。

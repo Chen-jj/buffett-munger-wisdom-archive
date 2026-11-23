@@ -31,11 +31,11 @@
 runner、显式本地集成及离线runner回归已实现；负责人独立runner 21 passed、完整2580 passed /
 6 skipped、真实env-gated集成1 passed。已生成完整623秒/163-cue规范样片和四份sidecar，
 真实`succeeded → reused → reused`，两次复用0写/0像素采样/0内容编码，上游/历史/链接目标不变。
-绝对路径、hash、媒体与保护集证据见[本轮复审报告](../../reviews/2026-10-24-rendering-technical-and-semantic-review.md)。
+绝对路径、hash、媒体与保护集证据见[本轮复审报告](../reviews/2026-10-24-rendering-technical-and-semantic-review.md)。
 
 ### 人类播放未通过
 
 用户实际播放反馈00:23/00:30/00:36/01:26附近的中文/讲话不同步，后续定位为英文词时间准确，
 中文优先分块与比例映射无法保证语义对应。当前不再是“未播放待确认”，而是**已播放、最终未通过**。
-尚无修复实现或修正版样片。新的完整方案在[探索prompt](../../prompts/bilingual-semantic-alignment-exploration.md)
+尚无修复实现或修正版样片。新的完整方案在[探索prompt](../prompts/bilingual-semantic-alignment-exploration.md)
 中交接，不能由rendering私改源cue消除。保留本任务和ADR-0006进行中，不归档为完成。

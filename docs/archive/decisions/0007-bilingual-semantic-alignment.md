@@ -1,17 +1,17 @@
 # ADR-0007：显式双语语义证据与确定性联合字幕规划
 
-> 2026-11-17归档说明：superseded历史候选，未实施；按被替代路线归档，不冒称技术或质量完成。 原路径`docs/decisions/0007-bilingual-semantic-alignment.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](../../decisions/0013-typed-chunking-quality-and-regression.md)。
+> 2026-11-17归档说明：superseded历史候选，未实施；按被替代路线归档，不冒称技术或质量完成。 原路径`docs/decisions/0007-bilingual-semantic-alignment.md`；原状态、历史不commit/push约束及验证结果属于当时记录。后续入口：[NB-12](../tasks/NB-12-chunking-quality-iteration.md) / [ADR-0013](0013-typed-chunking-quality-and-regression.md)。
 
 - 状态：**superseded / 历史候选，已由 ADR-0008～0012 的路线替代，未实施**。
 - 2026-10-28补记：用户要求先搁置本方案、重新调研业界。独立语义模块与固定译文后对齐不再是
   预设主线；与字幕模板约束的上下文翻译、联合生成等路线比较后再决定。本ADR保留为历史候选，
-  不按下文直接实施。最新依据见[业界调研](../../reviews/2026-10-28-industry-bilingual-subtitle-pipelines.md)。
+  不按下文直接实施。最新依据见[业界调研](../reviews/2026-10-28-industry-bilingual-subtitle-pipelines.md)。
 - 日期：2026-10-24。
 - 影响：`archive_core`、拟新增 `semantic_alignment`、`translation`、`srt_processing`、
   `subtitle_rendering`；编排接入见[ADR-0008](0008-local-orchestration-and-integration-tests.md)。
-- 依据：[研究报告](../../reviews/2026-10-24-bilingual-semantic-alignment-design.md)、
-  [独立原始文本审读](../../reviews/2026-10-24-independent-bilingual-semantic-audit.md)、
-  [契约/实验](../../reviews/2026-10-24-semantic-contract-and-experiments.md)。
+- 依据：[研究报告](../reviews/2026-10-24-bilingual-semantic-alignment-design.md)、
+  [独立原始文本审读](../reviews/2026-10-24-independent-bilingual-semantic-audit.md)、
+  [契约/实验](../reviews/2026-10-24-semantic-contract-and-experiments.md)。
 
 本文以下保留历史推导，不是当前实施规范；从 [ADR-0008](0008-local-orchestration-and-integration-tests.md) 进入现行方案。
 
