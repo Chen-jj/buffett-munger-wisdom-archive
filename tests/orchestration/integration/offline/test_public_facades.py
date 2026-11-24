@@ -1,13 +1,17 @@
 """Public production entry points with fake network/encoding boundaries."""
 
 from dataclasses import replace
+from functools import partial
+from hashlib import sha256
 from pathlib import Path
 import json
+import subprocess
 
 import pytest
 
 from archive_core.application import build_asset_workspace
 from archive_core.domain import AssetId
+from archive_core.interfaces.bilingual import MediaBoundaryDTO
 from acquisition.domain import (AcquisitionResult, AcquisitionTarget, Chapter, MediaReference, Provenance,
                                 SourceMetadata, Transcript, TranscriptParagraph)
 from acquisition.interfaces import AcquisitionCommand, build_acquisition_handler
@@ -15,7 +19,7 @@ from media_download.application import DownloadAssetVideoService, ResolverRegist
 from media_download.domain import DownloaderResult
 from media_download.infrastructure import DirectUrlResolver, LocalDownloadArtifactStore, Sha256ChecksumCalculator
 from media_download.interfaces import DownloadCommand, MediaDerivationCommand, build_download_handler, build_media_derivation_handler
-from infrastructure.infrastructure.process import ProcessResult
+from infrastructure.infrastructure.process import ProcessResult, run_process
 from orchestration.domain.models import MediaSelection, PipelineCommand
 from orchestration.infrastructure.local import LocalAssetLock, LocalRunStore, AssetBusyError
 
@@ -108,6 +112,38 @@ def test_acquisition_and_download_receipt_reuse_are_zero_write(tmp_path):
     meta.write_text("{}")
     with pytest.raises(ValueError):
         acquisition.verify(command)
+
+
+def test_download_completes_slow_boundary_scan_without_redownloading(tmp_path):
+    prepare(tmp_path)
+    workspace = build_asset_workspace(PARENT, tmp_path)
+    before = snapshot(workspace)
+    video_path = workspace / "video.mp4"
+    boundary_path = workspace / "media_boundary.json"
+    scans = []
+
+    def slow_probe(argv, *, timeout, **kwargs):
+        assert "-show_frames" in argv and argv[-1] == str(video_path)
+        scans.append(argv)
+        if timeout is not None and timeout < 301:
+            raise subprocess.TimeoutExpired(argv, timeout)
+        return subprocess.CompletedProcess(argv, 0, json.dumps({
+            "format": {"duration": "1.0"},
+            "streams": [{"width": 640, "height": 360}],
+            "frames": [{"best_effort_timestamp_time": time} for time in ("0.0", "0.032001", "0.089")],
+        }), "")
+
+    download = build_download_handler(output_root=tmp_path, process_runner=partial(run_process, runner=slow_probe))
+    command = DownloadCommand(PARENT, prepare_boundary=True)
+    assert download.handle(command).plan.action.value == "skip"
+    assert MediaBoundaryDTO.from_dict(json.loads(boundary_path.read_text())) == MediaBoundaryDTO(
+        sha256(video_path.read_bytes()).hexdigest(), 1000, (0, 32001, 89000),
+    )
+    after = snapshot(workspace)
+    assert after.keys() - before.keys() == {str(boundary_path)}
+    assert {path: after[path] for path in before} == before
+    assert download.handle(command).plan.action.value == "skip"
+    assert len(scans) == 1 and snapshot(workspace) == after
 
 
 def test_production_derivation_keeps_parent_and_binds_exact_source_range(tmp_path):

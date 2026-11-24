@@ -13,6 +13,7 @@
 - [NB-08全新真实验收](NB-08-full-fresh-acceptance.md)、[NB-09固定样片迭代](NB-09-editorial-quality-iteration.md)、[NB-09测试映射](NB-09-editorial-test-mapping.md)：实验/技术交付完成，未核听及质量限制仍保留。
 - [NB-10反馈诊断/术语](NB-10-cue-feedback-diagnosis.md)：诊断交付完成，不表示全部反馈或P1～P4已实现。
 - [NB-12 切分、回归与诊断样片](NB-12-chunking-quality-iteration.md)：实现、样片技术交付及复用验收已收尾；整体语义/出版质量未通过，未核听。待复审项见 [PROGRESS.md](../../../PROGRESS.md)。
+- [NB-13 全帧 PTS 扫描超时修复](NB-13-pipeline-timeouts.md)：离线替身验证慢扫描与下载复用。
 
 ## 渲染任务入口
 

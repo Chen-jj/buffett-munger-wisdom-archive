@@ -23,7 +23,7 @@
 
 ## 技术方向
 
-- `yt-dlp` 为默认适配器，隔离在端口之后；`ffprobe` 仅用于校验元数据，不作为业务规则依赖。
+- `yt-dlp` 为默认适配器，隔离在端口之后。`ffprobe` 为 `media_boundary.json` 收集实际解码帧时间，供下游排时复用。全帧扫描等待工具退出，再按现有规则校验工件。见 [ADR-0014](../../docs/archive/decisions/0014-pipeline-timeouts.md)。
 - 跳过/续传/覆盖决策必须由 manifest 与 `DownloadPolicy` 显式驱动，**不得以"文件存在"作为完成判据**。
 - 已有视频只有在 manifest 的身份、媒体引用、成功状态、canonical 路径、大小与 SHA-256 全部验证通过后才能返回 `SKIP`；否则抛出带稳定 `category` 的 `ExistingDownloadConflict`。
 - 媒体文件的覆盖必须显式；下载 manifest 属廉价元数据，允许覆写。

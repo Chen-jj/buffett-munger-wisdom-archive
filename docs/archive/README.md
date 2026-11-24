@@ -19,6 +19,7 @@
 | [ADR-0011](decisions/0011-contextual-chunk-translation.md) | 上下文分批初译已实现/实跑，质量不由归档签认 |
 | [ADR-0012](decisions/0012-bilingual-translation-postprocessing.md) | 有界编辑生成/唯一权威稿/排时已实现，语义残余保留 |
 | [ADR-0013](decisions/0013-typed-chunking-quality-and-regression.md) | 84 字符逻辑 cue、typed DP 和回归已实施；修订 ADR-0010，整体质量未通过 |
+| [ADR-0014](decisions/0014-pipeline-timeouts.md) | 全帧 PTS 扫描取消 300 秒时限，保留实际帧证据 |
 
 归档不自动撤销仍生效的契约。2026-11-23 归档 ADR-0006、ADR-0013 与 NB-12 的已结束实施记录，不关闭整体语义/出版质量问题，不将未核听改为已核听。
 

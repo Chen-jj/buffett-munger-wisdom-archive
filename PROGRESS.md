@@ -1,12 +1,13 @@
 # 项目进度与交接
 
-最近核对：**2026-11-23（Asia/Shanghai）**。代码核对基准：`9cb6c38`。这是给下一轮 agent 的短交接，不是任务流水账；流程规则见 [AGENTS.md](AGENTS.md)，细节和历史证据见 [文档索引](docs/README.md)。
+最近核对：**2026-11-24（Asia/Shanghai）**。代码核对基准：`8a487a3` 加本轮 NB-13 改动。流程规则见 [AGENTS.md](AGENTS.md)，细节和历史证据见 [文档索引](docs/README.md)。
 
 ## 已实现、已验证
 
 | 范围 | 当前状态 | 证据 |
 |---|---|---|
 | 本地生产管线 | 采集、下载/显式派生、转录、英文分块、初译、双语编辑排时、SRT 导出和 ASS 烧录已实现。单资产编排提供 plan / run / resume / verify，真实 CNBC 已从空工作区经恢复跑通，九阶段同进程/新进程复用时为零昂贵调用、零阶段改写。 | [ADR-0008](docs/archive/decisions/0008-local-orchestration-and-integration-tests.md) · [NB-08 验收](docs/archive/tasks/NB-08-full-fresh-acceptance.md) |
+| 全帧 PTS 扫描 | `ffprobe -show_frames` 取消 300 秒时限，使用实际帧时间戳继续排时与校验。模拟 301 秒扫描生成了边界文件并零次重新下载，重复运行复用证据。 | [ADR-0014](docs/archive/decisions/0014-pipeline-timeouts.md) · [NB-13 验收](docs/archive/tasks/NB-13-pipeline-timeouts.md) |
 | 最新固定样本迭代 | 生产切分是 `english-typed-cue-dp.v8`（84 字符逻辑 cue，上屏布局由 rendering 负责）；comparison-v9 是实验编号。英文 165 块，真实初译和编辑后发布 166 cue 的唯一权威稿及 623 秒诊断样片；五阶段复用为零昂贵调用、零阶段改写。未重跑 ASR/词对齐。 | [ADR-0013](docs/archive/decisions/0013-typed-chunking-quality-and-regression.md) · [NB-12 最终验收](docs/archive/tasks/NB-12-chunking-quality-iteration.md#2026-11-15负责人目视范围与验收后doc-only收尾) |
 | 面向用户的入口 | `src/cli/` 和 `src/webui/` 仍是脚手架，没有可用的 CLI 或评审 Web UI；不在当前实施队列。 | [CLI 指南](src/cli/AGENTS.md) · [Web UI 指南](src/webui/AGENTS.md) |
 
@@ -24,6 +25,7 @@
 
 ## 最近验证
 
+- 2026-11-24：修复范围收窄到全帧 PTS 扫描后，离线套件 **2874 passed / 1 skipped / 6 deselected**。真实长片未重跑。
 - 2026-11-23：文档整理后离线套件 **2873 passed / 1 skipped / 6 deselected**（排除 live）。未重新生成或核听样片。
 - 2026-11-15：NB-12 最终验收记录为 **2873 passed / 7 skipped**；真实取证范围和已知限制见归档。此结果不代表字幕质量通过。
 

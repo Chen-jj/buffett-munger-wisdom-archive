@@ -15,7 +15,7 @@ def probe_video_boundary(path, process):
     result = process([FFPROBE, "-v", "error", "-select_streams", "v:0", "-show_frames",
                       "-show_format", "-show_streams", "-show_entries",
                       "frame=best_effort_timestamp_time:format=start_time,duration:stream=width,height,start_time,duration",
-                      "-of", "json", str(path)], check=True, timeout=300)
+                      "-of", "json", str(path)], check=True)
     decoded = json.loads(result.stdout)
     streams = decoded["streams"]
     if not isinstance(streams, list) or len(streams) != 1 or not isinstance(streams[0], dict):

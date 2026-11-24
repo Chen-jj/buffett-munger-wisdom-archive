@@ -39,7 +39,7 @@ def decoded(**overrides):
 
 def response(data):
     def process(command, **options):
-        assert options == {"check": True, "timeout": 300}
+        assert options == {"check": True}
         return ProcessResult(tuple(command), 0, json.dumps(data), "")
     return process
 
