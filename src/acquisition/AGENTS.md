@@ -37,6 +37,7 @@
 - `meta.json`：规范化后的来源元数据、`asset_id`、`source_ref`、`provenance`。
 - `media_ref.json`：序列化的 `MediaReference`。
 - `transcript.txt` 与 `chapters.json`：仅当 transcript 可用时写入。`chapters.json` 必须使用 `archive_core` 的 `acquisition.transcript.v2` 公共 DTO，paragraph 分离 `speaker_label`、spoken `text` 与 `stage_directions`；无法可靠识别 speaker 的来源写 `null`。`transcript.txt` 保留 speaker 与舞台说明，继续只作为人读归档格式。
+- CNBC 正文在分词前还原按 Latin-1 误解码的长短破折号、弯撇号和省略号。库存 `chapters.json` 可通过 `acquisition.interfaces.repair_cnbc_structured_transcript()` 对公共 DTO 应用同一规则。该接口只修复库存的 spoken `text`，不写入文件。隔离回放需记录原文件和修复后输入的 SHA-256。
 
 写入必须按文件原子化；`overwrite=False` 时必须预检所有计划产出。
 

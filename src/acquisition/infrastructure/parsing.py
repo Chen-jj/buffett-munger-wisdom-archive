@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import json
 import re
 from typing import Any
+
+from archive_core.interfaces import StructuredTranscriptDTO
 
 from acquisition.domain import (
     Chapter,
@@ -15,6 +17,9 @@ from acquisition.domain import (
 )
 
 
+_CNBC_MISDECODED_PUNCTUATION = {
+    mark.encode("utf-8").decode("latin-1"): mark for mark in "–—‘’…"
+}
 _STAGE_DIRECTION_RE = re.compile(r"\[([^\[\]]+)\]|\(([^()]+)\)")
 _RELIABLE_STAGE_DIRECTIONS = {
     "applause",
@@ -128,8 +133,28 @@ def _parse_chapter_title(title_text: str) -> tuple[int, str]:
     return int(match.group(1)), match.group(2).strip()
 
 
+def _repair_cnbc_punctuation(text: str) -> str:
+    for damaged, mark in _CNBC_MISDECODED_PUNCTUATION.items():
+        text = text.replace(damaged, mark)
+    return text
+
+
+def repair_cnbc_structured_transcript(
+    transcript: StructuredTranscriptDTO,
+) -> StructuredTranscriptDTO:
+    """Repair only the spoken text of an existing CNBC transcript."""
+    chapters = []
+    for chapter in transcript.chapters:
+        paragraphs = tuple(
+            replace(paragraph, text=_repair_cnbc_punctuation(paragraph.text))
+            for paragraph in chapter.paragraphs
+        )
+        chapters.append(replace(chapter, paragraphs=paragraphs))
+    return replace(transcript, chapters=tuple(chapters))
+
+
 def _parse_cnbc_paragraph(text: str) -> TranscriptParagraph:
-    text = text.replace("\u00e2\u0080\u0094", "\u2014")
+    text = _repair_cnbc_punctuation(text)
     speaker_label, spoken_text = _split_cnbc_speaker(text)
     spoken_text, stage_directions = _extract_stage_directions(spoken_text)
     return TranscriptParagraph(

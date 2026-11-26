@@ -38,6 +38,7 @@ from transcription.domain import (
 )
 
 from transcription.domain.editorial import EDITORIAL_POLICY_VERSION, separate_editorial_breaks
+from transcription.domain.fusion import OfficialSentenceSpan
 
 from .alignment import ForcedAlignmentResult
 from .audio_asr import (
@@ -133,6 +134,8 @@ def recover_sentences(
     detector_boundaries: Sequence[int],
     policy: SentenceBoundaryPolicy,
     effective_chapters: EffectiveChapterPlan | None = None,
+    *,
+    official_sentence_spans: Sequence[OfficialSentenceSpan] = (),
 ) -> SentenceBoundaryPlan:
     """Recover complete sentences without applying subtitle display constraints."""
 
@@ -150,6 +153,9 @@ def recover_sentences(
     }
     boundary_surfaces, boundary_tail_indices = _boundary_surface_context(
         timed_words, contexts
+    )
+    official_covered, official_endings = _official_boundary_evidence(
+        timed_words, official_tokens, official_sentence_spans, policy
     )
     sentences: list[SourceSentenceDTO] = []
     start = 0
@@ -176,7 +182,7 @@ def recover_sentences(
         terminal = is_sentence_terminal(
             boundary_surfaces, boundary_tail_indices[index], policy
         )
-        if decision is None and official_word and terminal:
+        if decision is None and (index in official_endings or (official_word and terminal)):
             decision = _BoundaryDecision(
                 BoundarySource.OFFICIAL_PUNCTUATION,
                 BoundaryStatus.VERIFIED,
@@ -185,7 +191,8 @@ def recover_sentences(
         pause_ms = _pause_after(timed_words, index)
         segment_change = _segment_change(contexts, index)
         paragraph_change = _paragraph_change(contexts, index)
-        if decision is None and not official_word and terminal:
+        asr_can_set_boundary = not official_word and index not in official_covered
+        if decision is None and asr_can_set_boundary and terminal:
             if pause_ms >= policy.inferred_pause_ms:
                 decision = _BoundaryDecision(
                     BoundarySource.PUNCTUATION_AND_PAUSE,
@@ -197,7 +204,7 @@ def recover_sentences(
                     BoundaryStatus.INFERRED,
                 )
 
-        weak_detector_boundary = index in detected and (
+        weak_detector_boundary = (official_word or index not in official_covered) and index in detected and (
             pause_ms >= policy.inferred_pause_ms
             or segment_change
             or paragraph_change
@@ -349,6 +356,46 @@ def _boundary_surface_context(
     return tuple(surfaces), tuple(tail_indices)
 
 
+def _official_boundary_evidence(
+    words: tuple[TimedWordDTO, ...],
+    official_tokens: Sequence[OfficialTranscriptToken],
+    official_sentence_spans: Sequence[OfficialSentenceSpan],
+    policy: SentenceBoundaryPolicy,
+) -> tuple[set[int], set[int]]:
+    if not official_sentence_spans:
+        return set(), set()
+    asr_positions = {word_id: index for index, word in enumerate(words)
+                     for word_id in word.asr_word_ids}
+    official_positions = {token_id: index for index, word in enumerate(words)
+                          for token_id in word.official_token_ids}
+    token_indices = {token.id: index for index, token in enumerate(official_tokens)}
+    surfaces = tuple(token.text for token in official_tokens)
+    covered: set[int] = set()
+    endings: set[int] = set()
+    for sentence in official_sentence_spans:
+        asr_indices = {asr_positions[word_id] for word_id in sentence.asr_word_ids
+                       if word_id in asr_positions}
+        if not asr_indices:
+            continue
+        covered.update(asr_indices)
+        if not is_sentence_terminal(surfaces, token_indices[sentence.official_token_ids[-1]], policy):
+            continue
+        mapped_indices = {official_positions[token_id] for token_id in sentence.official_token_ids
+                          if token_id in official_positions}
+        if not mapped_indices:
+            continue
+        end_index = max(mapped_indices)
+        # The row's final timed word must have official evidence and belong to
+        # this row as a whole. A trailing ASR-only or shared word cannot locate
+        # the official ending precisely enough to introduce a new boundary.
+        end_word = words[end_index]
+        if (end_index >= max(asr_indices)
+                and set(end_word.asr_word_ids).issubset(sentence.asr_word_ids)
+                and set(end_word.official_token_ids).issubset(sentence.official_token_ids)):
+            endings.add(end_index)
+    return covered, endings
+
+
 def _pause_after(words: tuple[TimedWordDTO, ...], index: int) -> int:
     if index + 1 >= len(words):
         return 0
@@ -491,6 +538,7 @@ class SentenceBoundaryService:
                 detector_boundaries,
                 selected_boundary,
                 chapter_plan,
+                official_sentence_spans=(fusion.artifact.official_sentence_spans if fusion.artifact else ()),
             )
             for sentence in plan.sentences:
                 self._emit_boundary(asset_id, sentence)

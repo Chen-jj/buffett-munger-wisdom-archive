@@ -207,6 +207,7 @@ class MatchType(str, Enum):
     SUBSTITUTION = "substitution"
     ONE_TO_MANY = "one_to_many"
     MANY_TO_ONE = "many_to_one"
+    MANY_TO_MANY = "many_to_many"
     ASR_ONLY = "asr_only"
     OFFICIAL_ONLY = "official_only"
 

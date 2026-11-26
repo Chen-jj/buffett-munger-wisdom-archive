@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from dataclasses import replace
 import hashlib
 import json
 from pathlib import Path
@@ -47,6 +48,7 @@ from transcription.domain import (
     SentenceBoundaryPolicy,
     TranscriptFusionArtifact,
 )
+from transcription.domain.fusion import OfficialSentenceSpan
 from transcription.infrastructure import RuleBasedSentenceBoundaryDetector
 
 
@@ -356,6 +358,41 @@ def test_official_boundary_uses_last_token_of_one_to_many_mapping() -> None:
     )
 
 
+@pytest.mark.parametrize("trailing_asr", (False, True))
+@pytest.mark.parametrize("exclude_interior", (False, True))
+def test_official_span_uses_grounded_ending_and_ignores_interior_asr_punctuation(
+    trailing_asr: bool, exclude_interior: bool,
+) -> None:
+    first_texts = ("We", "just.", "welcome", "you") + (("stray.",) if trailing_asr else ())
+    aligned = _aligned_words(first_texts + ("Next.",))
+    words = _timed_words(aligned, official=False)
+    mapping = {0: "ot1", 2: "ot2", 3: "ot3", len(first_texts): "ot5"}
+    words = tuple(
+        replace(word, official_token_ids=(mapping[index],), match_type=MatchType.EXACT,
+                text_source=TextSource.OFFICIAL_TRANSCRIPT)
+        if index in mapping else word
+        for index, word in enumerate(words)
+    )
+    tokens = _official_tokens(("We", "welcome", "you", "all.", "Next."))
+    span = OfficialSentenceSpan(
+        official_token_ids=("ot1", "ot2", "ot3", "ot4"),
+        asr_word_ids=tuple(word.id for word in aligned[:len(first_texts)]),
+    )
+    if exclude_interior:
+        words = tuple(
+            replace(word, id=f"w{index}")
+            for index, word in enumerate(words[:1] + words[2:], start=1)
+        )
+
+    plan = recover_sentences(words, aligned, tokens, (1,), _policy(), official_sentence_spans=(span,))
+
+    expected_first_end = len(first_texts) - int(exclude_interior)
+    assert [sentence.last_word_id for sentence in plan.sentences] == (
+        [f"w{len(words)}"] if trailing_asr else [f"w{expected_first_end}", f"w{len(words)}"]
+    )
+    assert plan.sentences[0].boundary_source is BoundarySource.OFFICIAL_PUNCTUATION
+
+
 def test_speaker_change_forces_boundary_without_guessing_missing_speaker() -> None:
     plan = _plan(
         ("Good", "morning."),
@@ -404,6 +441,30 @@ def test_paragraph_change_is_weak_and_requires_another_signal() -> None:
     )
     assert len(supported.sentences) == 2
     assert supported.sentences[0].boundary_source is BoundarySource.PAUSE_FALLBACK
+
+
+@pytest.mark.parametrize("official", (False, True))
+@pytest.mark.parametrize("ellipsis", ("...", "…"))
+def test_ellipsis_does_not_mark_a_terminal_boundary(official: bool, ellipsis: str) -> None:
+    plan = _plan(
+        ("It", f"is{ellipsis}", "ready.", "Next."),
+        official=official,
+        starts=(100, 300, 4_395, 4_515),
+        segments=("seg1", "seg1", "seg2", "seg2"),
+    )
+
+    assert [sentence.last_word_id for sentence in plan.sentences] == ["w3", "w4"]
+
+
+@pytest.mark.parametrize("official", (False, True))
+def test_domain_period_is_internal_but_following_period_can_end_sentence(official: bool) -> None:
+    plan = _plan(
+        ("Visit", "berkshirehathaway.", "com.", "Done."),
+        official=official,
+        starts=(100, 220, 320, 440),
+    )
+
+    assert [sentence.last_word_id for sentence in plan.sentences] == ["w3", "w4"]
 
 
 def test_segment_change_is_weak_and_does_not_split_complete_sentence() -> None:

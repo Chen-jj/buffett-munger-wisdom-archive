@@ -62,8 +62,8 @@
 ## 事件与报告边界
 
 - application 通过 `TranscriptionEvent` 与 `TranscriptionEventSink` 发出结构化事件；事件必须
-  使用稳定 `EventCode`、明确 severity、asset、stage、action 和 reason。相关 ID、文本摘录与
-  原视频毫秒范围只在适用时记录。
+  使用稳定 `EventCode`、明确 severity、asset、stage、action 和 reason。相关 ID、原文、结果和
+  原视频毫秒范围只在适用时记录。文本字段完整记录传入的文字。
 - event `details` 只接受 JSON scalar，敏感配置键（API key、authorization、credential、
   password、secret、token）禁止进入事件或 related IDs。
 - `JsonLinesEventSink` 将 DEBUG/INFO/WARNING/ERROR 全部写入详细 JSON Lines 日志；不得在
@@ -121,27 +121,36 @@
 - 融合只读取 `archive_core.interfaces.StructuredTranscriptDTO`：仅 paragraph `text` 生成稳定
   `ot1..otN` spoken token；chapter title、speaker label 与 `stage_directions` 永不作为 spoken
   word。official token 保留 chapter/paragraph 位置和 speaker metadata，供后续句界使用。
-- `english-spoken.v1` normalization 只用于匹配，surface text 始终保留；规则显式覆盖大小写、
-  标点、数字/年份、百分比、货币、连字符和 contraction。匹配先使用唯一且单调的连续 n-gram
-  anchor，再只在受限局部窗口运行 DP，不做整场逐字稿大矩阵或 LLM 推断。
-- exact、normalized exact、双侧锚定且由 policy 显式 allowlist 授权的拼写 substitution、
-  one-to-many、many-to-one、ASR-only 与 official-only 都必须保留完整 source IDs。字符串相似
-  不能证明 substitution（如 million/billion）；折叠仅在 normalization units 证明等价时允许，
-  one-to-many 不得跨 chapter、paragraph 或 speaker，many-to-one 不得把 interpolated timing
-  伪报成 merged acoustic。已对齐 ASR-only word 始终保留并记录。
+- `english-spoken.v2` 对时间、日期、分数、百分比、金额等结构化形式先判等价，保留数值、
+  币种与显式精度。官网 token 保留原表面文字，已验证的带时间词可使用 `1.25%`、`3rd` 等排版。
+  匹配选择最大的不重叠单调 n-gram 锚点链，超限区间先去相同边缘再寻找局部唯一锚点，
+  DP 只比较有界局部窗口。
+- 所有 exact、normalized exact、substitution、one-to-many、many-to-one、many-to-many、ASR-only 与
+  official-only 词保留完整源 ID。归并依赖可验证的等价读法，多个官网 token 需来自同一章段和
+  说话人，`many_to_one` 使用合并的声学区间。经声学验证的替换时间来自候选本身。
 - NB-09 默认拼写清单加入 ASR `seas` 与实际官网 `See's` 的单词配对；只有局部 DP 具备
   双侧词汇锚点才可纳入，保留声学时间、ASR ID 和官网 token ID。保留官网拼写的撇号，
   不将普通动词 `sees` 当作该别名；无官网的 identity 路径不改写。清单已纳入融合缓存身份，
   不使 audio/VAD/ASR/alignment 失效。需重新切词或涉及官网编辑插注的疑似专名不自动猜测。
-- official-only run 仅在真正包围该 run 的最近两侧 n-gram anchor 全部是达到配置 score 阈值的
-  acoustic timing、speaker 不跨界、窗口合法，且 `OfficialTranscriptAligner` 返回
-  数量/顺序/文字/时间/score 全部
-  合格时整体恢复；否则全部排除
-  并保留诊断。单侧锚点、interpolated anchor、越界、重叠、部分返回或低分不得伪造时间；大段
-  无可靠锚点冲突硬失败。
-- `transcript_fusion.json` 仅官网路径持久化，记录 official token table、所有 timed mapping、
-  ignored non-spoken content、排除内容与局部声学校验。没有 `chapters.json` 时返回 aligned ASR
-  identity words，不写 fusion 文件，也不逐词发 ASR-only warning。
+- `monotonic-local-dp.v7` 按顺序对同一段里的差异配对。定位需要至少两个可靠声学匹配，且匹配
+  的相对位置在局部窗口内唯一。相邻保留词的声学时间或音频端点限定差异，窗口上限 5 秒。
+  句端可使用一侧同章段的定位证据。大段无可靠锚点冲突硬失败。
+- 官网连续增词按同一差异组发布，全部取得独立区间且对齐分均达到 `0.20` 可直接写入。完整
+  片段复核同时比较含该组和省略该组的上下文，仅在整个候选有声学支持时整组发布。已有 ASR
+  词默认保留。弱分差异在完整口述上下文比较保留与省略，确认省略优势和共有词不借时后才删除。
+- 同一位置的冲突以相同窗口上的整段 CTC 对数似然比较。定位和时间证据通过后优先官网，ASR
+  只有用独立发声稳定支持实际差异时才推翻。候选可共享经独立校验的上下文切点，差异与共有词
+  时间一起提交。单个外窗上限为 5 秒，切点扰动为 `40 ms`。能量是发声覆盖的近似，数值和
+  强反证门槛为 ADR-0018 的试跑值。
+- 两侧数量表达独立规范化，保留币种、精度及来源，等值百分比发布项目统一格式。同一人名
+  需要已定位的引介上下文、名字与称呼、结构化身份和原声学时间证据，规范姓氏不改变发言者归属。
+- 完整金额在局部计划进入声学裁决前做等值归并，按统一格式及官网尾部标点发布。两侧均为多词时
+  记录 `many_to_many` 及完整首尾声学范围。官网证实 `a` 属于数词且与相邻的短弱读 `a` 完整对应
+  时一并归入金额。缺少显式币种证据的 `pounds` 保留原单位。
+- `transcript_fusion.json` v3 仅官网路径持久化，正文为 `words`，并记录官网词表、非口述内容、
+  排除词、对齐验证和只含来源 ID 的 `official_sentence_spans`。`excluded_asr` 记录经验证移出的
+  ASR ID、原词时间及原因。写入和复用都需按原顺序完整对账。没有 `chapters.json` 时返回
+  aligned ASR identity words，不写融合文件，也不逐词发 ASR-only warning。
 - fusion cache key 包含 aligned ASR SHA-256、chapters SHA-256、normalization/matching policy 与
   local aligner provider/model/config。cache hit 仍须校验 manifest status、canonical path、size、
   SHA-256 和可解析工件；stale fusion 只有显式 `TranscriptFusionPolicy(overwrite=True)` 才可替换，
@@ -153,12 +162,14 @@
   `TranscriptFusionResult`。官网路径必须验证 canonical `transcript_fusion.json` 的 manifest
   status/path/size/SHA-256、cache key 和 aligned checksum chain；无官网路径必须严格等于 aligned
   ASR identity projection，不允许伪造或跳过 fusion 决策。
-- 官网映射 word 的 `. ? !` 经过版本化 abbreviation/name-initial 例外后是 verified boundary；
+- 官网映射 word 的 `. ? !` 经过版本化的省略号、缩写、姓名首字母和域名点号例外后是 verified boundary；
   reliable speaker 变化强制切句。paragraph 变化、ASR segment 变化和固定 pause 都只是弱信号，
   不得各自单独切句。
 - 无官网或 ASR-only 区域综合 ASR 标点、`SentenceBoundaryDetector`、pause 与 segment 弱提示。
   ASR segment 可跨句也可被一句跨越；任何切分都不得使用字幕行宽、阅读速度或 cue 时长。
-- 无标点异常长文本只由 `sentence-boundary.v1` fallback policy 处理。fallback 数量/比例超过
+- `official_sentence_spans` 提供官网边界的来源 ID。可靠定位的官网句内使用官网标点，
+  官网句末缺少独立词时间时，仅在最后一个带时间词完整属于该句且有官网映射时设置边界。
+- 无标点异常长文本只由 `sentence-boundary.v2` fallback policy 处理。fallback 数量/比例超过
   policy 门禁时保留 boundary findings 与失败事件，但不得发布 `source_alignment.json`。
   当前 policy 数值是 TR-05 的版本化离线基线；如未来 orchestration 集成验收调整数值，必须升级
   policy 并使 sentence cache stale。

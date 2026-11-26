@@ -298,9 +298,9 @@ class LocalCase:
                 data = {**common, **audio, "schema_version": "transcription.aligned-asr.v1", "language": "en",
                         "raw_asr_sha256": records["raw_asr"]["sha256"], "words": acoustic_alignment_rows(alignment())}
             else:
-                data = {**common, "schema_version": "transcription.transcript-fusion.v1", "aligned_asr_sha256": records["aligned_asr"]["sha256"],
+                data = {**common, "schema_version": "transcription.transcript-fusion.v3", "aligned_asr_sha256": records["aligned_asr"]["sha256"],
                         "chapters_sha256": None, "mode": "official", "normalization": {}, "matching": {}, "official_aligner": {},
-                        "official_alignment_config": {}, "official_tokens": [], "ignored_content": [], "words": [], "excluded_official": [], "local_validations": []}
+                        "official_alignment_config": {}, "official_tokens": [], "ignored_content": [], "words": [], "excluded_official": [], "local_validations": [], "official_sentence_spans": [], "excluded_asr": []}
             self.put(name + ".json", data)
             provenance = {"provider": provider, "config": {}} if name != "transcript_fusion" else {
                 "aligned_asr_sha256": records["aligned_asr"]["sha256"], "chapters_sha256": None}

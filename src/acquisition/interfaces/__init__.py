@@ -1,1 +1,3 @@
+from acquisition.infrastructure.parsing import repair_cnbc_structured_transcript
+
 from .workflow import AcquisitionCommand, AcquisitionOutcome, build_acquisition_handler

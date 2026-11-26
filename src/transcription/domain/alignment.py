@@ -41,11 +41,13 @@ def _require_sequence(value: object, name: str) -> Sequence[object]:
     return value
 
 
-def tokenize_surface_text(text: str) -> tuple[str, ...]:
+def tokenize_surface_text(
+    text: str, *, lexical_pattern: re.Pattern[str] = _LEXICAL_OR_PUNCTUATION_RE
+) -> tuple[str, ...]:
     """Split lexical words while attaching punctuation to neighboring words."""
 
     _require_text(text, "text")
-    pieces = _LEXICAL_OR_PUNCTUATION_RE.findall(text)
+    pieces = lexical_pattern.findall(text)
     words: list[str] = []
     prefix = ""
     for piece in pieces:

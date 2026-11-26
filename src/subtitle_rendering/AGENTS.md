@@ -70,6 +70,8 @@ ADR-0003 的上游字幕实现已通过离线跨层及 CNBC 真实技术集成�
   来源指纹错配及混合代次。容量、CPS、非重叠短间隔是警告，不重切、改译或挪时。
 - 转录报告的声学词数、插值词数和插值比例以已验指纹的融合前 forced alignment 工件核对；
   融合后的 canonical 词数可能因多对一等变换而不同，仍由最终稿独立验证完整覆盖。
+- 有官网融合工件时，输入验证要求 `transcription.transcript-fusion.v3` 结构及
+  `official_sentence_spans`、`excluded_asr` 数组。字幕内容与时间以已验证的最终双语稿为准。
 - 保留实际字体/face/glyph、安全像素框、媒体流/映射/音频复制和 manifest-last。
   百分秒 half-up 仅用于 ASS 投影；使用实际 decoded PTS 复验投影后的两帧间隔，
   不足/未知警告定位到左 cue 的原始起止，投影 gap/帧数单独写诊断，不二次移时；

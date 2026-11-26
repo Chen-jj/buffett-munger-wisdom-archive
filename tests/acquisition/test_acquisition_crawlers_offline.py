@@ -7,6 +7,11 @@ import pytest
 
 from archive_core.application import build_asset_workspace
 from archive_core.domain import AssetId
+from archive_core.interfaces import (
+    StructuredTranscriptDTO,
+    TranscriptChapterDTO,
+    TranscriptParagraphDTO,
+)
 
 from acquisition.application import AcquireUseCase, CrawlerRegistry
 from acquisition.domain import (
@@ -22,6 +27,7 @@ from acquisition.infrastructure import (
 )
 import acquisition.infrastructure.cnbc as cnbc_module
 import acquisition.infrastructure.youtube as youtube_module
+from acquisition.interfaces import repair_cnbc_structured_transcript
 
 
 FIXTURES = Path(__file__).parents[1] / "fixtures"
@@ -60,7 +66,7 @@ def _assert_result_contract(result: AcquisitionResult) -> None:
 
 
 
-def test_cnbc_transcript_normalizes_page_mojibake_em_dash() -> None:
+def test_cnbc_transcript_repairs_misdecoded_punctuation_in_page() -> None:
     url = "https://buffett.cnbc.com/video/2000/morning.html"
     http = StubHttpClient(
         {
@@ -69,7 +75,8 @@ def test_cnbc_transcript_normalizes_page_mojibake_em_dash() -> None:
                 '<div class="Chapter-chapter">'
                 '<div class="Chapter-chapterTitle">3. Investing</div>'
                 '<div class="ChapterParagraph-chapterParagraph"><p>'
-                "WARREN BUFFETT: A bird in the hand \u00e2\u0080\u0094 you know."
+                "WARREN BUFFETT: I didn\u00e2\u0080\u0099t \u00e2\u0080\u0094 "
+                "well\u00e2\u0080\u00a6 (Laughter)"
                 "</p></div></div></div>"
             )
         }
@@ -84,9 +91,36 @@ def test_cnbc_transcript_normalizes_page_mojibake_em_dash() -> None:
     )
 
     assert result.transcript is not None
-    assert result.transcript.chapters[0].paragraphs[0].text == (
-        "A bird in the hand \u2014 you know."
+    assert result.transcript.chapters[0].paragraphs[0] == TranscriptParagraph(
+        text="I didn’t — well…",
+        speaker_label="WARREN BUFFETT",
+        stage_directions=("Laughter",),
     )
+
+
+def test_cnbc_structured_transcript_repair_preserves_nonspoken_metadata() -> None:
+    damaged = "didn\u00e2\u0080\u0099t \u00e2\u0080\u0094 \u00e2\u0080\u0098maybe\u00e2\u0080\u00a6 1\u00e2\u0080\u00932"
+    unchanged = "Café — already clean. I don't mind..."
+    transcript = StructuredTranscriptDTO(
+        language="en",
+        chapters=(
+            TranscriptChapterDTO(3, "Investing — Basics", (
+                TranscriptParagraphDTO(damaged, "WARREN BUFFETT", ("Laughter",)),
+                TranscriptParagraphDTO("", stage_directions=("Applause",)),
+            )),
+            TranscriptChapterDTO(4, "Questions", (TranscriptParagraphDTO(unchanged),)),
+        ),
+    )
+
+    repaired = repair_cnbc_structured_transcript(transcript)
+
+    assert repaired.chapters[0] == TranscriptChapterDTO(3, "Investing — Basics", (
+        TranscriptParagraphDTO("didn’t — ‘maybe… 1–2", "WARREN BUFFETT", ("Laughter",)),
+        transcript.chapters[0].paragraphs[1],
+    ))
+    assert repaired.chapters[1] == transcript.chapters[1]
+    assert transcript.chapters[0].paragraphs[0].text == damaged
+    assert repair_cnbc_structured_transcript(repaired) == repaired
 
 
 def test_cnbc_crawler_accepts_supported_locators_and_hints() -> None:

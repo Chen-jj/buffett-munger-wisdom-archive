@@ -66,6 +66,8 @@ FinalBilingualDraftDTO、StageManifestDTO，以及严格证据/实际帧PTS/保�
 - timed word 与 sentence 的稳定 ID 分别严格使用文档顺序的一基格式 `w1..wN`、
   `s1..sN`。sentence 必须连续且恰好覆盖所有 words，冗余首尾时间必须匹配引用 word，
   文本按公共空格/标点规范可从引用 words 重建。
+- `MatchType.MANY_TO_MANY` 表示多个原 ASR 词对应多个官网 token，用于已证实等价的完整金额。
+  全部来源 ID 和合并的声学范围随单个 `TimedWordDTO` 保留。
 - source alignment 必须显式提供 `sections`；空列表表示没有可靠分组，非空时使用
   `sec1..secN`，连续且恰好一次覆盖全部 sentences。文档结构强制形成的句界使用
   `document_section_change` provenance。

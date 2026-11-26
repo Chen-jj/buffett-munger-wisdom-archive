@@ -84,6 +84,28 @@ def test_event_serialization_contains_required_observability_fields() -> None:
     }
 
 
+def test_detailed_log_preserves_complete_long_source_and_result_text() -> None:
+    source_text = "Recognized words " * 32 + "source tail."
+    result_text = "Aligned words " * 36 + "result tail."
+    assert len(source_text) > 500 and len(result_text) > 500
+    event = TranscriptionEvent(
+        asset_id=ASSET_ID,
+        stage=STAGE,
+        code=EventCode.FUSION_SURFACE_ADJUSTED,
+        severity=EventSeverity.INFO,
+        action="record",
+        reason="compare source with result",
+        source_text=source_text,
+        result_text=result_text,
+    )
+    log = StringIO()
+    JsonLinesEventSink(log).emit(event)
+
+    saved = json.loads(log.getvalue())
+    assert saved["source_text"] == source_text
+    assert saved["result_text"] == result_text
+
+
 def test_document_section_event_codes_are_stable() -> None:
     assert {
         code.value

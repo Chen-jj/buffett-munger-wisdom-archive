@@ -174,7 +174,10 @@ class FakeAligner:
 class FakeOfficialAligner:
     identity = ProviderIdentity("fake-official-aligner", "1")
 
-    def align_official(self, audio_path, tokens, left_anchor, right_anchor, config):
+    def align_official_window(self, audio_path, tokens, start_ms, end_ms, config):
+        raise AssertionError("exact transcript match must not call local aligner")
+
+    def score_candidates(self, audio_path, start_ms, end_ms, readings, config):
         raise AssertionError("exact transcript match must not call local aligner")
 
 

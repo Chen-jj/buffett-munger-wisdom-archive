@@ -36,6 +36,7 @@ class DefaultTranscriptionPresenter:
             "substitution",
             "one_to_many",
             "many_to_one",
+            "many_to_many",
             "asr_only",
             "official_only_recovered",
             "official_only_excluded",

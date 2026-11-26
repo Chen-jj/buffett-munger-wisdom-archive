@@ -36,6 +36,11 @@ from transcription.domain import (
     VadRegion,
     tokenize_surface_text,
 )
+from transcription.domain.fusion import fusion_candidate_text
+from transcription.domain.fusion_acoustics import (
+    AcousticCandidateEvidence,
+    AcousticWordEvidence,
+)
 
 
 ProcessRunner = Callable[..., ProcessResult]
@@ -476,7 +481,7 @@ class WhisperXForcedAligner:
 
 
 class WhisperXOfficialTranscriptAligner:
-    """Locally align official-only tokens inside a bounded acoustic window."""
+    """Evaluate spoken readings inside a bounded acoustic window."""
 
     def __init__(
         self,
@@ -547,6 +552,94 @@ class WhisperXOfficialTranscriptAligner:
             )
         return tuple(candidates)
 
+    def align_official_window(
+        self,
+        audio_path: str,
+        tokens: tuple[OfficialTranscriptToken, ...],
+        start_ms: int,
+        end_ms: int,
+        config: OfficialAlignmentConfig,
+    ) -> tuple[OfficialAlignmentCandidate, ...]:
+        token_readings = tuple(fusion_candidate_text(token.text) for token in tokens)
+        word_counts = tuple(len(reading.split()) for reading in token_readings)
+        readings = (" ".join(token_readings),)
+        # A trailing interruption can leave a written currency implicit in
+        # speech. Both readings keep the same amount and are scored together.
+        if (
+            tokens and tokens[-1].text.endswith("—") and word_counts[-1] > 1
+            and token_readings[-1] != tokens[-1].text
+            and any(unicodedata.category(character) == "Sc" for character in tokens[-1].text)
+        ):
+            shortened = token_readings[-1].rsplit(" ", 1)[0]
+            readings += (" ".join((*token_readings[:-1], shortened)),)
+        scores = self.score_candidates(audio_path, start_ms, end_ms, readings, config)
+        evidence = scores[0]
+        if len(scores) == 2:
+            shorthand = scores[1]
+            if (
+                shorthand.ctc_log_likelihood is not None
+                and len(shorthand.word_evidence) == sum(word_counts) - 1
+                and (
+                    evidence.ctc_log_likelihood is None
+                    or (
+                        evidence.word_evidence
+                        and evidence.word_evidence[-1].score < config.min_alignment_score
+                        and shorthand.ctc_log_likelihood >= evidence.ctc_log_likelihood
+                    )
+                )
+            ):
+                evidence = shorthand
+                word_counts = (*word_counts[:-1], word_counts[-1] - 1)
+        if 0 in word_counts or len(evidence.word_evidence) != sum(word_counts):
+            raise RuntimeError("local CTC alignment did not preserve official word coverage")
+
+        candidates = []
+        offset = 0
+        for token, count in zip(tokens, word_counts, strict=True):
+            words = evidence.word_evidence[offset:offset + count]
+            # A written amount covers its actual spoken components, and its
+            # weakest component determines whether the full amount can publish.
+            candidates.append(OfficialAlignmentCandidate(
+                token.id, token.text, words[0].start_ms, words[-1].end_ms,
+                min(word.score for word in words),
+            ))
+            offset += count
+        return tuple(candidates)
+
+    def score_candidates(
+        self,
+        audio_path: str,
+        start_ms: int,
+        end_ms: int,
+        readings: tuple[str, ...],
+        config: OfficialAlignmentConfig,
+    ) -> tuple[AcousticCandidateEvidence, ...]:
+        import torch
+
+        waveform = _read_pcm_window(audio_path, start_ms, end_ms)
+        pcm_end_ms = start_ms + waveform.shape[-1] // 16
+        model, metadata = self._alignment_model(self._backend(), config)
+        waveform_for_model = waveform.to(config.device)
+        if waveform.shape[-1] < 400:
+            waveform_for_model = torch.nn.functional.pad(
+                waveform_for_model, (0, 400 - waveform.shape[-1])
+            )
+        with torch.inference_mode():
+            if metadata["type"] == "torchaudio":
+                logits, _ = model(waveform_for_model)
+            elif metadata["type"] == "huggingface":
+                logits = model(waveform_for_model).logits
+            else:
+                raise ValueError("alignment model does not provide CTC logits")
+            log_probabilities = logits[0].float().log_softmax(dim=-1).cpu()
+
+        dictionary = metadata["dictionary"]
+        blank = dictionary.get("<pad>", dictionary.get("[pad]", 0))
+        return tuple(
+            _score_ctc_reading(reading, dictionary, blank, log_probabilities, waveform, start_ms, pcm_end_ms)
+            for reading in readings
+        )
+
     def _alignment_model(
         self, backend: Any, config: OfficialAlignmentConfig
     ) -> tuple[Any, Any]:
@@ -571,6 +664,142 @@ class WhisperXOfficialTranscriptAligner:
                 ) from error
             self._backend_instance = whisperx
         return self._backend_instance
+
+
+def _read_pcm_window(audio_path: str, start_ms: int, end_ms: int) -> Any:
+    import torch
+
+    if not 0 <= start_ms < end_ms:
+        raise ValueError("local alignment requires a positive audio window")
+    frame_start, frame_end = start_ms * 16, end_ms * 16
+    with wave.open(audio_path, "rb") as source:
+        if (source.getnchannels(), source.getsampwidth(), source.getframerate()) != (1, 2, 16000):
+            raise ValueError("local alignment requires mono 16 kHz signed 16-bit PCM WAV audio")
+        frame_end = min(frame_end, source.getnframes() // 16 * 16)
+        if frame_start >= frame_end:
+            raise ValueError("local alignment window contains no recorded PCM audio")
+        source.setpos(frame_start)
+        frames = source.readframes(frame_end - frame_start)
+    if len(frames) != 2 * (frame_end - frame_start):
+        raise ValueError("local alignment window contains truncated PCM audio")
+    return torch.frombuffer(bytearray(frames), dtype=torch.int16).float().reshape(1, -1) / 32768.0
+
+
+def _score_ctc_reading(
+    reading: str,
+    dictionary: Mapping[str, int],
+    blank: int,
+    log_probabilities: Any,
+    waveform: Any,
+    start_ms: int,
+    end_ms: int,
+) -> AcousticCandidateEvidence:
+    import math
+    import numpy as np
+    import torch
+
+    normalized = unicodedata.normalize("NFKC", reading).casefold().replace("’", "'")
+    words = tuple(
+        word for word in (
+            "".join(character for character in chunk if character.isalnum() or character in "'-").strip("'-")
+            for chunk in normalized.split()
+        ) if word
+    )
+    if not reading.strip():
+        likelihood = float(log_probabilities[:, blank].sum())
+        return AcousticCandidateEvidence(likelihood if math.isfinite(likelihood) else None)
+    if not words:
+        return AcousticCandidateEvidence(None)
+
+    try:
+        labels = [dictionary[character] for character in "|".join(words)]
+    except KeyError:
+        return AcousticCandidateEvidence(None)
+    frame_count = log_probabilities.shape[0]
+    if len(labels) + sum(left == right for left, right in zip(labels, labels[1:])) > frame_count:
+        return AcousticCandidateEvidence(None)
+    likelihood = -float(torch.nn.functional.ctc_loss(
+        log_probabilities.unsqueeze(1),
+        torch.as_tensor(labels, dtype=torch.long),
+        (frame_count,),
+        (len(labels),),
+        blank=blank,
+        reduction="sum",
+    ))
+    if not math.isfinite(likelihood):
+        return AcousticCandidateEvidence(None)
+
+    emissions = log_probabilities.numpy()
+    path = _ctc_best_state_path(emissions, labels, blank)
+    character_frames = tuple(np.flatnonzero(path == 2 * index + 1) for index in range(len(labels)))
+    character_scores = tuple(
+        float(np.exp(emissions[frames, label]).mean())
+        for frames, label in zip(character_frames, labels, strict=True)
+    )
+    audio_energy = waveform.square()[0]
+    total_energy = float(audio_energy.sum())
+    covered_energy = 0.0
+    evidence = []
+    scores = []
+    weak_run = longest_weak_run = 0
+    index = 0
+    for word in words:
+        end_index = index + len(word)
+        first_frame = int(character_frames[index][0])
+        last_frame = int(character_frames[end_index - 1][-1]) + 1
+        word_start = start_ms + round(first_frame * (end_ms - start_ms) / frame_count)
+        word_end = start_ms + round(last_frame * (end_ms - start_ms) / frame_count)
+        if word_start >= word_end:
+            return AcousticCandidateEvidence(likelihood)
+        word_scores = character_scores[index:end_index]
+        evidence.append(AcousticWordEvidence(word, word_start, word_end, sum(word_scores) / len(word_scores)))
+        scores.extend(word_scores)
+        covered_energy += float(audio_energy[(word_start - start_ms) * 16:(word_end - start_ms) * 16].sum())
+        for score in word_scores:
+            weak_run = weak_run + 1 if score < 0.05 else 0
+            longest_weak_run = max(longest_weak_run, weak_run)
+        index = end_index + 1  # Skip the word-delimiter label.
+
+    weakest = sorted(scores)[:2]
+    return AcousticCandidateEvidence(
+        ctc_log_likelihood=likelihood,
+        start_ms=evidence[0].start_ms,
+        end_ms=evidence[-1].end_ms,
+        mean_character_score=sum(scores) / len(scores),
+        weakest_two_mean=sum(weakest) / len(weakest),
+        energy_coverage=min(1.0, covered_energy / total_energy) if total_energy else 0.0,
+        longest_weak_character_run=longest_weak_run,
+        word_evidence=tuple(evidence),
+    )
+
+
+def _ctc_best_state_path(emissions: Any, labels: list[int], blank: int) -> Any:
+    """Backtrack the most likely complete path, including CTC blank states."""
+    import numpy as np
+
+    states = np.full(2 * len(labels) + 1, blank)
+    states[1::2] = labels
+    indices = np.arange(len(states))
+    # A two-state jump bypasses a blank only between different characters.
+    skip_allowed = (states[2:] != blank) & (states[2:] != states[:-2])
+    previous = np.full(len(states), -np.inf)
+    previous[0] = 0.0
+    transitions = np.empty((len(emissions), len(states)), dtype=np.uint8)
+    for index, frame in enumerate(emissions):
+        stay = previous
+        advance = np.concatenate(([-np.inf], previous[:-1]))
+        skip = np.concatenate(([-np.inf, -np.inf], np.where(skip_allowed, previous[:-2], -np.inf)))
+        candidates = np.stack((stay, advance, skip))
+        offsets = candidates.argmax(axis=0)
+        transitions[index] = offsets
+        previous = candidates[offsets, indices] + frame[states]
+
+    state = len(states) - 1 if previous[-1] >= previous[-2] else len(states) - 2
+    path = np.empty(len(emissions), dtype=np.int32)
+    for index in range(len(emissions) - 1, -1, -1):
+        path[index] = state
+        state -= int(transitions[index, state])
+    return path
 
 
 class LocalTranscriptionArtifactStore:

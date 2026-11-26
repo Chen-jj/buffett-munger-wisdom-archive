@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from bisect import bisect_right
+from dataclasses import dataclass, replace
+from difflib import SequenceMatcher
 from functools import lru_cache
+from itertools import product
 from pathlib import Path
 from typing import Mapping, Sequence
 
@@ -35,6 +38,21 @@ from transcription.domain import (
     build_official_tokens,
     normalize_token,
 )
+from transcription.domain.fusion import (
+    ExcludedAsrWord,
+    MoneyAmount,
+    OfficialSentenceSpan,
+    equivalent_fusion_text,
+    fusion_candidate_readings,
+    fusion_candidate_text,
+    is_explicit_fusion_quantity,
+    money_spans,
+    numeric_clock_equivalent,
+    official_surface_text,
+    same_official_person,
+)
+from transcription.domain.fusion_acoustics import AcousticCandidateEvidence
+from transcription.domain.sentences import SentenceBoundaryPolicy, is_sentence_terminal
 
 from .alignment import ForcedAlignmentResult
 from .audio_asr import (
@@ -44,6 +62,7 @@ from .audio_asr import (
     SUCCESSFUL_CACHE_STATUS,
     _cache_key,
 )
+from .fusion_context import ContextualComparison, contextual_comparison
 from .observability import (
     EventCode,
     EventSeverity,
@@ -126,6 +145,7 @@ class _MappingPlan:
     official_indices: tuple[int, ...]
     anchor: bool = False
     anchor_asr_indices: tuple[int, ...] = ()
+    money_text: str | None = None
 
 
 @dataclass(frozen=True)
@@ -133,6 +153,32 @@ class _FusionBuild:
     words: tuple[TimedWordDTO, ...]
     exclusions: tuple[ExcludedOfficialTokens, ...]
     validations: tuple[LocalAlignmentValidation, ...]
+    excluded_asr: tuple[ExcludedAsrWord, ...]
+
+
+@dataclass(frozen=True)
+class _DifferenceWindow:
+    start_ms: int
+    end_ms: int
+    left_id: str | None
+    right_id: str | None
+    can_extend_left: bool
+    can_extend_right: bool
+
+
+@dataclass(frozen=True)
+class _ScoredDifference:
+    asr: AcousticCandidateEvidence
+    official: AcousticCandidateEvidence
+    readings: tuple[str, str]
+
+
+@dataclass(frozen=True)
+class _DifferenceContext:
+    left: tuple[AlignedAsrWord, ...]
+    right: tuple[AlignedAsrWord, ...]
+    start_ms: int
+    end_ms: int
 
 
 def identity_fusion_words(
@@ -167,6 +213,8 @@ def plan_transcript_fusion(
 
     asr = tuple(aligned_words)
     official = tuple(official_tokens)
+    asr_amounts = money_spans(tuple(word.text for word in asr))
+    official_amounts = money_spans(tuple(token.text for token in official))
     anchors = _find_monotonic_anchors(asr, official, normalization, matching)
     plans: list[_MappingPlan] = []
     asr_cursor = 0
@@ -222,7 +270,90 @@ def plan_transcript_fusion(
             right_anchored=False,
         )
     )
-    return tuple(plans)
+    return _group_equivalent_money(asr, official, plans, asr_amounts, official_amounts)
+
+
+def _group_equivalent_money(
+    asr: tuple[AlignedAsrWord, ...],
+    official: tuple[OfficialTranscriptToken, ...],
+    plans: list[_MappingPlan],
+    asr_amounts: Sequence[tuple[int, int, MoneyAmount]],
+    official_amounts: Sequence[tuple[int, int, MoneyAmount]],
+) -> tuple[_MappingPlan, ...]:
+    """Use the local plan to locate complete amounts before comparing differences."""
+    if not asr_amounts or not official_amounts:
+        return tuple(plans)
+    asr_positions = {index: position for position, plan in enumerate(plans) for index in plan.asr_indices}
+    official_positions = {index: position for position, plan in enumerate(plans) for index in plan.official_indices}
+    replacements: dict[int, tuple[int, _MappingPlan]] = {}
+    taken_through = 0
+    for first_official, last_official, official_amount in official_amounts:
+        official_indices = tuple(range(first_official, last_official))
+        if not _same_official_context(official, official_indices):
+            continue
+        match = None
+        for first_asr, last_asr, asr_amount in asr_amounts:
+            if (asr_amount.currency, asr_amount.value) != (official_amount.currency, official_amount.value):
+                continue
+            asr_surfaces = tuple(word.text for word in asr[first_asr:last_asr])
+            official_surfaces = tuple(token.text for token in official[first_official:last_official])
+            if official_amount.currency == "£" and not any("£" in text for text in (*asr_surfaces, *official_surfaces)):
+                continue
+            # Only an adjacent weak ASR article can supply a numeral article.
+            candidate_asr_starts = (first_asr,)
+            if (first_asr > 0 and official_amount.numeral_article and asr_surfaces[0].lstrip("-−").startswith(official_amount.currency)
+                    and asr[first_asr - 1].text.casefold() == "a"
+                    and asr[first_asr - 1].alignment_score is not None
+                    and asr[first_asr - 1].alignment_score < 0.20
+                    and asr[first_asr - 1].end_ms - asr[first_asr - 1].start_ms <= 120
+                    and asr[first_asr].start_ms - asr[first_asr - 1].end_ms <= 1_250):
+                candidate_asr_starts = (first_asr - 1, first_asr)
+            for candidate_first in candidate_asr_starts:
+                asr_indices = tuple(range(candidate_first, last_asr))
+                if any(asr[index].timing_source is not AlignmentTimingSource.ACOUSTIC_ALIGNMENT for index in asr_indices):
+                    continue
+                start = min(asr_positions[candidate_first], official_positions[first_official])
+                end = max(asr_positions[last_asr - 1], official_positions[last_official - 1]) + 1
+                if start < taken_through:
+                    continue
+                region = plans[start:end]
+                if (tuple(index for plan in region for index in plan.asr_indices) != asr_indices
+                        or tuple(index for plan in region for index in plan.official_indices) != official_indices):
+                    continue
+                shared_neighbor = any(
+                    plans[position].match_type in {MatchType.EXACT, MatchType.NORMALIZED_EXACT}
+                    and _same_official_context(official, (first_official, *plans[position].official_indices))
+                    for position in (start - 1, end) if 0 <= position < len(plans)
+                )
+                if not shared_neighbor and len(region) != 1:
+                    continue
+                match = start, end, asr_indices
+                break
+            if match is not None:
+                break
+        if match is None:
+            continue
+        start, end, asr_indices = match
+        if len(asr_indices) == len(official_indices) == 1:
+            plan = (
+                replace(plans[start], money_text=official_amount.text) if end == start + 1 else
+                _MappingPlan(MatchType.NORMALIZED_EXACT, asr_indices, official_indices, money_text=official_amount.text)
+            )
+        else:
+            match_type = (
+                MatchType.ONE_TO_MANY if len(asr_indices) == 1 else
+                MatchType.MANY_TO_ONE if len(official_indices) == 1 else MatchType.MANY_TO_MANY
+            )
+            plan = _MappingPlan(match_type, asr_indices, official_indices, money_text=official_amount.text)
+        replacements[start] = end, plan
+        taken_through = end
+
+    merged = []
+    position = 0
+    while position < len(plans):
+        position, plan = replacements.get(position, (position + 1, plans[position]))
+        merged.append(plan)
+    return tuple(merged)
 
 
 def _find_monotonic_anchors(
@@ -251,16 +382,45 @@ def _find_monotonic_anchors(
         and gram in official_grams
         and len(official_grams[gram]) == 1
     ]
-    anchors: list[_Anchor] = []
-    next_asr = 0
-    next_official = 0
-    for asr_start, official_start in sorted(candidates):
-        if asr_start < next_asr or official_start < next_official:
-            continue
-        anchors.append(_Anchor(asr_start, official_start, size))
-        next_asr = asr_start + size
-        next_official = official_start + size
-    return tuple(anchors)
+    # Select the maximum-cardinality non-overlapping chain.
+    candidates.sort()
+    if not candidates:
+        return ()
+    scores = [1] * len(candidates)
+    parents = [-1] * len(candidates)
+    coordinates = sorted({position + size for _, position in candidates})
+    tree = [-1] * (len(coordinates) + 1)
+
+    def better(left: int, right: int) -> int:
+        if left < 0:
+            return right
+        if right < 0:
+            return left
+        # Stable earliest candidate wins equal-length ties.
+        return min((left, right), key=lambda index: (-scores[index], index))
+
+    active = 0
+    for index, (asr_start, official_start) in enumerate(candidates):
+        while active < index and candidates[active][0] + size <= asr_start:
+            position = bisect_right(coordinates, candidates[active][1] + size)
+            while position < len(tree):
+                tree[position] = better(tree[position], active)
+                position += position & -position
+            active += 1
+        position = bisect_right(coordinates, official_start)
+        parent = -1
+        while position:
+            parent = better(parent, tree[position])
+            position -= position & -position
+        parents[index] = parent
+        if parent >= 0:
+            scores[index] = scores[parent] + 1
+    index = min(range(len(candidates)), key=lambda item: (-scores[item], item))
+    anchors = []
+    while index >= 0:
+        anchors.append(_Anchor(*candidates[index], size))
+        index = parents[index]
+    return tuple(reversed(anchors))
 
 
 def _align_local_region(
@@ -278,11 +438,67 @@ def _align_local_region(
 ) -> tuple[_MappingPlan, ...]:
     asr_count = asr_end - asr_start
     official_count = official_end - official_start
+    # Equal edge words are not part of the mismatch search budget. Their
+    # existing acoustic times remain untouched; they are not n-gram anchors
+    # and cannot authorize official-only recovery on their own.
+    if asr_count and official_count and asr_count + official_count > matching.max_local_window_words:
+        prefix = []
+        while asr_start < asr_end and official_start < official_end and (
+            normalize_token(asr[asr_start].text, normalization) == official[official_start].normalized
+        ):
+            kind = MatchType.EXACT if asr[asr_start].text == official[official_start].text else MatchType.NORMALIZED_EXACT
+            prefix.append(_MappingPlan(kind, (asr_start,), (official_start,)))
+            asr_start += 1
+            official_start += 1
+        suffix = []
+        while asr_start < asr_end and official_start < official_end and (
+            normalize_token(asr[asr_end - 1].text, normalization) == official[official_end - 1].normalized
+        ):
+            asr_end -= 1
+            official_end -= 1
+            kind = MatchType.EXACT if asr[asr_end].text == official[official_end].text else MatchType.NORMALIZED_EXACT
+            suffix.append(_MappingPlan(kind, (asr_end,), (official_end,)))
+        if prefix or suffix:
+            middle = _align_local_region(asr, official, asr_start, asr_end, official_start, official_end,
+                                         normalization, matching, left_anchored=left_anchored,
+                                         right_anchored=right_anchored)
+            return tuple(prefix) + middle + tuple(reversed(suffix))
     if (
         asr_count
         and official_count
         and asr_count + official_count > matching.max_local_window_words
     ):
+        # Refine this region with locally unique n-grams. Each recursive call
+        # consumes at least one anchor without allocating a full-transcript matrix.
+        local_anchors = _find_monotonic_anchors(
+            asr[asr_start:asr_end], official[official_start:official_end],
+            normalization, matching,
+        )
+        if local_anchors:
+            refined = []
+            asr_cursor, official_cursor = asr_start, official_start
+            for index, anchor in enumerate(local_anchors):
+                a = asr_start + anchor.asr_start
+                o = official_start + anchor.official_start
+                refined.extend(_align_local_region(
+                    asr, official, asr_cursor, a, official_cursor, o,
+                    normalization, matching,
+                    left_anchored=left_anchored or index > 0, right_anchored=True,
+                ))
+                anchor_indices = tuple(range(a, a + anchor.length))
+                for offset in range(anchor.length):
+                    match_type = (MatchType.EXACT if asr[a + offset].text == official[o + offset].text
+                                  else MatchType.NORMALIZED_EXACT)
+                    refined.append(_MappingPlan(
+                        match_type, (a + offset,), (o + offset,),
+                        anchor=True, anchor_asr_indices=anchor_indices,
+                    ))
+                asr_cursor, official_cursor = a + anchor.length, o + anchor.length
+            refined.extend(_align_local_region(
+                asr, official, asr_cursor, asr_end, official_cursor, official_end,
+                normalization, matching, left_anchored=True, right_anchored=right_anchored,
+            ))
+            return tuple(refined)
         raise FusionFailure(
             "local mismatch window exceeds configured bound",
             asr_word_ids=tuple(word.id for word in asr[asr_start:asr_end]),
@@ -291,6 +507,19 @@ def _align_local_region(
             ),
         )
     bilateral = left_anchored and right_anchored
+
+    # Preserve all ASR words in one-sided regions without running DP.
+    if not official_count:
+        return tuple(_MappingPlan(MatchType.ASR_ONLY, (index,), ())
+                     for index in range(asr_start, asr_end))
+    if not asr_count:
+        if not bilateral and official_count > matching.max_official_only_words:
+            raise FusionFailure(
+                "large unmatched region lacks reliable monotonic bilateral anchors",
+                official_token_ids=tuple(token.id for token in official[official_start:official_end]),
+            )
+        return tuple(_MappingPlan(MatchType.OFFICIAL_ONLY, (), (index,))
+                     for index in range(official_start, official_end))
 
     @lru_cache(maxsize=None)
     def solve(
@@ -360,7 +589,14 @@ def _align_local_region(
                     for index in official_indices
                     for unit in official[index].normalized
                 )
-                if asr_units == flattened:
+                if (
+                    asr_units == flattened
+                    or numeric_clock_equivalent(asr[asr_index].text, official, official_indices)
+                    or equivalent_fusion_text(
+                        (asr[asr_index].text,),
+                        tuple(official[index].text for index in official_indices),
+                    )
+                ):
                     add_choice(
                         2,
                         1,
@@ -373,10 +609,9 @@ def _align_local_region(
                         relative_official + official_length,
                     )
 
-            for asr_length in range(
-                2,
-                min(matching.max_group_size, asr_count - relative_asr) + 1,
-            ):
+            quantity_limit = 8 if is_explicit_fusion_quantity(official[official_index].text) else 0
+            for asr_length in range(2, min(max(quantity_limit, matching.max_group_size),
+                                           asr_count - relative_asr) + 1):
                 asr_indices = tuple(range(asr_index, asr_index + asr_length))
                 if any(
                     asr[index].timing_source
@@ -389,7 +624,10 @@ def _align_local_region(
                     for index in asr_indices
                     for unit in normalize_token(asr[index].text, normalization)
                 )
-                if flattened == official_units:
+                if flattened == official_units or equivalent_fusion_text(
+                    tuple(asr[index].text for index in asr_indices),
+                    (official[official_index].text,),
+                ):
                     add_choice(
                         2,
                         2,
@@ -436,7 +674,8 @@ def _align_local_region(
     )
     has_asr_gap = any(plan.match_type is MatchType.ASR_ONLY for plan in plans)
     if not bilateral and has_official_gap and (
-        official_count > matching.max_official_only_words
+        sum(len(plan.official_indices) for plan in plans
+            if plan.match_type is MatchType.OFFICIAL_ONLY) > matching.max_official_only_words
         or (
             has_asr_gap
             and unmatched > matching.max_unanchored_conflict_words
@@ -484,6 +723,81 @@ def _same_official_context(
         for index in indices
     }
     return len(contexts) == 1
+
+
+def _official_sentence_spans(
+    asr: tuple[AlignedAsrWord, ...],
+    official: tuple[OfficialTranscriptToken, ...],
+    plans: tuple[_MappingPlan, ...],
+    excluded_asr: tuple[ExcludedAsrWord, ...],
+    matching: MatchingPolicy,
+) -> tuple[OfficialSentenceSpan, ...]:
+    """Preserve the source associations used by sentence-boundary evidence."""
+
+    policy = SentenceBoundaryPolicy()
+    official_surfaces = tuple(token.text for token in official)
+    asr_surfaces = tuple(word.text for word in asr)
+    provenance = {
+        index: plan
+        for plan in plans if plan.asr_indices
+        for index in plan.official_indices
+    }
+    mapped_asr = {index for plan in provenance.values() for index in plan.asr_indices}
+    excluded_ids = {word.asr_word_id for word in excluded_asr}
+    rows: list[OfficialSentenceSpan] = []
+    asr_cursor = 0
+    official_cursor = 0
+
+    for current in range(len(official)):
+        if (
+            current + 1 < len(official)
+            and _same_official_context(official, (current, current + 1))
+            and not is_sentence_terminal(official_surfaces, current, policy)
+        ):
+            continue
+        first, end = official_cursor, current + 1
+        official_cursor = end
+        evidence = {
+            index: provenance[index]
+            for index in range(first, end)
+            if index in provenance and any(
+                asr[source].timing_source is AlignmentTimingSource.ACOUSTIC_ALIGNMENT
+                for source in provenance[index].asr_indices
+            )
+        }
+        if not evidence:
+            continue
+        fully_matched = len(evidence) == end - first
+        anchored = any(plan.anchor for plan in evidence.values())
+        if not fully_matched and (len(evidence) < 2 or not anchored):
+            continue
+        first_asr = min(plan.asr_indices[0] for plan in evidence.values())
+        last_asr = max(plan.asr_indices[-1] for plan in evidence.values()) + 1
+        # Include unmapped ASR wording from the same partial sentence, stopping
+        # at other lexical matches and at observed ASR sentence ends.
+        if min(evidence) > first:
+            floor = max(asr_cursor, first_asr - matching.max_local_window_words)
+            while (
+                first_asr > floor
+                and first_asr - 1 not in mapped_asr
+                and not is_sentence_terminal(asr_surfaces, first_asr - 1, policy)
+            ):
+                first_asr -= 1
+        if max(evidence) < end - 1:
+            ceiling = min(len(asr), last_asr + matching.max_local_window_words)
+            while (
+                last_asr < ceiling
+                and last_asr not in mapped_asr
+                and not is_sentence_terminal(asr_surfaces, last_asr - 1, policy)
+            ):
+                last_asr += 1
+        if first_asr < asr_cursor:
+            continue
+        asr_ids = tuple(word.id for word in asr[first_asr:last_asr] if word.id not in excluded_ids)
+        if asr_ids:
+            rows.append(OfficialSentenceSpan(asr_ids, tuple(token.id for token in official[first:end])))
+        asr_cursor = last_asr
+    return tuple(rows)
 
 
 class TranscriptFusionService:
@@ -557,7 +871,7 @@ class TranscriptFusionService:
             workspace / canonical_filename(ArtifactType.TRANSCRIPT_FUSION)
         )
         cache_key = _cache_key(
-            "transcript_fusion.v1",
+            "transcript_fusion.v3",
             {
                 "aligned_asr_sha256": aligned_record.sha256,
                 "chapters_sha256": chapters_sha256,
@@ -581,6 +895,7 @@ class TranscriptFusionService:
             cache_key,
             aligned_record.sha256,
             chapters_sha256,
+            aligned.artifact.words,
         )
         if cached is not None:
             self._emit_cached_summary(asset_id, aligned.artifact, cached)
@@ -624,6 +939,7 @@ class TranscriptFusionService:
                 selected_normalization,
                 selected_matching,
                 official_alignment_config,
+                aligned.artifact.audio_duration_ms,
                 warn_asr_only=bool(official_tokens),
             )
         except FusionFailure as error:
@@ -660,7 +976,12 @@ class TranscriptFusionService:
             excluded_official=build.exclusions,
             local_validations=build.validations,
             cache_key=cache_key,
+            official_sentence_spans=_official_sentence_spans(
+                aligned.artifact.words, official_tokens, plans, build.excluded_asr, selected_matching,
+            ),
+            excluded_asr=build.excluded_asr,
         )
+        artifact.validate_asr_coverage(aligned.artifact.words)
         self.artifacts.write_json(
             fusion_path,
             artifact.to_dict(),
@@ -727,326 +1048,716 @@ class TranscriptFusionService:
         normalization: NormalizationPolicy,
         matching: MatchingPolicy,
         official_alignment_config: OfficialAlignmentConfig | None,
+        audio_duration_ms: int,
         *,
         warn_asr_only: bool,
     ) -> _FusionBuild:
         words: list[TimedWordDTO] = []
         exclusions: list[ExcludedOfficialTokens] = []
         validations: list[LocalAlignmentValidation] = []
+        excluded_asr: list[ExcludedAsrWord] = []
+        adjusted: dict[str, AlignedAsrWord] = {}
+        speaker_labels = frozenset(token.speaker_label for token in official if token.speaker_label)
+        gap_types = {MatchType.ASR_ONLY, MatchType.OFFICIAL_ONLY}
         plan_index = 0
         while plan_index < len(plans):
             plan = plans[plan_index]
-            if plan.match_type is MatchType.OFFICIAL_ONLY:
-                run_end = plan_index + 1
-                while (
-                    run_end < len(plans)
-                    and plans[run_end].match_type is MatchType.OFFICIAL_ONLY
+            if plan.match_type not in gap_types:
+                word = self._timed_word_from_plan(words, plan, asr, official)
+                if len(word.asr_word_ids) == 1 and word.asr_word_ids[0] in adjusted:
+                    shared = adjusted[word.asr_word_ids[0]]
+                    word = replace(word, start_ms=shared.start_ms, end_ms=shared.end_ms)
+                words.append(word)
+                self._emit_plan_event(asset_id, word, plan, asr, official, warn_asr_only=warn_asr_only)
+                plan_index += 1
+                continue
+
+            run_end = plan_index + 1
+            while run_end < len(plans) and plans[run_end].match_type in gap_types:
+                run_end += 1
+            run = plans[plan_index:run_end]
+            asr_indices = tuple(index for part in run for index in part.asr_indices)
+            official_indices = tuple(index for part in run for index in part.official_indices)
+            tokens = tuple(official[index] for index in official_indices)
+            original = tuple(asr[index] for index in asr_indices)
+            config = official_alignment_config
+            window = None
+            if self.official_aligner is not None and config is not None and (
+                tokens or all(word.alignment_score is None or word.alignment_score < config.min_anchor_alignment_score
+                              for word in original)
+            ):
+                window = self._difference_window(
+                    asr, official, plans, plan_index, run_end, asr_indices, official_indices,
+                    audio_duration_ms, normalization, matching, config,
+                )
+                if window is not None and (window.left_id in adjusted or window.right_id in adjusted):
+                    left = adjusted.get(window.left_id)
+                    right = adjusted.get(window.right_id)
+                    window = replace(window, start_ms=left.end_ms if left else window.start_ms,
+                                     end_ms=right.start_ms if right else window.end_ms)
+            reason = "no bounded same-utterance acoustic window with unique reliable matches"
+            context = self._difference_context(
+                asr, official, plans, plan_index, run_end, audio_duration_ms, adjusted, words,
+            ) if window is not None else None
+            if original and tokens:
+                replacement = None
+                retiming = None
+                if window is not None and config is not None and len(original) == len(tokens) == 1 and (
+                    plan_index and plans[plan_index - 1].asr_indices == (asr_indices[0] - 1,)
+                    and plans[plan_index - 1].official_indices == (official_indices[0] - 1,)
+                    and same_official_person(
+                        asr[max(0, asr_indices[0] - 5):asr_indices[0] + 1], tokens[0],
+                        official[max(0, official_indices[0] - 5):official_indices[0]], speaker_labels,
+                    )
                 ):
-                    run_end += 1
-                token_indices = tuple(
-                    index
-                    for run_plan in plans[plan_index:run_end]
-                    for index in run_plan.official_indices
-                )
-                recovered, exclusion, validation = self._recover_official_only(
-                    asset_id,
-                    audio_path,
-                    asr,
-                    official,
-                    plans,
-                    plan_index,
-                    run_end,
-                    token_indices,
-                    normalization,
-                    matching,
-                    official_alignment_config,
-                )
+                    replacement = AcousticCandidateEvidence(None, original[0].start_ms, original[0].end_ms)
+                    reason = "mapped given name, introduction and official speaker identity establish the same person"
+                elif window is not None and config is not None:
+                    replacement, reason, retiming = self._compare_difference(
+                        asset_id, audio_path, original, tokens, window, context, config,
+                    )
+                if replacement is not None:
+                    if retiming is not None:
+                        self._apply_shared_times(asset_id, words, adjusted, context, retiming, asr)
+                    word = TimedWordDTO(
+                        id=f"w{len(words) + 1}", text=official_surface_text(tokens),
+                        start_ms=replacement.start_ms, end_ms=replacement.end_ms,
+                        asr_word_ids=tuple(item.id for item in original),
+                        official_token_ids=tuple(item.id for item in tokens),
+                        match_type=MatchType.SUBSTITUTION,
+                        text_source=TextSource.OFFICIAL_TRANSCRIPT,
+                        timing_source=TimingSource.ACOUSTIC_ALIGNMENT,
+                    )
+                    words.append(word)
+                    self._emit_mapping(
+                        asset_id, EventCode.FUSION_TEXT_REPLACED, EventSeverity.INFO, word,
+                        source_text=" ".join(item.text for item in original), result_text=word.text,
+                        action="replace_in_fixed_acoustic_window", reason=reason,
+                    )
+                    plan_index = run_end
+                    continue
+            elif tokens:
+                recovered = ()
+                retiming = None
+                if window is not None and config is not None:
+                    recovered, reason, retiming = self._recover_official_only(
+                        asset_id, audio_path, tokens, window, context, normalization, config,
+                    )
+                if retiming is not None:
+                    self._apply_shared_times(asset_id, words, adjusted, context, retiming, asr)
+                token_ids = tuple(token.id for token in tokens)
+                status = LocalValidationStatus.RECOVERED if recovered else LocalValidationStatus.EXCLUDED
+                validations.append(LocalAlignmentValidation(
+                    token_ids, window.left_id if window else None,
+                    window.right_id if window else None, status, reason, recovered,
+                ))
                 for candidate in recovered:
                     token = official[int(candidate.official_token_id[2:]) - 1]
                     word = TimedWordDTO(
-                        id=f"w{len(words) + 1}",
-                        text=token.text,
-                        start_ms=candidate.start_ms,
-                        end_ms=candidate.end_ms,
-                        asr_word_ids=(),
-                        official_token_ids=(token.id,),
+                        id=f"w{len(words) + 1}", text=token.text,
+                        start_ms=candidate.start_ms, end_ms=candidate.end_ms,
+                        asr_word_ids=(), official_token_ids=(token.id,),
                         match_type=MatchType.OFFICIAL_ONLY,
                         text_source=TextSource.OFFICIAL_TRANSCRIPT,
                         timing_source=TimingSource.ACOUSTIC_ALIGNMENT,
                     )
                     words.append(word)
                     self._emit_mapping(
-                        asset_id,
-                        EventCode.FUSION_OFFICIAL_ONLY_RECOVERED,
-                        EventSeverity.WARNING,
-                        word,
-                        source_text=None,
-                        result_text=word.text,
-                        action="recover_official_only_word",
-                        reason=(
-                            "local forced alignment succeeded between reliable anchors"
-                        ),
-                        additional_related_ids={
-                            "left_anchor_id": validation.left_anchor_id or "none",
-                            "right_anchor_id": validation.right_anchor_id or "none",
-                        },
+                        asset_id, EventCode.FUSION_OFFICIAL_ONLY_RECOVERED, EventSeverity.WARNING, word,
+                        source_text=None, result_text=word.text, action="recover_official_only_word",
+                        reason="local alignment gave this word an independent acoustic span",
                     )
-                if exclusion is not None:
-                    exclusions.append(exclusion)
-                    for token_index in token_indices:
-                        token = official[token_index]
-                        self._emit(
-                            asset_id,
-                            EventCode.FUSION_OFFICIAL_ONLY_EXCLUDED,
-                            EventSeverity.WARNING,
-                            action="exclude_unverified_official_word",
-                            reason=exclusion.reason,
-                            related_ids={
-                                "official_word_id": token.id,
-                                "left_anchor_id": exclusion.left_anchor_id or "none",
-                                "right_anchor_id": exclusion.right_anchor_id or "none",
-                            },
-                            source_text=token.text,
-                        )
-                validations.append(validation)
+                if not recovered:
+                    exclusions.append(self._exclude_official(asset_id, tokens, window, reason))
                 plan_index = run_end
                 continue
 
-            word = self._timed_word_from_plan(words, plan, asr, official)
-            words.append(word)
-            self._emit_plan_event(
-                asset_id,
-                word,
-                plan,
-                asr,
-                official,
-                warn_asr_only=warn_asr_only,
-            )
-            plan_index += 1
+            if tokens:
+                exclusions.append(self._exclude_official(asset_id, tokens, window, reason))
+            elif context is not None and config is not None:
+                omitted = self._omit_asr_only(asset_id, audio_path, original, window, context, config)
+                if omitted is not None:
+                    self._apply_shared_times(asset_id, words, adjusted, context, omitted, asr)
+                    excluded_asr.extend(ExcludedAsrWord(
+                        item.id, item.start_ms, item.end_ms,
+                        "complete contextual reading supports omission without losing independent speech",
+                    ) for item in original)
+                    plan_index = run_end
+                    continue
+            for part in run:
+                if part.match_type is not MatchType.ASR_ONLY:
+                    continue
+                word = self._timed_word_from_plan(words, part, asr, official)
+                words.append(word)
+                self._emit_plan_event(asset_id, word, part, asr, official, warn_asr_only=warn_asr_only)
+            plan_index = run_end
 
         previous_end = 0
         for word in words:
-            if word.start_ms < previous_end:
+            if word.start_ms < previous_end or word.end_ms > audio_duration_ms:
                 raise FusionFailure(
-                    "recovered official word overlaps existing spoken timeline",
-                    asr_word_ids=word.asr_word_ids,
-                    official_token_ids=word.official_token_ids,
+                    "recovered official word overlaps existing spoken timeline or exceeds audio",
+                    asr_word_ids=word.asr_word_ids, official_token_ids=word.official_token_ids,
                 )
             previous_end = word.end_ms
-        return _FusionBuild(tuple(words), tuple(exclusions), tuple(validations))
+        return _FusionBuild(tuple(words), tuple(exclusions), tuple(validations), tuple(excluded_asr))
 
-    def _recover_official_only(
-        self,
-        asset_id: AssetId,
-        audio_path: str,
+    @staticmethod
+    def _difference_window(
         asr: tuple[AlignedAsrWord, ...],
         official: tuple[OfficialTranscriptToken, ...],
         plans: tuple[_MappingPlan, ...],
         run_start: int,
         run_end: int,
-        token_indices: tuple[int, ...],
+        asr_indices: tuple[int, ...],
+        official_indices: tuple[int, ...],
+        audio_duration_ms: int,
         normalization: NormalizationPolicy,
         matching: MatchingPolicy,
-        config: OfficialAlignmentConfig | None,
-    ) -> tuple[
-        tuple[OfficialAlignmentCandidate, ...],
-        ExcludedOfficialTokens | None,
-        LocalAlignmentValidation,
-    ]:
-        tokens = tuple(official[index] for index in token_indices)
-        token_ids = tuple(token.id for token in tokens)
-        left_plan = self._nearest_anchor_plan(plans, run_start - 1, step=-1)
-        right_plan = self._nearest_anchor_plan(plans, run_end, step=1)
-        minimum_anchor_score = (
-            float(config.min_anchor_alignment_score)
-            if config is not None
-            else None
-        )
-        left = self._reliable_rightmost_anchor(
-            left_plan, asr, minimum_anchor_score
-        )
-        right = self._reliable_leftmost_anchor(
-            right_plan, asr, minimum_anchor_score
-        )
-        left_boundary = self._nearest_asr_word(
-            plans, asr, run_start - 1, step=-1, take_rightmost=True
-        )
-        right_boundary = self._nearest_asr_word(
-            plans, asr, run_end, step=1, take_rightmost=False
-        )
-        left_id = left.id if left is not None else None
-        right_id = right.id if right is not None else None
-        reason: str | None = None
-        if len(tokens) > matching.max_official_only_words:
-            reason = "official-only run exceeds local acoustic validation limit"
-        elif not _same_official_context(official, token_indices):
-            reason = "official-only run crosses chapter, paragraph, or speaker boundary"
-        elif not self._same_speaker_as_anchors(
-            tokens, left_plan, right_plan, official
+        config: OfficialAlignmentConfig,
+    ) -> _DifferenceWindow | None:
+        if len(asr_indices) > matching.max_group_size or len(official_indices) > matching.max_official_only_words:
+            return None
+        if official_indices and not _same_official_context(official, official_indices):
+            return None
+        before = plans[run_start - 1] if run_start else None
+        after = plans[run_end] if run_end < len(plans) else None
+        left = asr[before.asr_indices[-1]] if before else None
+        right = asr[after.asr_indices[0]] if after else None
+        if not official_indices and (
+            before is None or after is None
+            or not _same_official_context(official, (before.official_indices[-1], after.official_indices[0]))
         ):
-            reason = "official-only run crosses a speaker boundary"
-        elif left is None or right is None:
-            reason = "official-only run lacks reliable acoustic anchors on both sides"
-        elif left.end_ms >= right.start_ms:
-            reason = "official-only anchor window has no available time"
-        elif self.official_aligner is None or config is None:
-            reason = "no local official transcript aligner is configured"
-        if reason is None:
-            try:
-                candidates = self.official_aligner.align_official(
-                    audio_path, tokens, left, right, config
+            return None
+        if any(word is not None and word.timing_source is not AlignmentTimingSource.ACOUSTIC_ALIGNMENT
+               for word in (left, right)):
+            return None
+        start_ms = left.end_ms if left else 0
+        end_ms = right.start_ms if right else audio_duration_ms
+        if not 0 <= end_ms - start_ms <= 5_000:
+            return None
+
+        context = official_indices[0] if official_indices else before.official_indices[-1]
+        evidence: set[int] = set()
+        adjacent_context: list[bool] = []
+        for position, step in ((run_start - 1, -1), (run_end, 1)):
+            adjacent_context.append(
+                0 <= position < len(plans) and _same_official_context(
+                    official, (context, *plans[position].official_indices)
                 )
-                self._validate_local_candidates(
-                    tokens,
-                    candidates,
-                    left_boundary or left,
-                    right_boundary or right,
-                    normalization,
-                    config,
-                )
-            except Exception as error:
-                reason = f"local forced alignment failed: {error}"
-            else:
-                validation = LocalAlignmentValidation(
-                    token_ids,
-                    left_id,
-                    right_id,
-                    LocalValidationStatus.RECOVERED,
-                    "all official-only words passed local acoustic validation",
-                    tuple(candidates),
-                )
-                return tuple(candidates), None, validation
-        exclusion = ExcludedOfficialTokens(token_ids, reason, left_id, right_id)
-        validation = LocalAlignmentValidation(
-            token_ids,
-            left_id,
-            right_id,
-            LocalValidationStatus.EXCLUDED,
-            reason,
+            )
+            for _ in range(matching.max_local_window_words):
+                if not 0 <= position < len(plans):
+                    break
+                plan = plans[position]
+                if plan.official_indices and not _same_official_context(
+                    official, (context, *plan.official_indices)
+                ):
+                    break
+                for index in plan.asr_indices if plan.official_indices else ():
+                    word = asr[index]
+                    if word.timing_source is AlignmentTimingSource.ACOUSTIC_ALIGNMENT and (
+                        word.alignment_score is not None and word.alignment_score >= config.min_anchor_alignment_score
+                    ):
+                        evidence.add(index)
+                position += step
+        if not any(adjacent_context) or len(evidence) < 2:
+            return None
+
+        # Use the position of several ordered matches to disambiguate the local
+        # repeat, independently of whether each acoustic endpoint scores well.
+        ordered = sorted(evidence)
+        first, last = ordered[0], ordered[-1]
+        offsets = tuple(index - first for index in ordered)
+        expected = tuple(normalize_token(asr[index].text, normalization) for index in ordered)
+        starts = range(max(0, first - matching.max_local_window_words), min(
+            first + matching.max_local_window_words + 1, len(asr) - (last - first)
+        ))
+        occurrences = sum(
+            all(normalize_token(asr[candidate + offset].text, normalization) == target
+                for offset, target in zip(offsets, expected, strict=True))
+            for candidate in starts
         )
-        return (), exclusion, validation
+        if occurrences != 1:
+            return None
+        return _DifferenceWindow(
+            start_ms, end_ms, left.id if left else None, right.id if right else None,
+            adjacent_context[0], adjacent_context[1],
+        )
 
     @staticmethod
-    def _nearest_anchor_plan(
-        plans: tuple[_MappingPlan, ...], start: int, *, step: int
-    ) -> _MappingPlan | None:
-        index = start
-        while 0 <= index < len(plans):
-            if plans[index].anchor:
-                return plans[index]
-            index += step
-        return None
-
-    @staticmethod
-    def _nearest_asr_word(
-        plans: tuple[_MappingPlan, ...],
+    def _difference_context(
         asr: tuple[AlignedAsrWord, ...],
-        start: int,
-        *,
-        step: int,
-        take_rightmost: bool,
-    ) -> AlignedAsrWord | None:
-        index = start
-        while 0 <= index < len(plans):
-            asr_indices = plans[index].asr_indices
-            if asr_indices:
-                selected = asr_indices[-1] if take_rightmost else asr_indices[0]
-                return asr[selected]
-            index += step
-        return None
-
-    @staticmethod
-    def _same_speaker_as_anchors(
-        tokens: tuple[OfficialTranscriptToken, ...],
-        left_plan: _MappingPlan | None,
-        right_plan: _MappingPlan | None,
         official: tuple[OfficialTranscriptToken, ...],
-    ) -> bool:
-        if (
-            left_plan is None
-            or right_plan is None
-            or not left_plan.official_indices
-            or not right_plan.official_indices
-        ):
-            return True
-        speakers = {token.speaker_label for token in tokens}
-        speakers.add(official[left_plan.official_indices[-1]].speaker_label)
-        speakers.add(official[right_plan.official_indices[0]].speaker_label)
-        return len(speakers) == 1
+        plans: tuple[_MappingPlan, ...],
+        start: int,
+        end: int,
+        duration_ms: int,
+        adjusted: Mapping[str, AlignedAsrWord],
+        published: Sequence[TimedWordDTO],
+    ) -> _DifferenceContext | None:
+        if start == 0 or end == len(plans):
+            return None
+        left_plan, right_plan = plans[start - 1], plans[end]
+        if not left_plan.official_indices or not right_plan.official_indices:
+            return None
+        context = left_plan.official_indices[-1]
+        if not _same_official_context(official, (context, right_plan.official_indices[0])):
+            return None
 
-    @staticmethod
-    def _reliable_rightmost_anchor(
-        plan: _MappingPlan | None,
-        asr: tuple[AlignedAsrWord, ...],
-        minimum_score: float | None,
-    ) -> AlignedAsrWord | None:
-        if plan is None or not plan.anchor or not plan.asr_indices:
-            return None
-        words = tuple(asr[index] for index in plan.anchor_asr_indices)
-        if any(
-            word.timing_source is not AlignmentTimingSource.ACOUSTIC_ALIGNMENT
-            for word in words
-        ):
-            return None
-        if minimum_score is not None and any(
-            word.alignment_score is None
-            or float(word.alignment_score) < minimum_score
-            for word in words
-        ):
-            return None
-        return asr[plan.asr_indices[-1]]
+        def shared(position: int, step: int, limit: int) -> list[AlignedAsrWord]:
+            result = []
+            for _ in range(limit + 2):
+                if not 0 <= position < len(plans) or len(result) == limit:
+                    break
+                plan = plans[position]
+                position += step
+                if step < 0 and plan.match_type is MatchType.OFFICIAL_ONLY:
+                    continue
+                if (
+                    plan.match_type not in {MatchType.EXACT, MatchType.NORMALIZED_EXACT}
+                    or not _same_official_context(official, (context, *plan.official_indices))
+                ):
+                    break
+                word = asr[plan.asr_indices[0]]
+                if (
+                    word.id in adjusted
+                    or word.timing_source is not AlignmentTimingSource.ACOUSTIC_ALIGNMENT
+                    or len(fusion_candidate_text(word.text).split()) != 1
+                ):
+                    break
+                if step < 0 and (
+                    len(result) >= len(published)
+                    or published[-1 - len(result)].asr_word_ids != (word.id,)
+                ):
+                    break
+                result.append(word)
+            return result
 
-    @staticmethod
-    def _reliable_leftmost_anchor(
-        plan: _MappingPlan | None,
-        asr: tuple[AlignedAsrWord, ...],
-        minimum_score: float | None,
-    ) -> AlignedAsrWord | None:
-        if plan is None or not plan.anchor or not plan.asr_indices:
-            return None
-        words = tuple(asr[index] for index in plan.anchor_asr_indices)
-        if any(
-            word.timing_source is not AlignmentTimingSource.ACOUSTIC_ALIGNMENT
-            for word in words
+        left = shared(start - 1, -1, 5)
+        right = shared(end, 1, 4)
+        if len(right) == 1 and end + 2 < len(plans) and (
+            right[0].end_ms - right[0].start_ms > 1_000
+            and plans[end + 1].match_type is MatchType.OFFICIAL_ONLY
+            and plans[end + 2].match_type is MatchType.OFFICIAL_ONLY
         ):
+            # Reserve the unreliable shared cut for the larger adjacent gap.
             return None
-        if minimum_score is not None and any(
-            word.alignment_score is None
-            or float(word.alignment_score) < minimum_score
-            for word in words
-        ):
-            return None
-        return asr[plan.asr_indices[0]]
+        while left and right:
+            first_index = int(left[-1].id[2:]) - 1
+            last_index = int(right[-1].id[2:]) - 1
+            floor = published[-len(left) - 1].end_ms if len(published) > len(left) else 0
+            first = max(floor, asr[first_index - 1].end_ms if first_index else 0)
+            last = asr[last_index + 1].start_ms if last_index + 1 < len(asr) else duration_ms
+            if 0 < last - first <= 5_000:
+                return _DifferenceContext(tuple(reversed(left)), tuple(right), first, last)
+            if len(left) > 1 and (len(right) <= 2 or len(left) > 2 and (
+                left[0].end_ms - first >= last - right[0].start_ms
+            )):
+                left.pop()
+            elif len(right) > 1:
+                right.pop()
+            else:
+                return None
+        return None
 
-    @staticmethod
-    def _validate_local_candidates(
+    def _compare_context(
+        self,
+        asset_id: AssetId,
+        audio_path: str,
+        words: tuple[AlignedAsrWord, ...],
         tokens: tuple[OfficialTranscriptToken, ...],
-        candidates: Sequence[OfficialAlignmentCandidate],
-        left: AlignedAsrWord,
-        right: AlignedAsrWord,
+        window: _DifferenceWindow,
+        context: _DifferenceContext,
+        pairs: tuple[tuple[str, str], ...],
+        config: OfficialAlignmentConfig,
+    ) -> ContextualComparison | None:
+        left, right = context.left, context.right
+        bounds = (left, right, context.start_ms, context.end_ms)
+        if not words and len(tokens) == 1:
+            trials = ((left, right, left[0].start_ms, right[-1].end_ms), bounds)
+        elif not words:
+            compact_left, compact_right = left[-2:], right[:2]
+            trials = ((compact_left, compact_right, compact_left[0].start_ms, compact_right[-1].end_ms), bounds)
+        elif not tokens:
+            compact_left, compact_right = left[-3:], right[:2]
+            trials = ((compact_left, compact_right, compact_left[0].start_ms, compact_right[-1].end_ms), bounds)
+        else:
+            trials = (bounds,)
+        result = None
+        for trial_left, trial_right, first, last in dict.fromkeys(trials):
+            scored = contextual_comparison(
+                self.official_aligner, audio_path, trial_left, trial_right, pairs, first, last, config,
+            )
+            if scored is not None:
+                result = replace(scored, shared=(
+                    *left[:-len(trial_left)], *scored.shared, *right[len(trial_right):],
+                ))
+                break
+        self._emit(
+            asset_id, EventCode.FUSION_ACOUSTIC_COMPARISON, EventSeverity.INFO,
+            action="compare_complete_context", reason=(
+                "bounded complete readings agree on contextual word ownership" if result else
+                "no independently anchored common cuts from complete contextual readings"
+            ),
+            related_ids=self._difference_ids(words, tokens, window),
+            source_text=result.readings[0] or None if result else pairs[0][0] or None,
+            result_text=result.readings[1] or None if result else pairs[0][1] or None,
+            start_ms=result.outer_start_ms if result else context.start_ms,
+            end_ms=result.outer_end_ms if result else context.end_ms,
+            details={
+                "original_start_ms": window.start_ms, "original_end_ms": window.end_ms,
+                "common_start_ms": result.start_ms if result else None,
+                "common_end_ms": result.end_ms if result else None,
+                "asr_context_log_likelihood": result.asr_context.ctc_log_likelihood if result else None,
+                "official_context_log_likelihood": result.official_context.ctc_log_likelihood if result else None,
+            },
+        )
+        return result
+
+    def _apply_shared_times(
+        self,
+        asset_id: AssetId,
+        published: list[TimedWordDTO],
+        adjusted: dict[str, AlignedAsrWord],
+        context: _DifferenceContext,
+        result: ContextualComparison,
+        asr: tuple[AlignedAsrWord, ...],
+    ) -> None:
+        original_context = (*context.left, *context.right)
+        if tuple(item.id for item in result.shared) != tuple(item.id for item in original_context):
+            raise FusionFailure("local retiming changed shared word identity")
+        previous = context.start_ms
+        for position, shared in enumerate(result.shared):
+            if position == len(context.left):
+                previous = max(previous, result.end_ms)
+            if not previous <= shared.start_ms < shared.end_ms <= context.end_ms:
+                raise FusionFailure("local retiming overlaps or exceeds shared context")
+            if position < len(context.left) and shared.end_ms > result.start_ms:
+                raise FusionFailure("local retiming enters the fixed difference window")
+            previous = shared.end_ms
+        for position, shared in enumerate(result.shared):
+            prior = asr[int(shared.id[2:]) - 1]
+            if (shared.start_ms, shared.end_ms) == (prior.start_ms, prior.end_ms):
+                continue
+            adjusted[shared.id] = shared
+            if position < len(context.left):
+                index = len(published) - len(context.left) + position
+                published[index] = replace(published[index], start_ms=shared.start_ms, end_ms=shared.end_ms)
+            self._emit(
+                asset_id, EventCode.FUSION_ACOUSTIC_COMPARISON, EventSeverity.INFO,
+                action="retime_shared_word", reason="shared word independently supported by the bounded context",
+                related_ids={"asr_word_id": shared.id}, source_text=shared.text,
+                start_ms=shared.start_ms, end_ms=shared.end_ms,
+                details={"original_start_ms": prior.start_ms, "original_end_ms": prior.end_ms,
+                         "common_start_ms": result.start_ms, "common_end_ms": result.end_ms},
+            )
+
+    def _recover_official_only(
+        self,
+        asset_id: AssetId,
+        audio_path: str,
+        tokens: tuple[OfficialTranscriptToken, ...],
+        window: _DifferenceWindow,
+        context: _DifferenceContext | None,
         normalization: NormalizationPolicy,
         config: OfficialAlignmentConfig,
-    ) -> None:
-        supplied = tuple(candidates)
-        if len(supplied) != len(tokens):
-            raise ValueError("local alignment did not preserve official word coverage")
-        previous_end = left.end_ms
-        for token, candidate in zip(tokens, supplied):
-            if (
-                candidate.official_token_id != token.id
-                or normalize_token(candidate.text, normalization) != token.normalized
-            ):
-                raise ValueError(
-                    "local alignment changed official word identity or text"
+    ) -> tuple[tuple[OfficialAlignmentCandidate, ...], str, ContextualComparison | None]:
+        candidates = ()
+        try:
+            if window.start_ms < window.end_ms:
+                candidates = self.official_aligner.align_official_window(
+                    audio_path, tokens, window.start_ms, window.end_ms, config,
                 )
-            if (
-                candidate.start_ms < previous_end
-                or candidate.end_ms > right.start_ms
-            ):
-                raise ValueError("local alignment is outside anchors or overlaps")
-            if float(candidate.alignment_score) < float(config.min_alignment_score):
-                raise ValueError("local alignment score is below configured minimum")
+        except (RuntimeError, ValueError) as error:
+            reason = f"local forced alignment failed: {error}"
+        else:
+            reason = "local model did not produce evidence for the whole official fragment"
+
+        valid = len(candidates) == len(tokens)
+        previous_end = window.start_ms
+        for token, candidate in zip(tokens, candidates):
+            accepted = (
+                candidate.official_token_id == token.id
+                and normalize_token(candidate.text, normalization) == token.normalized
+                and previous_end <= candidate.start_ms < candidate.end_ms <= window.end_ms
+                and candidate.alignment_score >= config.min_alignment_score
+            )
+            if not accepted:
+                if not previous_end <= candidate.start_ms < candidate.end_ms <= window.end_ms:
+                    reason = "local alignment is outside anchors or overlaps"
+                elif candidate.alignment_score < config.min_alignment_score:
+                    reason = "local alignment score is below configured minimum"
+                else:
+                    reason = "local alignment changed official word identity or text"
+            valid = valid and accepted
             previous_end = candidate.end_ms
+            self._emit(
+                asset_id, EventCode.FUSION_ACOUSTIC_COMPARISON, EventSeverity.INFO,
+                action="validate_official_only_word", reason=(
+                    "local word passed score and time checks" if accepted else reason
+                ),
+                related_ids={"official_word_id": token.id}, source_text=token.text,
+                start_ms=candidate.start_ms, end_ms=candidate.end_ms,
+                details={"word_score": candidate.alignment_score,
+                         "window_start_ms": window.start_ms, "window_end_ms": window.end_ms},
+            )
+        if valid:
+            return tuple(candidates), "all words passed independent score and timing checks", None
+        if context is None:
+            return (), reason, None
+
+        readings = tuple(fusion_candidate_text(token.text) for token in tokens)
+        result = self._compare_context(asset_id, audio_path, (), tokens, window, context,
+                                       (("", " ".join(readings)),), config)
+        if result is None:
+            return (), reason, None
+        with_fragment = result.official_context.ctc_log_likelihood
+        without_fragment = result.asr_context.ctc_log_likelihood
+        if with_fragment is None or without_fragment is None:
+            return (), "missing comparable likelihoods for the complete official fragment", None
+        offset = 0
+        projected = []
+        previous_end = result.start_ms
+        for token, reading in zip(tokens, readings, strict=True):
+            count = len(reading.split())
+            evidence = result.official_context_difference[offset:offset + count]
+            score_floor = config.min_alignment_score if len(tokens) == 1 else 0.08
+            if (
+                not evidence or len(evidence) != count
+                or not previous_end <= evidence[0].start_ms < evidence[-1].end_ms <= result.end_ms
+                or min(word.score for word in evidence) < score_floor
+            ):
+                return (), reason, None
+            projected.append(OfficialAlignmentCandidate(
+                token.id, token.text, evidence[0].start_ms, evidence[-1].end_ms,
+                min(word.score for word in evidence),
+            ))
+            previous_end = evidence[-1].end_ms
+            offset += count
+        margin = with_fragment - without_fragment
+        if margin < 0 and (len(tokens) > 1 or margin < -0.5) or (
+            margin < 4.0 and any(item.alignment_score < config.min_alignment_score for item in projected)
+        ):
+            return (), "complete contextual comparison did not support the whole official fragment", None
+        return tuple(projected), "complete official fragment is independently supported in shared context", result
+
+    def _exclude_official(
+        self,
+        asset_id: AssetId,
+        tokens: tuple[OfficialTranscriptToken, ...],
+        window: _DifferenceWindow | None,
+        reason: str,
+    ) -> ExcludedOfficialTokens:
+        left_id = window.left_id if window else None
+        right_id = window.right_id if window else None
+        for token in tokens:
+            self._emit(
+                asset_id, EventCode.FUSION_OFFICIAL_ONLY_EXCLUDED, EventSeverity.WARNING,
+                action="exclude_unverified_official_word", reason=reason,
+                related_ids={"official_word_id": token.id, "left_anchor_id": left_id or "none",
+                             "right_anchor_id": right_id or "none"},
+                source_text=token.text,
+            )
+        return ExcludedOfficialTokens(tuple(token.id for token in tokens), reason, left_id, right_id)
+
+    def _compare_difference(
+        self,
+        asset_id: AssetId,
+        audio_path: str,
+        words: tuple[AlignedAsrWord, ...],
+        tokens: tuple[OfficialTranscriptToken, ...],
+        window: _DifferenceWindow,
+        context: _DifferenceContext | None,
+        config: OfficialAlignmentConfig,
+    ) -> tuple[AcousticCandidateEvidence | None, str, ContextualComparison | None]:
+        asr_text = " ".join(word.text for word in words)
+        official_text = official_surface_text(tokens)
+        shared_currency = set(asr_text) & set(official_text) & {"$", "£", "€"}
+        original = fusion_candidate_readings(asr_text, implicit_currency=bool(shared_currency))
+        incoming = fusion_candidate_readings(official_text, implicit_currency=bool(shared_currency))
+        pairs = tuple(product(original, incoming))
+        quantity = any(is_explicit_fusion_quantity(text) for text in (asr_text, official_text))
+        results = self._score_windows(asset_id, audio_path, words, tokens, pairs, window, config)
+        if results and self._asr_refutes_official(results, window, quantity):
+            return None, "stable same-window likelihood and distinct ASR words refute the official reading", None
+        if results and self._publication_evidence(results[0].official, window, results[0].readings, quantity):
+            return results[0].official, "located official reading has valid time and lacks strong ASR refutation", None
+
+        if context is not None and (quantity or (results and results[0].official.start_ms is not None)):
+            result = self._compare_context(asset_id, audio_path, words, tokens, window, context, pairs, config)
+            if result is not None:
+                revised = replace(window, start_ms=result.start_ms, end_ms=result.end_ms,
+                                  can_extend_left=False, can_extend_right=False)
+                checks = self._score_windows(
+                    asset_id, audio_path, words, tokens, (result.readings,), revised, config,
+                )
+                if checks and self._asr_refutes_official(checks, revised, quantity):
+                    return None, "stable likelihood and independent ASR evidence refute the official reading after retiming", None
+                if self._publication_evidence(result.official, revised, result.readings, quantity):
+                    reason = "official reading is supported between jointly verified shared word cuts"
+                    if quantity and any(item.score < 0.20 for item in result.official.word_evidence):
+                        reason += "; the weakest amount components leave precision ambiguity"
+                    return result.official, reason, result
+        return None, "official reading selected by default but reliable independent timing is unavailable", None
+
+    @staticmethod
+    def _publication_evidence(
+        reading: AcousticCandidateEvidence, window: _DifferenceWindow, readings: tuple[str, str], quantity: bool,
+    ) -> bool:
+        if not (
+            reading.ctc_log_likelihood is not None
+            and reading.start_ms is not None and reading.end_ms is not None
+            and window.start_ms <= reading.start_ms < reading.end_ms <= window.end_ms
+            and reading.mean_character_score >= 0.15 and reading.energy_coverage >= 0.25
+        ):
+            return False
+        if not quantity:
+            return True
+        indices = TranscriptFusionService._different_word_indices(readings[0], readings[1])
+        evidence = reading.word_evidence
+        if len(evidence) != len(readings[1].split()):
+            return False
+        magnitudes = [index for index in indices if evidence[index].text in {
+            "thousand", "million", "billion", "trillion",
+        }]
+        if magnitudes:
+            return max(evidence[index].score for index in magnitudes) >= 0.30
+        return bool(indices) and all(evidence[index].score >= 0.30 for index in indices)
+
+    @staticmethod
+    def _different_word_indices(other: str, selected: str) -> tuple[int, ...]:
+        return tuple(index for kind, _, _, start, end in SequenceMatcher(
+            None, other.casefold().split(), selected.casefold().split(), autojunk=False,
+        ).get_opcodes() if kind != "equal" for index in range(start, end))
+
+    @staticmethod
+    def _asr_refutes_official(
+        results: tuple[_ScoredDifference, ...], window: _DifferenceWindow, quantity: bool,
+    ) -> bool:
+        asr = results[0].asr
+        readings = results[0].readings
+        selected = TranscriptFusionService._different_word_indices(readings[1], readings[0])
+        evidence = asr.word_evidence
+        floor = 3.0 if quantity else 1.5
+        return (
+            bool(selected) and len(evidence) == len(readings[0].split())
+            and TranscriptFusionService._publication_evidence(asr, window, readings[::-1], quantity)
+            and all(evidence[index].score >= 0.28 for index in selected)
+            and asr.energy_coverage + 0.10 >= results[0].official.energy_coverage
+            and all(item.asr.ctc_log_likelihood is not None and item.official.ctc_log_likelihood is not None
+                    and item.asr.ctc_log_likelihood - item.official.ctc_log_likelihood >= floor for item in results)
+        )
+
+    def _omit_asr_only(
+        self,
+        asset_id: AssetId,
+        audio_path: str,
+        words: tuple[AlignedAsrWord, ...],
+        window: _DifferenceWindow,
+        context: _DifferenceContext,
+        config: OfficialAlignmentConfig,
+    ) -> ContextualComparison | None:
+        retained = " ".join(fusion_candidate_text(word.text) for word in words)
+        result = self._compare_context(asset_id, audio_path, words, (), window, context, ((retained, ""),), config)
+        if result is None:
+            return None
+        with_extra = result.asr_context.ctc_log_likelihood
+        without_extra = result.official_context.ctc_log_likelihood
+        evidence = result.asr_context_difference
+        omit = (
+            with_extra is not None and without_extra is not None
+            and without_extra - with_extra >= 6.0
+            and not result.context_refined_for_official
+            and result.asr.ctc_log_likelihood is not None and result.official.ctc_log_likelihood is not None
+            and result.official.ctc_log_likelihood - result.asr.ctc_log_likelihood >= 4.0
+            and bool(evidence) and all(word.score < 0.12 for word in evidence)
+            and result.official_context.mean_character_score >= 0.45
+        )
+        reason = (
+            "complete context supports omission and extra words lack independent speech evidence" if omit
+            else "complete context does not justify removing the timed ASR words"
+        )
+        self._emit(
+            asset_id, EventCode.FUSION_ASR_ONLY_EXCLUDED if omit else EventCode.FUSION_ACOUSTIC_COMPARISON,
+            EventSeverity.INFO, action="omit_asr_only_words" if omit else "retain_weak_asr_words",
+            reason=reason, related_ids=self._difference_ids(words, (), window), source_text=retained,
+            start_ms=context.start_ms, end_ms=context.end_ms,
+        )
+        return result if omit else None
+
+    @staticmethod
+    def _difference_ids(
+        words: tuple[AlignedAsrWord, ...], tokens: tuple[OfficialTranscriptToken, ...], window: _DifferenceWindow,
+    ) -> dict[str, str]:
+        return {"asr_word_ids": ",".join(word.id for word in words) or "none",
+                "official_word_ids": ",".join(token.id for token in tokens) or "none",
+                "left_anchor_id": window.left_id or "none", "right_anchor_id": window.right_id or "none"}
+
+    def _score_windows(
+        self,
+        asset_id: AssetId,
+        audio_path: str,
+        words: tuple[AlignedAsrWord, ...],
+        tokens: tuple[OfficialTranscriptToken, ...],
+        pairs: tuple[tuple[str, str], ...],
+        window: _DifferenceWindow,
+        config: OfficialAlignmentConfig,
+    ) -> tuple[_ScoredDifference, ...]:
+        start, end = window.start_ms, window.end_ms
+        if start >= end:
+            return ()
+        windows = [(start, end)]
+        if end - start > 120:
+            windows.extend(((start + 40, end), (start, end - 40)))
+            if window.can_extend_left and start >= 40:
+                windows.append((start - 40, end))
+            if window.can_extend_right:
+                windows.append((start, end + 40))
+        originals = tuple(dict.fromkeys(left for left, _ in pairs))
+        candidates = tuple(dict.fromkeys(right for _, right in pairs))
+        readings = (*originals, *candidates)
+        ids = self._difference_ids(words, tokens, window)
+        results = []
+
+        def strongest(texts, evidence):
+            return max(zip(texts, evidence, strict=True), key=lambda item: (
+                item[1].ctc_log_likelihood if item[1].ctc_log_likelihood is not None else float("-inf")
+            ))
+
+        for first, last in windows:
+            try:
+                evidence = self.official_aligner.score_candidates(audio_path, first, last, readings, config)
+                asr_text, baseline = strongest(originals, evidence[:len(originals)])
+                official_text, official = strongest(candidates, evidence[len(originals):])
+            except (RuntimeError, ValueError) as error:
+                self._emit(
+                    asset_id, EventCode.FUSION_ACOUSTIC_COMPARISON, EventSeverity.INFO,
+                    action="score_fixed_window", reason=str(error), related_ids=ids,
+                    start_ms=first, end_ms=last, source_text=readings[0] or None, result_text=readings[-1] or None,
+                )
+                return ()
+            results.append(_ScoredDifference(baseline, official, (asr_text, official_text)))
+            for action, text, evidence in (
+                ("score_asr_reading", asr_text, baseline), ("score_official_reading", official_text, official),
+            ):
+                self._emit(
+                    asset_id, EventCode.FUSION_ACOUSTIC_COMPARISON, EventSeverity.INFO,
+                    action=action, reason="CTC likelihood and local path evidence", related_ids=ids,
+                    start_ms=first, end_ms=last, source_text=text or None,
+                    details={
+                        "ctc_log_likelihood": evidence.ctc_log_likelihood,
+                        "candidate_start_ms": evidence.start_ms, "candidate_end_ms": evidence.end_ms,
+                        "candidate_mean_character_score": evidence.mean_character_score,
+                        "candidate_weakest_two_mean": evidence.weakest_two_mean,
+                        "candidate_energy_coverage": evidence.energy_coverage,
+                        "candidate_longest_weak_character_run": evidence.longest_weak_character_run,
+                        "candidate_word_scores": "; ".join(
+                            f"{word.text} {word.start_ms}-{word.end_ms} {word.score:.3f}" for word in evidence.word_evidence
+                        ),
+                    },
+                )
+        return tuple(results)
 
     @staticmethod
     def _timed_word_from_plan(
@@ -1057,18 +1768,15 @@ class TranscriptFusionService:
     ) -> TimedWordDTO:
         asr_words = tuple(asr[index] for index in plan.asr_indices)
         official_words = tuple(official[index] for index in plan.official_indices)
-        if plan.match_type is MatchType.ONE_TO_MANY:
-            text = asr_words[0].text
-            text_source = TextSource.ASR
-        elif plan.match_type is MatchType.ASR_ONLY:
+        if plan.match_type is MatchType.ASR_ONLY:
             text = asr_words[0].text
             text_source = TextSource.ASR
         else:
-            text = official_words[0].text
+            text = plan.money_text or official_surface_text(official_words)
             text_source = TextSource.OFFICIAL_TRANSCRIPT
         timing_source = (
             TimingSource.MERGED_ACOUSTIC_ALIGNMENT
-            if plan.match_type is MatchType.MANY_TO_ONE
+            if plan.match_type in {MatchType.MANY_TO_ONE, MatchType.MANY_TO_MANY}
             else aligned_timing_source(asr_words[0].timing_source)
         )
         return TimedWordDTO(
@@ -1126,6 +1834,12 @@ class TranscriptFusionService:
                 "merge_asr_words",
                 "normalized lexical units prove many-to-one equivalence",
             ),
+            MatchType.MANY_TO_MANY: (
+                EventCode.FUSION_MANY_TO_MANY_COLLAPSED,
+                EventSeverity.INFO,
+                "merge_equivalent_money_spans",
+                "complete amounts share the same value and currency",
+            ),
             MatchType.ASR_ONLY: (
                 EventCode.FUSION_ASR_ONLY_RETAINED,
                 EventSeverity.WARNING if warn_asr_only else EventSeverity.DEBUG,
@@ -1172,6 +1886,10 @@ class TranscriptFusionService:
             ),
             MatchType.MANY_TO_ONE: (
                 EventCode.FUSION_MANY_TO_ONE_COLLAPSED,
+                EventSeverity.INFO,
+            ),
+            MatchType.MANY_TO_MANY: (
+                EventCode.FUSION_MANY_TO_MANY_COLLAPSED,
                 EventSeverity.INFO,
             ),
             MatchType.ASR_ONLY: (
@@ -1341,6 +2059,7 @@ class TranscriptFusionService:
         cache_key: str,
         aligned_sha256: str,
         chapters_sha256: str,
+        aligned_words: tuple[AlignedAsrWord, ...],
     ) -> TranscriptFusionArtifact | None:
         record = manifest.records.get("transcript_fusion")
         if record is None:
@@ -1358,6 +2077,7 @@ class TranscriptFusionService:
             artifact = TranscriptFusionArtifact.from_dict(
                 self.artifacts.read_json(path)
             )
+            artifact.validate_asr_coverage(aligned_words)
         except Exception:
             return None
         if (
@@ -1392,16 +2112,10 @@ class TranscriptFusionService:
                 action=action,
                 reason=reason,
                 related_ids=related_ids or {},
-                source_text=_event_excerpt(source_text),
-                result_text=_event_excerpt(result_text),
+                source_text=source_text,
+                result_text=result_text,
                 start_ms=start_ms,
                 end_ms=end_ms,
                 details=details or {},
             )
         )
-
-
-def _event_excerpt(value: str | None) -> str | None:
-    if value is None or len(value) <= 500:
-        return value
-    return f"{value[:497]}..."

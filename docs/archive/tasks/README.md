@@ -14,6 +14,9 @@
 - [NB-10反馈诊断/术语](NB-10-cue-feedback-diagnosis.md)：诊断交付完成，不表示全部反馈或P1～P4已实现。
 - [NB-12 切分、回归与诊断样片](NB-12-chunking-quality-iteration.md)：实现、样片技术交付及复用验收已收尾；整体语义/出版质量未通过，未核听。待复审项见 [PROGRESS.md](../../../PROGRESS.md)。
 - [NB-13 全帧 PTS 扫描超时修复](NB-13-pipeline-timeouts.md)：离线替身验证慢扫描与下载复用。
+- [NB-14 CNBC 2020 融合与句界恢复](NB-14-cnbc-fusion-sentence-replay.md)：两场技术验收、真实重跑及前后对照。
+- [NB-15 CNBC 带词时间的逐字稿融合](NB-15-cnbc-timed-transcript-fusion.md) 记录单一正文、声学来源与两场回归。
+- [NB-16 CNBC 官网优先融合裁决与回放](NB-16-cnbc-fusion-official-priority.md) 记录 v7 验收、完整金额修正和提交前回归。
 
 ## 渲染任务入口
 

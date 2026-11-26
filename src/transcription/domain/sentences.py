@@ -7,11 +7,12 @@ import re
 from typing import Any, Mapping, Sequence
 
 
-SENTENCE_BOUNDARY_POLICY_VERSION = "sentence-boundary.v1"
+SENTENCE_BOUNDARY_POLICY_VERSION = "sentence-boundary.v2"
 
 _OPENING_PUNCTUATION = "\"'\u201c\u2018([{"
 _CLOSING_PUNCTUATION = "\"'\u201d\u2019)]}"
 _INITIAL_RE = re.compile(r"^[A-Za-z]\.$")
+_DOMAIN_SUFFIXES = frozenset({"com", "edu", "gov", "int", "mil", "net", "org"})
 _CONTEXTUAL_ABBREVIATIONS = frozenset({"etc."})
 _DEFAULT_ABBREVIATIONS = (
     "co.",
@@ -122,7 +123,7 @@ def is_sentence_terminal(
     index: int,
     policy: SentenceBoundaryPolicy,
 ) -> bool:
-    """Apply abbreviation and name-initial exceptions to terminal punctuation."""
+    """Apply punctuation exceptions for continuations and lexical periods."""
 
     if not words:
         raise ValueError("words must not be empty")
@@ -131,15 +132,19 @@ def is_sentence_terminal(
     text = _lexical_surface(words[index])
     if text.endswith(("?", "!")):
         return True
-    if not text.endswith("."):
+    if not text.endswith(".") or text.endswith("..."):
         return False
     lowered = text.lower()
     if lowered in policy.abbreviations:
         if lowered in _CONTEXTUAL_ABBREVIATIONS:
             return index + 1 == len(words) or _starts_with_uppercase(words[index + 1])
         return False
-    if _INITIAL_RE.fullmatch(text) is not None and index + 1 < len(words):
-        return False
+    if index + 1 < len(words):
+        if _INITIAL_RE.fullmatch(text) is not None:
+            return False
+        next_surface = _lexical_surface(words[index + 1]).rstrip(".,;:?!")
+        if next_surface in _DOMAIN_SUFFIXES and text[:-1].replace("-", "").isalnum():
+            return False
     return True
 
 

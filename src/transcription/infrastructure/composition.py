@@ -62,7 +62,7 @@ DEFAULT_TRANSCRIPTION_RUNTIME = {
         "version": "interpolation.v1",
     },
     "matching_anchor_ngram_size": 3,
-    "official_min_alignment_score": 0.5,
+    "official_min_alignment_score": 0.2,
     "official_min_anchor_alignment_score": 0.5,
     "vad_merge_gap_ms": 500,
     "vad_model": "pyannote/segmentation",
@@ -108,7 +108,7 @@ def _workflow_config(runtime: Mapping[str, Any]) -> TranscriptionWorkflowConfig:
         alignment=alignment,
         normalization=NormalizationPolicy(),
         matching=MatchingPolicy(
-            anchor_ngram_size=runtime.get("matching_anchor_ngram_size", 2)
+            anchor_ngram_size=runtime.get("matching_anchor_ngram_size", 2),
         ),
         official_alignment=OfficialAlignmentConfig.from_dict(
             {
@@ -203,7 +203,10 @@ class LocalTranscriptionHandler:
             transcript_fusion=TranscriptFusionService(
                 official_aligner=_Observed(WhisperXOfficialTranscriptAligner(
                     whisperx_version=packages["whisperx"]
-                ), counts, {"align": "official_alignment_calls"}),
+                ), counts, {
+                    "align_official_window": "official_alignment_calls",
+                    "score_candidates": "official_alignment_calls",
+                }),
                 **common,
             ),
             sentence_boundaries=SentenceBoundaryService(

@@ -240,7 +240,7 @@ def load_render_inputs(*, asset_id: str, srt_processing_manifest_path: str,
             "vad": ("transcription.vad.v1", ("schema_version", "audio_sha256", "audio_duration_ms", "provider", "config", "regions", "chunks", "cache_key")),
             "raw_asr": ("transcription.raw-asr.v1", ("schema_version", "audio_sha256", "audio_duration_ms", "vad_cache_key", "language", "task", "profile", "provider", "config", "segments", "cache_key")),
             "aligned_asr": ("transcription.aligned-asr.v1", ("schema_version", "language", "audio_sha256", "raw_asr_sha256", "audio_duration_ms", "provider", "config", "words", "cache_key")),
-            "transcript_fusion": ("transcription.transcript-fusion.v1", ("schema_version", "audio_duration_ms", "aligned_asr_sha256", "chapters_sha256", "mode", "normalization", "matching", "official_aligner", "official_alignment_config", "official_tokens", "ignored_content", "words", "excluded_official", "local_validations", "cache_key")),
+            "transcript_fusion": ("transcription.transcript-fusion.v3", ("schema_version", "audio_duration_ms", "aligned_asr_sha256", "chapters_sha256", "mode", "normalization", "matching", "official_aligner", "official_alignment_config", "official_tokens", "ignored_content", "words", "excluded_official", "local_validations", "official_sentence_spans", "excluded_asr", "cache_key")),
         }
         if not has_fusion:
             envelopes.pop("transcript_fusion")
@@ -259,7 +259,9 @@ def load_render_inputs(*, asset_id: str, srt_processing_manifest_path: str,
         source_provenance = records["source_alignment"]["provenance"]
         if has_fusion:
             fusion = cached["transcript_fusion"]
-            if (fusion["aligned_asr_sha256"] != records["aligned_asr"]["sha256"]
+            if (not isinstance(fusion["official_sentence_spans"], list)
+                    or not isinstance(fusion["excluded_asr"], list)
+                    or fusion["aligned_asr_sha256"] != records["aligned_asr"]["sha256"]
                     or records["transcript_fusion"]["provenance"].get("aligned_asr_sha256") != fusion["aligned_asr_sha256"]
                     or source_provenance.get("sentence_input_sha256") != records["transcript_fusion"]["sha256"]
                     or fusion["chapters_sha256"] != chapters_sha

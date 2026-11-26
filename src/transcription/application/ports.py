@@ -21,6 +21,7 @@ from transcription.domain import (
     VadConfig,
     VadRegion,
 )
+from transcription.domain.fusion_acoustics import AcousticCandidateEvidence
 
 
 class AudioExtractionConfigLike(Protocol):
@@ -99,6 +100,26 @@ class OfficialTranscriptAligner(Protocol):
         config: OfficialAlignmentConfig,
     ) -> tuple[OfficialAlignmentCandidate, ...]:
         """Acoustically validate official-only tokens inside two anchors."""
+
+    def align_official_window(
+        self,
+        audio_path: str,
+        tokens: tuple[OfficialTranscriptToken, ...],
+        start_ms: int,
+        end_ms: int,
+        config: OfficialAlignmentConfig,
+    ) -> tuple[OfficialAlignmentCandidate, ...]:
+        """Find times for official words within fixed source-audio bounds."""
+
+    def score_candidates(
+        self,
+        audio_path: str,
+        start_ms: int,
+        end_ms: int,
+        readings: tuple[str, ...],
+        config: OfficialAlignmentConfig,
+    ) -> tuple[AcousticCandidateEvidence, ...]:
+        """Score candidate readings in order on the same acoustic emissions."""
 
 
 class SentenceBoundaryDetector(Protocol):

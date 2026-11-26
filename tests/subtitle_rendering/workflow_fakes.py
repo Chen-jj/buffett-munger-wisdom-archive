@@ -199,9 +199,9 @@ class WorkflowCase:
                 payload = {**common, "schema_version": "transcription.aligned-asr.v1", "audio_sha256": audio_sha, "raw_asr_sha256": records["raw_asr"]["sha256"],
                            "language": "en", "provider": providers, "config": config, "words": acoustic_alignment_rows(alignment())}
             else:
-                payload = {**common, "schema_version": "transcription.transcript-fusion.v1", "aligned_asr_sha256": records["aligned_asr"]["sha256"],
+                payload = {**common, "schema_version": "transcription.transcript-fusion.v3", "aligned_asr_sha256": records["aligned_asr"]["sha256"],
                            "chapters_sha256": chapter_sha, "mode": "official", "normalization": {}, "matching": {}, "official_aligner": {},
-                           "official_alignment_config": {}, "official_tokens": [], "ignored_content": [], "words": [], "excluded_official": [], "local_validations": []}
+                           "official_alignment_config": {}, "official_tokens": [], "ignored_content": [], "words": [], "excluded_official": [], "local_validations": [], "official_sentence_spans": [], "excluded_asr": []}
             self.put(name + ".json", payload)
             records[name] = {**self.evidence(name + ".json"), "path": self.path(name + ".json"), "cache_key": common["cache_key"], "status": "succeeded",
                              "provenance": {"provider": providers, "config": config} if name != "transcript_fusion" else {"aligned_asr_sha256": records["aligned_asr"]["sha256"], "chapters_sha256": chapter_sha}}

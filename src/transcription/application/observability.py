@@ -72,7 +72,10 @@ class EventCode(str, Enum):
     FUSION_TEXT_REPLACED = "fusion.text_replaced"
     FUSION_ONE_TO_MANY_COLLAPSED = "fusion.one_to_many_collapsed"
     FUSION_MANY_TO_ONE_COLLAPSED = "fusion.many_to_one_collapsed"
+    FUSION_MANY_TO_MANY_COLLAPSED = "fusion.many_to_many_collapsed"
     FUSION_ASR_ONLY_RETAINED = "fusion.asr_only_retained"
+    FUSION_ASR_ONLY_EXCLUDED = "fusion.asr_only_excluded"
+    FUSION_ACOUSTIC_COMPARISON = "fusion.acoustic_comparison"
     FUSION_OFFICIAL_ONLY_RECOVERED = "fusion.official_only_recovered"
     FUSION_OFFICIAL_ONLY_EXCLUDED = "fusion.official_only_excluded"
     FUSION_REGION_UNMATCHED = "fusion.region_unmatched"
@@ -130,8 +133,8 @@ class TranscriptionEvent:
         _require_non_empty_string(self.action, "action")
         _require_non_empty_string(self.reason, "reason")
         self._validate_related_ids()
-        self._validate_text_excerpt(self.source_text, "source_text")
-        self._validate_text_excerpt(self.result_text, "result_text")
+        self._validate_optional_text(self.source_text, "source_text")
+        self._validate_optional_text(self.result_text, "result_text")
         self._validate_time_range()
         self._validate_details()
         object.__setattr__(self, "related_ids", dict(self.related_ids))
@@ -147,12 +150,9 @@ class TranscriptionEvent:
                 raise ValueError(f"sensitive related ID is not allowed: {key}")
 
     @staticmethod
-    def _validate_text_excerpt(value: str | None, field_name: str) -> None:
-        if value is None:
-            return
-        _require_non_empty_string(value, field_name)
-        if len(value) > 500:
-            raise ValueError(f"{field_name} must be an excerpt of at most 500 characters")
+    def _validate_optional_text(value: str | None, field_name: str) -> None:
+        if value is not None:
+            _require_non_empty_string(value, field_name)
 
     def _validate_time_range(self) -> None:
         if (self.start_ms is None) != (self.end_ms is None):
@@ -308,6 +308,7 @@ class TranscriptionReportAggregator:
             EventCode.FUSION_TEXT_REPLACED: "substitution",
             EventCode.FUSION_ONE_TO_MANY_COLLAPSED: "one_to_many",
             EventCode.FUSION_MANY_TO_ONE_COLLAPSED: "many_to_one",
+            EventCode.FUSION_MANY_TO_MANY_COLLAPSED: "many_to_many",
             EventCode.FUSION_ASR_ONLY_RETAINED: "asr_only",
             EventCode.FUSION_OFFICIAL_ONLY_RECOVERED: "official_only_recovered",
             EventCode.FUSION_OFFICIAL_ONLY_EXCLUDED: "official_only_excluded",
