@@ -60,7 +60,7 @@ def _sentence(position: int, text: str) -> SourceSentenceDTO:
         text=text,
         speaker_label=f"SPEAKER-{position}",
         text_source=TextSource.OFFICIAL_TRANSCRIPT,
-        boundary_source=BoundarySource.OFFICIAL_PUNCTUATION,
+        boundary_source=BoundarySource.FUSED_PUNCTUATION,
         boundary_status=BoundaryStatus.VERIFIED,
     )
 

@@ -67,7 +67,7 @@ def _alignment() -> SourceAlignmentDTO:
         sentences.append(SourceSentenceDTO(f"s{position}",selected[0].id,selected[-1].id,
             selected[0].start_ms,selected[-1].end_ms,reconstruct_sentence_text(selected),
             "Warren Buffett" if position < 3 else "Charlie Munger",TextSource.OFFICIAL_TRANSCRIPT,
-            BoundarySource.OFFICIAL_PUNCTUATION,BoundaryStatus.VERIFIED))
+            BoundarySource.FUSED_PUNCTUATION,BoundaryStatus.VERIFIED))
     go = next(word for word in words if word.text == "go")
     return SourceAlignmentDTO("en",words[-1].end_ms,tuple(words),tuple(sentences),(
         SourceSectionDTO("sec1",SECTION_TITLES[0],"s1","s2"),

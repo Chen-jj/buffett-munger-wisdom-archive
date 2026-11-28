@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 from dataclasses import replace
 import hashlib
+from io import StringIO
 import json
 from pathlib import Path
 
@@ -27,7 +28,6 @@ from transcription.application import (
     EventCode,
     ForcedAlignmentResult,
     OfficialTranscriptInput,
-    SentenceBoundaryFailure,
     SentenceBoundaryInputValidationError,
     SentenceBoundaryPublicationPolicy,
     SentenceBoundaryService,
@@ -48,8 +48,8 @@ from transcription.domain import (
     SentenceBoundaryPolicy,
     TranscriptFusionArtifact,
 )
-from transcription.domain.fusion import OfficialSentenceSpan
-from transcription.infrastructure import RuleBasedSentenceBoundaryDetector
+from transcription.infrastructure import JsonLinesEventSink, RuleBasedSentenceBoundaryDetector
+from transcription.domain.fusion import ExcludedOfficialTokens, OfficialSentenceSpan, build_official_tokens
 
 
 ASSET_ID = AssetId("cnbc", "1994", "morning")
@@ -139,15 +139,7 @@ class CountingDetector(RuleBasedSentenceBoundaryDetector):
 
 
 def _policy(**changes: object) -> SentenceBoundaryPolicy:
-    values = {
-        "inferred_pause_ms": 700,
-        "fallback_pause_ms": 1_200,
-        "max_words_without_boundary": 80,
-        "max_fallback_sentences": 20,
-        "max_fallback_ratio": 1.0,
-    }
-    values.update(changes)
-    return SentenceBoundaryPolicy(**values)
+    return SentenceBoundaryPolicy(**changes)
 
 
 def _aligned_words(
@@ -279,7 +271,7 @@ def test_official_punctuation_respects_abbreviations_decimals_and_name_initials(
         "Why?",
     ]
     assert all(
-        sentence.boundary_source is BoundarySource.OFFICIAL_PUNCTUATION
+        sentence.boundary_source is BoundarySource.FUSED_PUNCTUATION
         and sentence.boundary_status is BoundaryStatus.VERIFIED
         for sentence in plan.sentences
     )
@@ -309,12 +301,12 @@ def test_official_punctuation_uses_wrapping_and_abbreviation_context(
 
     assert [sentence.text for sentence in plan.sentences] == expected
     assert all(
-        sentence.boundary_source is BoundarySource.OFFICIAL_PUNCTUATION
+        sentence.boundary_source is BoundarySource.FUSED_PUNCTUATION
         for sentence in plan.sentences
     )
 
 
-def test_official_boundary_uses_last_token_of_one_to_many_mapping() -> None:
+def test_official_punctuation_does_not_replace_one_to_many_fused_surface() -> None:
     aligned = _aligned_words(("can't", "Continue."))
     words = (
         TimedWordDTO(
@@ -346,13 +338,13 @@ def test_official_boundary_uses_last_token_of_one_to_many_mapping() -> None:
         words,
         aligned,
         tokens,
-        detector_boundaries=(),
+        detector_boundaries=(1,),
         policy=_policy(),
     )
 
-    assert [sentence.text for sentence in plan.sentences] == ["can't", "Continue."]
+    assert [sentence.text for sentence in plan.sentences] == ["can't Continue."]
     assert all(
-        sentence.boundary_source is BoundarySource.OFFICIAL_PUNCTUATION
+        sentence.boundary_source is BoundarySource.FUSED_PUNCTUATION
         and sentence.boundary_status is BoundaryStatus.VERIFIED
         for sentence in plan.sentences
     )
@@ -360,7 +352,7 @@ def test_official_boundary_uses_last_token_of_one_to_many_mapping() -> None:
 
 @pytest.mark.parametrize("trailing_asr", (False, True))
 @pytest.mark.parametrize("exclude_interior", (False, True))
-def test_official_span_uses_grounded_ending_and_ignores_interior_asr_punctuation(
+def test_fused_punctuation_does_not_require_official_ending_mapping(
     trailing_asr: bool, exclude_interior: bool,
 ) -> None:
     first_texts = ("We", "just.", "welcome", "you") + (("stray.",) if trailing_asr else ())
@@ -374,23 +366,20 @@ def test_official_span_uses_grounded_ending_and_ignores_interior_asr_punctuation
         for index, word in enumerate(words)
     )
     tokens = _official_tokens(("We", "welcome", "you", "all.", "Next."))
-    span = OfficialSentenceSpan(
-        official_token_ids=("ot1", "ot2", "ot3", "ot4"),
-        asr_word_ids=tuple(word.id for word in aligned[:len(first_texts)]),
-    )
     if exclude_interior:
         words = tuple(
             replace(word, id=f"w{index}")
             for index, word in enumerate(words[:1] + words[2:], start=1)
         )
 
-    plan = recover_sentences(words, aligned, tokens, (1,), _policy(), official_sentence_spans=(span,))
+    boundaries = RuleBasedSentenceBoundaryDetector().detect(tuple(w.text for w in words), _policy())
+    plan = recover_sentences(words, aligned, tokens, boundaries, _policy())
 
-    expected_first_end = len(first_texts) - int(exclude_interior)
-    assert [sentence.last_word_id for sentence in plan.sentences] == (
-        [f"w{len(words)}"] if trailing_asr else [f"w{expected_first_end}", f"w{len(words)}"]
-    )
-    assert plan.sentences[0].boundary_source is BoundarySource.OFFICIAL_PUNCTUATION
+    expected = ([] if exclude_interior else ["w2"]) + (
+        [f"w{len(words)-1}"] if trailing_asr else []
+    ) + [f"w{len(words)}"]
+    assert [sentence.last_word_id for sentence in plan.sentences] == expected
+    assert plan.sentences[0].boundary_source is BoundarySource.FUSED_PUNCTUATION
 
 
 def test_speaker_change_forces_boundary_without_guessing_missing_speaker() -> None:
@@ -425,22 +414,18 @@ def test_document_section_change_forces_verified_boundary_without_punctuation() 
     assert plan.sentences[0].boundary_status is BoundaryStatus.VERIFIED
 
 
-def test_paragraph_change_is_weak_and_requires_another_signal() -> None:
-    no_support = _plan(
-        ("Good", "morning."),
+def test_official_continuation_survives_paragraph_change_and_weak_signals() -> None:
+    plan = _plan(
+        ("Good—", "morning."),
         official=True,
         paragraphs=(1, 2),
+        starts=(100, 4_195),
+        segments=("seg1", "seg2"),
+        detected=(0, 1),
     )
-    assert len(no_support.sentences) == 1
 
-    supported = _plan(
-        ("Good", "morning."),
-        official=True,
-        paragraphs=(1, 2),
-        starts=(100, 1_500),
-    )
-    assert len(supported.sentences) == 2
-    assert supported.sentences[0].boundary_source is BoundarySource.PAUSE_FALLBACK
+    assert len(plan.sentences) == 1
+    assert plan.sentences[0].boundary_source is BoundarySource.FUSED_PUNCTUATION
 
 
 @pytest.mark.parametrize("official", (False, True))
@@ -482,60 +467,53 @@ def test_one_asr_segment_can_contain_multiple_sentences() -> None:
 
     assert [sentence.text for sentence in plan.sentences] == ["First.", "Second?"]
     assert all(
-        sentence.boundary_source is BoundarySource.ASR_PUNCTUATION
+        sentence.boundary_source is BoundarySource.FUSED_PUNCTUATION
         for sentence in plan.sentences
     )
 
 
-def test_asr_punctuation_and_pause_have_explicit_provenance() -> None:
+def test_fused_punctuation_provenance_is_independent_of_pause() -> None:
     plan = _plan(
         ("First.", "Second?"),
         starts=(100, 1_000),
     )
 
-    assert plan.sentences[0].boundary_source is BoundarySource.PUNCTUATION_AND_PAUSE
-    assert plan.sentences[0].boundary_status is BoundaryStatus.INFERRED
+    assert plan.sentences[0].boundary_source is BoundarySource.FUSED_PUNCTUATION
+    assert plan.sentences[0].boundary_status is BoundaryStatus.VERIFIED
 
 
-def test_local_detector_combines_with_pause_or_segment_as_fallback() -> None:
+def test_detector_pause_and_segment_cannot_create_unpunctuated_boundary() -> None:
     plan = _plan(
         ("This", "ends", "Another", "thought."),
         segments=("seg1", "seg1", "seg2", "seg2"),
         detected=(1, 3),
     )
 
-    assert [sentence.text for sentence in plan.sentences] == [
-        "This ends",
-        "Another thought.",
-    ]
-    assert plan.sentences[0].boundary_source is BoundarySource.PAUSE_FALLBACK
-    assert plan.sentences[1].boundary_source is BoundarySource.ASR_PUNCTUATION
+    assert [sentence.text for sentence in plan.sentences] == ["This ends Another thought."]
+    assert plan.sentences[0].boundary_source is BoundarySource.FUSED_PUNCTUATION
 
 
-def test_fallback_policy_gate_returns_diagnostic_plan() -> None:
-    with pytest.raises(SentenceBoundaryFailure, match="publication gate") as captured:
-        _plan(
-            ("unpunctuated", "ending"),
-            detected=(),
-            policy=_policy(max_fallback_sentences=0, max_fallback_ratio=0.0),
-        )
-
-    assert captured.value.diagnostic_plan is not None
-    assert captured.value.diagnostic_plan.fallback_count == 1
-
-
-def test_abnormally_long_unpunctuated_text_uses_versioned_fallback() -> None:
+@pytest.mark.parametrize(("fallback_count", "sentence_count"), ((101, 3000), (3, 4)))
+def test_detector_candidates_cannot_force_word_count_splits(
+    fallback_count: int, sentence_count: int
+) -> None:
     plan = _plan(
-        ("one", "two", "three", "four."),
-        detected=(3,),
-        policy=_policy(max_words_without_boundary=3),
+        ("Fallback",) * fallback_count + ("Confirmed.",) * (sentence_count - fallback_count),
+        segments=tuple(f"seg{index}" for index in range(sentence_count)),
+        detected=tuple(range(sentence_count)),
     )
 
-    assert [sentence.text for sentence in plan.sentences] == [
-        "one two three",
-        "four.",
-    ]
-    assert plan.sentences[0].boundary_source is BoundarySource.PAUSE_FALLBACK
+    assert len(plan.sentences) == sentence_count - fallback_count
+    assert plan.sentences[0].last_word_id == f"w{fallback_count+1}"
+
+
+def test_long_unpunctuated_text_closes_only_at_end_of_timeline() -> None:
+    texts = ("word",) * 221
+    plan = _plan(texts)
+
+    assert [sentence.text for sentence in plan.sentences] == [" ".join(texts)]
+    assert plan.sentences[0].boundary_source is BoundarySource.DOCUMENT_END
+    assert plan.sentences[0].boundary_status is BoundaryStatus.INFERRED
 
 
 def _alignment_fixture(
@@ -552,7 +530,7 @@ def _alignment_fixture(
     artifact = AlignedAsrArtifact(
         audio_sha256="audio-sha",
         raw_asr_sha256="raw-sha",
-        audio_duration_ms=2_000,
+        audio_duration_ms=max(2_000, words[-1].end_ms),
         provider=ProviderIdentity("fake-aligner", "1"),
         config=ForcedAlignmentConfig(
             model="fake",
@@ -713,7 +691,7 @@ def test_service_consumes_validated_official_fusion_metadata(tmp_path: Path) -> 
     assert result.alignment.sentences[0].speaker_label == "WARREN BUFFETT"
     assert (
         result.alignment.sentences[0].boundary_source
-        is BoundarySource.OFFICIAL_PUNCTUATION
+        is BoundarySource.FUSED_PUNCTUATION
     )
     assert [section.title for section in result.alignment.sections] == ["Opening"]
 
@@ -798,7 +776,7 @@ def test_section_fallback_preserves_document_boundary_and_emits_finding(
     assert EventCode.SECTION_DOCUMENT_CHANGE_BOUNDARY in by_code
 
 
-def test_gate_failure_keeps_events_and_does_not_publish_canonical(tmp_path: Path) -> None:
+def test_unpunctuated_document_end_publishes_with_diagnostics(tmp_path: Path) -> None:
     store = MemoryArtifactStore()
     aligned, fusion = _alignment_fixture(
         store, tmp_path, texts=("unpunctuated", "ending")
@@ -812,23 +790,36 @@ def test_gate_failure_keeps_events_and_does_not_publish_canonical(tmp_path: Path
         output_root=str(tmp_path),
     )
 
-    with pytest.raises(SentenceBoundaryFailure, match="publication gate"):
-        service.execute(
-            aligned,
-            fusion,
-            boundary_policy=_policy(
-                max_fallback_sentences=0,
-                max_fallback_ratio=0.0,
-            ),
-        )
+    result = service.execute(aligned, fusion)
 
-    canonical = str(
-        build_asset_workspace(ASSET_ID, tmp_path)
-        / canonical_filename(ArtifactType.SOURCE_ALIGNMENT)
+    assert len(result.alignment.sentences) == 1
+    assert result.path in store.data
+    completed = next(
+        event for event in events.events if event.code is EventCode.BOUNDARY_COMPLETED
     )
-    assert canonical not in store.data
-    assert EventCode.BOUNDARY_FALLBACK_USED in [event.code for event in events.events]
-    assert EventCode.STAGE_FAILED in [event.code for event in events.events]
+    assert completed.details["document_end_count"] == 1
+    assert EventCode.BOUNDARY_DOCUMENT_END in [event.code for event in events.events]
+
+
+def test_long_sentence_is_published_and_logged_in_full(tmp_path: Path) -> None:
+    store = MemoryArtifactStore()
+    texts = ("We",) + ("some",) * 146 + ("end.",)
+    sentence_text = " ".join(texts)
+    assert len(sentence_text) == 737
+    aligned, fusion = _alignment_fixture(store, tmp_path, texts=texts)
+    log = StringIO()
+    result = SentenceBoundaryService(
+        detector=CountingDetector(),
+        checksum=MemoryChecksum(store),
+        artifacts=store,
+        events=JsonLinesEventSink(log),
+        output_root=str(tmp_path),
+    ).execute(aligned, fusion)
+
+    assert result.alignment.sentences[0].text == sentence_text
+    events = [json.loads(line) for line in log.getvalue().splitlines()]
+    boundary = next(event for event in events if event["code"] == "boundary.fused_applied")
+    assert boundary["source_text"] == sentence_text
 
 
 def test_first_publication_manifest_failure_leaves_no_canonical_and_emits_failure(
@@ -877,7 +868,7 @@ def test_replacement_manifest_failure_preserves_previous_canonical(
         service.execute(
             aligned,
             fusion,
-            boundary_policy=_policy(inferred_pause_ms=800),
+            boundary_policy=_policy(abbreviations=(*_policy().abbreviations, "dept.")),
             publication_policy=SentenceBoundaryPublicationPolicy(overwrite=True),
         )
 
@@ -896,15 +887,249 @@ def test_sentence_policy_change_invalidates_cache_and_requires_overwrite(
         events=EventSink(),
         output_root=str(tmp_path),
     )
-    service.execute(aligned, fusion, boundary_policy=_policy(inferred_pause_ms=700))
+    service.execute(aligned, fusion, boundary_policy=_policy())
 
     with pytest.raises(RuntimeError, match="explicit overwrite"):
-        service.execute(aligned, fusion, boundary_policy=_policy(inferred_pause_ms=800))
+        service.execute(aligned, fusion, boundary_policy=_policy(abbreviations=(*_policy().abbreviations, "dept.")))
 
     replaced = service.execute(
         aligned,
         fusion,
-        boundary_policy=_policy(inferred_pause_ms=800),
+        boundary_policy=_policy(abbreviations=(*_policy().abbreviations, "dept.")),
         publication_policy=SentenceBoundaryPublicationPolicy(overwrite=True),
     )
     assert replaced.cache_hit is False
+
+
+@pytest.mark.parametrize(
+    ("left", "right"),
+    [
+        pytest.param(
+            "Will it eventually come from all businesses through some combination of higher tax rates on corporations, increased wages for the lower-middle class?",
+            "Well, I certainly think that increased corporate taxes are a much higher probability than having lower corporate taxes.", id="E01-question-answer",
+        ),
+        pytest.param("Some years the price will be good, some years the price will be bad, et cetera.", "But you think about the potential of the farm.", id="E02-et-cetera"),
+        pytest.param("We still came out okay, or a little bit better than okay.", "But it was not designed what we did was not designed to make a statement.", id="E03-okay"),
+        pytest.param("This next question comes from Steven Stoller.", "He's a shareholder in Atlanta, Georgia.", id="E04-name"),
+        pytest.param("Certain ideas, in terms of wealth taxes, changed, or taxes on foundations changed.", "But my plan has been thought out and in place for a long time.", id="E05-changed"),
+        pytest.param("This question comes from David Cass.", "He is a clinical professor of finance at the University of Maryland.", id="E06-conflict-retained-name"),
+        pytest.param("Now, they'll make mistakes in that, but you make mistakes in a lot of business decisions.", "But over that should be the guiding principle.", id="E07-decisions"),
+        pytest.param("He just doesn't happen to have market value skills.", "So, I do not think that a very rich company ought to totally abide by what the market dishes out.", id="E08-skills"),
+        pytest.param("Fortunately we had a Federal Reserve that knew what to do.", "But money was investment grade companies were essentially going to be frozen out of the market.", id="E09-asr-extra-sentence"),
+        pytest.param("Communicate in a very, very straightforward manner about him.", "fairly complex subjects and tell you when he knows something.", id="P01-him"),
+        pytest.param("Along with my friend Bill Gates too.", "as to what's going on.", id="P02-too"),
+        pytest.param("DEFCON 6 on the other.", "1 on the other side.", id="P03-number-repair"),
+        pytest.param("There's a small business in Oman.", "I hate what this what truncating this meeting has done.", id="P04-place"),
+        pytest.param("That, view held on.", "and the stock market actually managed to go up.", id="P05-on"),
+        pytest.param("All men are created equal and endowed by their Creator, et cetera.", "I think it was self-evident.", id="P06-full-et-cetera"),
+        pytest.param("We've had a lot of very good Fed Chairman.", "but Paul Volcker, I had him at the top of the list.", id="P07-chairman"),
+        pytest.param("Never... never pay it.", "you don't need to pay attention to them.", id="P08-self-correction"),
+        pytest.param("Very big companies that didn't bother them.", "to extend out their borrowings came a couple times.", id="P09-them"),
+        pytest.param("But we don't need it.", "we don't need a hundred.", id="P10-repeat"),
+        pytest.param("There's a couple of them.", "and and it may be that in effect, what's happened has accelerated the decline.", id="P11-repeat-and"),
+        pytest.param("We hope for the best and we wish it.", "everybody the best.", id="P12-wish"),
+        pytest.param("We've got three extraordinarily good, minds.", "in terms of allocating capital.", id="P13-minds"),
+        pytest.param("They're sure going to give it there.", "their best effort every day.", id="P14-there"),
+        pytest.param("And that takes away from the upside down.", "And I don't know, whether two or three years from now.", id="Q01-down"),
+        pytest.param("That infrastructure is continuing to, change.", "we're ready for $100 billion of investment opportunities there.", id="Q02-change"),
+        pytest.param("But we didn't do anything.", "the price has not gotten to a level.", id="Q03-anything"),
+    ],
+)
+def test_adr0017_real_fused_sentence_endings(left: str, right: str) -> None:
+    texts = tuple((left + " " + right).split())
+    plan = _plan(texts)
+
+    assert [sentence.text for sentence in plan.sentences] == [left, right]
+    assert all(s.boundary_source is BoundarySource.FUSED_PUNCTUATION for s in plan.sentences)
+
+
+def _persist_fusion_fixture(store, aligned, fusion, artifact):
+    store.write_json(fusion.path, artifact.to_dict(), overwrite=True)
+    manifest = AudioVadAsrCacheManifest.from_dict(store.read_json(aligned.manifest_path))
+    manifest.records["transcript_fusion"] = replace(
+        manifest.records["transcript_fusion"], size_bytes=store.size(fusion.path),
+        sha256=store.sha256(fusion.path),
+    )
+    store.write_json(aligned.manifest_path, manifest.to_dict(), overwrite=True)
+    return replace(fusion, words=artifact.words, artifact=artifact)
+
+
+@pytest.mark.parametrize("kind", ("conflict_retained", "extra_word"))
+def test_adr0017_asr_only_sentence_end_survives_official_span(
+    tmp_path: Path, kind: str,
+) -> None:
+    left = "This question comes from David Cass."
+    right = "He is a clinical professor of finance at the University of Maryland."
+    texts = tuple((left + " " + right).split())
+    official_text = (left.replace("Cass.", "Kass.") if kind == "conflict_retained"
+                     else left.replace(" Cass.", "")) + " " + right
+    transcript = StructuredTranscriptDTO(
+        language="en", chapters=(TranscriptChapterDTO(
+            number=1, title="Question", paragraphs=(TranscriptParagraphDTO(
+                speaker_label="WARREN BUFFETT", text=official_text,
+            ),),
+        ),),
+    )
+    store = MemoryArtifactStore()
+    aligned, fusion, official = _official_fusion_fixture(
+        store, tmp_path, texts=texts, transcript=transcript,
+    )
+    index = len(left.split()) - 1
+    artifact = fusion.artifact
+    tokens, ignored = build_official_tokens(transcript, artifact.normalization)
+    words = tuple(
+        replace(w, official_token_ids=(), match_type=MatchType.ASR_ONLY, text_source=TextSource.ASR)
+        if i == index else replace(w, official_token_ids=(
+            tokens[i - int(kind == "extra_word" and i > index)].id,
+        )) for i,w in enumerate(fusion.words)
+    )
+    span_words = aligned.artifact.words[:index+1] if kind == "conflict_retained" else aligned.artifact.words
+    span_tokens = tokens[:index+1] if kind == "conflict_retained" else tokens
+    span = OfficialSentenceSpan(
+        tuple(w.id for w in span_words),
+        tuple(t.id for t in span_tokens),
+    )
+    excluded = (ExcludedOfficialTokens((tokens[index].id,), kind),) if kind == "conflict_retained" else ()
+    artifact = replace(artifact, words=words, official_tokens=tokens, ignored_content=ignored,
+        excluded_official=excluded,
+        official_sentence_spans=(span,))
+    if kind == "extra_word":
+        assert all(t.normalized != ("cass",) for t in tokens)
+        assert all("Cass" not in p.text for c in transcript.chapters for p in c.paragraphs)
+    fusion = _persist_fusion_fixture(store, aligned, fusion, artifact)
+    result = SentenceBoundaryService(
+        detector=CountingDetector(), checksum=MemoryChecksum(store), artifacts=store,
+        events=EventSink(), output_root=str(tmp_path),
+    ).execute(aligned, fusion, official=official)
+
+    assert [s.text for s in result.alignment.sentences] == [left, right]
+    assert result.alignment.words[index] == words[index]
+
+
+def test_adr0017_question_unknown_speaker_does_not_acquire_answer_identity() -> None:
+    left = "Will it eventually come from all businesses through some combination of higher tax rates on corporations, increased wages for the lower-middle class?"
+    right = "Well, I certainly think that increased corporate taxes are a much higher probability than having lower corporate taxes."
+    texts = tuple((left + " " + right).split())
+    speakers = (None,) * len(left.split()) + ("WARREN BUFFETT",) * len(right.split())
+    plan = _plan(texts, official=True, speakers=speakers)
+
+    assert [s.text for s in plan.sentences] == [left, right]
+    assert [s.speaker_label for s in plan.sentences] == [None, "WARREN BUFFETT"]
+
+
+@pytest.mark.parametrize(
+    ("left", "right", "expected_count"),
+    [
+        ("The banks were very involved with the problem in 2008 and' 2009,", "they had done some things they shouldn't have done in some of them.", 1),
+        ("We hope for the best and we wish it.", "everybody the best.", 2),
+    ],
+)
+def test_adr0017_reference_punctuation_cannot_override_fused_text(
+    left: str, right: str, expected_count: int,
+) -> None:
+    texts = tuple((left + " " + right).split())
+    aligned = _aligned_words(texts)
+    words = _timed_words(aligned, official=True)
+    tokens = _official_tokens(texts)
+    index = len(left.split())-1
+    other = "." if texts[index].endswith(",") else ","
+    changed = tuple(replace(t, text=t.text[:-1]+other) if i == index else t for i,t in enumerate(tokens))
+    detected = RuleBasedSentenceBoundaryDetector().detect(texts, _policy())
+    first = recover_sentences(words, aligned, tokens, detected, _policy())
+    second = recover_sentences(words, aligned, changed, detected, _policy())
+
+    assert first == second
+    assert len(first.sentences) == expected_count
+
+
+def test_adr0017_editorial_question_is_split_before_publishing(tmp_path: Path) -> None:
+    texts = tuple("he called it the what did he call it?— the stock market study.".split())
+    store = MemoryArtifactStore()
+    aligned, fusion, official = _official_fusion_fixture(store, tmp_path, texts=texts)
+    result = SentenceBoundaryService(
+        detector=CountingDetector(), checksum=MemoryChecksum(store), artifacts=store,
+        events=EventSink(), output_root=str(tmp_path),
+    ).execute(aligned, fusion, official=official)
+
+    assert [s.text for s in result.alignment.sentences] == [
+        "he called it the what did he call it?", "the stock market study.",
+    ]
+    assert len(result.alignment.annotations) == 1
+    assert fusion.words[8].text == "it?—"
+
+
+def test_adr0017_separately_timed_sees_and_begins_next_sentence() -> None:
+    left = "And Easter is a big sales period for See's."
+    right = "And I don't know whether we were halfway through."
+    plan = _plan(tuple((left+" "+right).split()), official=True)
+    assert [s.text for s in plan.sentences] == [left, right]
+
+
+def test_adr0017_same_chapter_forward_speaker_preserves_greg_handoff() -> None:
+    prefix = "It's just a question of which sweatsuit I wear."
+    question = "Greg, would you like to add anything"
+    answer = "Really nothing to add, Warren."
+    texts = tuple((prefix+" "+question+" "+answer).split())
+    speakers = ("WARREN BUFFETT",)*len(prefix.split()) + (None,)*len(question.split()) + ("GREG ABEL",)*len(answer.split())
+    plan = _plan(texts, official=True, speakers=speakers)
+    assert [s.text for s in plan.sentences] == [prefix, question, answer]
+    assert plan.sentences[1].speaker_label is None
+    assert plan.sentences[1].boundary_source is BoundarySource.SPEAKER_CHANGE
+    assert plan.sentences[2].speaker_label == "GREG ABEL"
+
+
+def test_forward_speaker_resets_at_chapter_and_unknown_is_not_a_handoff() -> None:
+    plan = _plan(
+        ("Warren", "Greg,", "anything", "Really", "nothing."), official=True,
+        chapters=(1,2,2,2,2), speakers=("WARREN BUFFETT",None,None,"GREG ABEL","GREG ABEL"),
+    )
+    assert [s.text for s in plan.sentences] == ["Warren", "Greg, anything Really nothing."]
+    assert plan.sentences[0].boundary_source is BoundarySource.DOCUMENT_SECTION_CHANGE
+
+
+@pytest.mark.parametrize(
+    ("prefix", "answer", "speaker"),
+    [
+        ("Okay,", "thank you.", "BECKY QUICK"),
+        ("Well,", "I agree that the approach is right.", "WARREN BUFFETT"),
+        ("Okay,", "Absolutely.", "BECKY QUICK"),
+        ("uh", "Thank you.", "WARREN BUFFETT"),
+    ],
+)
+def test_adr0017_asr_only_answer_prefix_is_not_assigned_to_previous_turn(
+    prefix: str, answer: str, speaker: str,
+) -> None:
+    previous = "A previous speaker has finished."
+    previous_speaker = "WARREN BUFFETT" if speaker == "BECKY QUICK" else "BECKY QUICK"
+    texts = tuple((previous+" "+prefix+" "+answer).split())
+    aligned = _aligned_words(texts)
+    words = _timed_words(aligned, official=True)
+    prefix_index = len(previous.split())
+    words = tuple(
+        replace(w, official_token_ids=(), match_type=MatchType.ASR_ONLY, text_source=TextSource.ASR)
+        if i == prefix_index else w for i,w in enumerate(words)
+    )
+    speakers = (previous_speaker,)*prefix_index + (None,) + (speaker,)*len(answer.split())
+    tokens = _official_tokens(texts, speakers=speakers)
+    detected = RuleBasedSentenceBoundaryDetector().detect(texts, _policy())
+    plan = recover_sentences(words, aligned, tokens, detected, _policy())
+
+    assert [s.text for s in plan.sentences] == [previous, prefix+" "+answer]
+    assert plan.sentences[1].speaker_label == speaker
+
+
+@pytest.mark.parametrize("gap", (20, 2_000))
+def test_adr0017_but_our_continuation_and_punctuation_ignore_gap(gap: int) -> None:
+    texts = ("but", "Our", "Our", "position.", "Next.")
+    starts = (100, 200+gap, 400+gap, 600+gap, 700+gap+gap)
+    plan = _plan(texts, starts=starts, segments=("seg1","seg2","seg2","seg2","seg3"))
+    assert [s.text for s in plan.sentences] == ["but Our Our position.", "Next."]
+    assert all(s.boundary_source is BoundarySource.FUSED_PUNCTUATION for s in plan.sentences)
+
+
+def test_sentence_policy_rejects_previous_pause_configuration() -> None:
+    assert _policy().to_dict()["version"] == "sentence-boundary.v3"
+    with pytest.raises(ValueError, match="unsupported fields"):
+        SentenceBoundaryPolicy.from_dict({**_policy().to_dict(), "inferred_pause_ms": 700})
+    with pytest.raises(ValueError, match="unsupported sentence boundary policy"):
+        SentenceBoundaryPolicy.from_dict({**_policy().to_dict(), "version": "sentence-boundary.v2"})

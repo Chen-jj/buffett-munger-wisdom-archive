@@ -78,9 +78,9 @@ def alignment(*, sections: bool = True, last_speaker: str | None = "BUFFETT") ->
     ) for i, (text, start, end) in enumerate(zip(texts, (100, 400, 1300), (350, 1000, 1800), strict=True)))
     sentences = (
         SourceSentenceDTO("s1", "w1", "w2", 100, 1000, "We agree.", None,
-                          TextSource.OFFICIAL_TRANSCRIPT, BoundarySource.OFFICIAL_PUNCTUATION, BoundaryStatus.VERIFIED),
+                          TextSource.OFFICIAL_TRANSCRIPT, BoundarySource.FUSED_PUNCTUATION, BoundaryStatus.VERIFIED),
         SourceSentenceDTO("s2", "w3", "w3", 1300, 1800, "Indeed.", last_speaker,
-                          TextSource.OFFICIAL_TRANSCRIPT, BoundarySource.OFFICIAL_PUNCTUATION, BoundaryStatus.VERIFIED),
+                          TextSource.OFFICIAL_TRANSCRIPT, BoundarySource.FUSED_PUNCTUATION, BoundaryStatus.VERIFIED),
     )
     return SourceAlignmentDTO("en", 3000, words, sentences,
                               (SourceSectionDTO("sec1", "Question", "s1", "s2"),) if sections else ())

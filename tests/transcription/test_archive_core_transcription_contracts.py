@@ -76,7 +76,7 @@ def _sentence(
         text=text,
         speaker_label=speaker_label,
         text_source=TextSource.OFFICIAL_TRANSCRIPT,
-        boundary_source=BoundarySource.OFFICIAL_PUNCTUATION,
+        boundary_source=BoundarySource.FUSED_PUNCTUATION,
         boundary_status=BoundaryStatus.VERIFIED,
     )
 
@@ -707,7 +707,7 @@ def test_source_alignment_round_trip_preserves_all_source_enums() -> None:
     assert data["words"][0]["match_type"] == "normalized_exact"
     assert data["words"][0]["text_source"] == "official_transcript"
     assert data["words"][0]["timing_source"] == "acoustic_alignment"
-    assert data["sentences"][0]["boundary_source"] == "official_punctuation"
+    assert data["sentences"][0]["boundary_source"] == "fused_punctuation"
     assert data["sentences"][0]["boundary_status"] == "verified"
     assert SourceAlignmentDTO.from_dict(data) == alignment
 

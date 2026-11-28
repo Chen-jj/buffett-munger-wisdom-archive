@@ -225,11 +225,9 @@ class TimingSource(str, Enum):
 
 
 class BoundarySource(str, Enum):
-    OFFICIAL_PUNCTUATION = "official_punctuation"
+    FUSED_PUNCTUATION = "fused_punctuation"
     SPEAKER_CHANGE = "speaker_change"
-    ASR_PUNCTUATION = "asr_punctuation"
-    PUNCTUATION_AND_PAUSE = "punctuation_and_pause"
-    PAUSE_FALLBACK = "pause_fallback"
+    DOCUMENT_END = "document_end"
     DOCUMENT_SECTION_CHANGE = "document_section_change"
 
 

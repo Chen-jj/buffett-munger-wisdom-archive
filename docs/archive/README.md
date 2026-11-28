@@ -22,6 +22,7 @@
 | [ADR-0014](decisions/0014-pipeline-timeouts.md) | 全帧 PTS 扫描取消 300 秒时限，保留实际帧证据 |
 | [ADR-0015](decisions/0015-cnbc-transcript-fusion-and-sentence-boundaries.md) | 逐字稿融合、句界与日志改动已实施，完成 CNBC 2020 隔离重跑及对照 |
 | [ADR-0016](decisions/0016-cnbc-timed-transcript-fusion.md) | 确立单一带词时间正文、来源对账和固定窗口声学比较，裁决规则由 ADR-0018 修订 |
+| [ADR-0017](decisions/0017-sentence-boundary-evidence.md) | 按融合标点恢复句界、跨句组合真实逐词时间发布及典型反例回归；负责人完整离线及两场固定工件验收通过 |
 | [ADR-0018](decisions/0018-cnbc-fusion-official-priority.md) | 用户确认融合算法通过，保留回放证据及未核听项 |
 
 归档不自动撤销仍生效的契约。2026-11-23 归档 ADR-0006、ADR-0013 与 NB-12 的已结束实施记录，不关闭整体语义/出版质量问题，不将未核听改为已核听。

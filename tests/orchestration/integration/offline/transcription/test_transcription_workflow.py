@@ -298,9 +298,7 @@ def _make(
                 model="fake-align", model_version="1", device="cpu",
                 interpolation=InterpolationPolicy(version="interpolation.v1"),
             ),
-            sentence_boundary=SentenceBoundaryPolicy(
-                max_fallback_sentences=10, max_fallback_ratio=1.0
-            ),
+            sentence_boundary=SentenceBoundaryPolicy(),
             official_alignment=OfficialAlignmentConfig(
                 model="fake-align", model_version="1", device="cpu",
                 min_alignment_score=0.5, min_anchor_alignment_score=0.5,
@@ -516,7 +514,8 @@ def test_stale_inputs_invalidate_only_their_downstream_stages(tmp_path: Path) ->
     workflow.config = replace(
         workflow.config,
         sentence_boundary=replace(
-            workflow.config.sentence_boundary, inferred_pause_ms=701
+            workflow.config.sentence_boundary,
+            abbreviations=(*workflow.config.sentence_boundary.abbreviations, "dept."),
         ),
     )
     boundary_result = workflow.execute(
@@ -592,7 +591,8 @@ def test_final_pair_failure_preserves_replaced_canonical(tmp_path: Path) -> None
     workflow.config = replace(
         workflow.config,
         sentence_boundary=replace(
-            workflow.config.sentence_boundary, inferred_pause_ms=701
+            workflow.config.sentence_boundary,
+            abbreviations=(*workflow.config.sentence_boundary.abbreviations, "dept."),
         ),
     )
     store.fail_pair_after_canonical = True
@@ -632,7 +632,8 @@ def test_failure_records_report_and_manifest_without_publishing_canonical(tmp_pa
     workflow.config = replace(
         workflow.config,
         sentence_boundary=replace(
-            workflow.config.sentence_boundary, inferred_pause_ms=701
+            workflow.config.sentence_boundary,
+            abbreviations=(*workflow.config.sentence_boundary.abbreviations, "dept."),
         ),
     )
     providers[4].detect = lambda *args: (_ for _ in ()).throw(

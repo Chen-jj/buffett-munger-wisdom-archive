@@ -17,6 +17,7 @@
 - [NB-14 CNBC 2020 融合与句界恢复](NB-14-cnbc-fusion-sentence-replay.md)：两场技术验收、真实重跑及前后对照。
 - [NB-15 CNBC 带词时间的逐字稿融合](NB-15-cnbc-timed-transcript-fusion.md) 记录单一正文、声学来源与两场回归。
 - [NB-16 CNBC 官网优先融合裁决与回放](NB-16-cnbc-fusion-official-priority.md) 记录 v7 验收、完整金额修正和提交前回归。
+- [NB-17 融合标点权威性与句界恢复](NB-17-fused-punctuation-sentence-boundaries.md) 记录典型反例测试、首次退回修复、完整离线及两场句界/粒度回放验收。
 
 ## 渲染任务入口
 

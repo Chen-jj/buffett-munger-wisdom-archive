@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Sequence
 
@@ -38,7 +38,6 @@ from transcription.domain import (
 )
 
 from transcription.domain.editorial import EDITORIAL_POLICY_VERSION, separate_editorial_breaks
-from transcription.domain.fusion import OfficialSentenceSpan
 
 from .alignment import ForcedAlignmentResult
 from .audio_asr import (
@@ -85,7 +84,6 @@ class SentenceBoundaryResult:
 @dataclass(frozen=True)
 class SentenceBoundaryPlan:
     sentences: tuple[SourceSentenceDTO, ...]
-    fallback_count: int
 
 
 class SentenceBoundaryInputValidationError(RuntimeError):
@@ -93,32 +91,13 @@ class SentenceBoundaryInputValidationError(RuntimeError):
 
 
 class SentenceBoundaryFailure(RuntimeError):
-    def __init__(
-        self,
-        reason: str,
-        *,
-        diagnostic_plan: SentenceBoundaryPlan | None = None,
-    ) -> None:
-        self.diagnostic_plan = diagnostic_plan
-        super().__init__(reason)
-
-
-@dataclass(frozen=True)
-class _OfficialContext:
-    chapter_index: int
-    paragraph_index: int
-    speaker_label: str | None
-    tokens: tuple[OfficialTranscriptToken, ...]
+    pass
 
 
 @dataclass(frozen=True)
 class _WordContext:
-    segment_ids: tuple[str, ...]
-    official: _OfficialContext | None
-
-    @property
-    def speaker_label(self) -> str | None:
-        return self.official.speaker_label if self.official is not None else None
+    speaker_label: str | None
+    has_official_context: bool
 
 
 @dataclass(frozen=True)
@@ -134,8 +113,6 @@ def recover_sentences(
     detector_boundaries: Sequence[int],
     policy: SentenceBoundaryPolicy,
     effective_chapters: EffectiveChapterPlan | None = None,
-    *,
-    official_sentence_spans: Sequence[OfficialSentenceSpan] = (),
 ) -> SentenceBoundaryPlan:
     """Recover complete sentences without applying subtitle display constraints."""
 
@@ -151,86 +128,44 @@ def recover_sentences(
         boundary.preceding_word_id
         for boundary in document_section_boundaries(chapter_plan)
     }
-    boundary_surfaces, boundary_tail_indices = _boundary_surface_context(
-        timed_words, contexts
-    )
-    official_covered, official_endings = _official_boundary_evidence(
-        timed_words, official_tokens, official_sentence_spans, policy
-    )
+    surfaces = tuple(word.text for word in timed_words)
     sentences: list[SourceSentenceDTO] = []
     start = 0
-    known_speaker = contexts[0].speaker_label
-    fallback_count = 0
+    known_speaker = None
+    sentence_has_official_context = False
 
     for index, word in enumerate(timed_words):
+        if index == 0 or timed_words[index - 1].id in section_boundary_word_ids:
+            known_speaker = None
+        if contexts[index].speaker_label is not None:
+            known_speaker = contexts[index].speaker_label
+        sentence_has_official_context |= contexts[index].has_official_context
         decision: _BoundaryDecision | None = None
         next_index = index + 1
         has_next = next_index < len(timed_words)
-        if has_next:
+        if has_next and word.id not in section_boundary_word_ids:
             next_speaker = contexts[next_index].speaker_label
             if (
                 known_speaker is not None
                 and next_speaker is not None
                 and next_speaker != known_speaker
+                and sentence_has_official_context
             ):
                 decision = _BoundaryDecision(
                     BoundarySource.SPEAKER_CHANGE,
                     BoundaryStatus.VERIFIED,
                 )
 
-        official_word = contexts[index].official is not None
-        terminal = is_sentence_terminal(
-            boundary_surfaces, boundary_tail_indices[index], policy
-        )
-        if decision is None and (index in official_endings or (official_word and terminal)):
+        if decision is None and index in detected and is_sentence_terminal(surfaces, index, policy):
             decision = _BoundaryDecision(
-                BoundarySource.OFFICIAL_PUNCTUATION,
+                BoundarySource.FUSED_PUNCTUATION,
                 BoundaryStatus.VERIFIED,
             )
 
-        pause_ms = _pause_after(timed_words, index)
-        segment_change = _segment_change(contexts, index)
-        paragraph_change = _paragraph_change(contexts, index)
-        asr_can_set_boundary = not official_word and index not in official_covered
-        if decision is None and asr_can_set_boundary and terminal:
-            if pause_ms >= policy.inferred_pause_ms:
-                decision = _BoundaryDecision(
-                    BoundarySource.PUNCTUATION_AND_PAUSE,
-                    BoundaryStatus.INFERRED,
-                )
-            else:
-                decision = _BoundaryDecision(
-                    BoundarySource.ASR_PUNCTUATION,
-                    BoundaryStatus.INFERRED,
-                )
-
-        weak_detector_boundary = (official_word or index not in official_covered) and index in detected and (
-            pause_ms >= policy.inferred_pause_ms
-            or segment_change
-            or paragraph_change
-        )
-        paragraph_with_support = paragraph_change and (
-            pause_ms >= policy.fallback_pause_ms or segment_change
-        )
-        if decision is None and (weak_detector_boundary or paragraph_with_support):
-            decision = _BoundaryDecision(
-                BoundarySource.PAUSE_FALLBACK,
-                BoundaryStatus.FALLBACK,
-            )
-
-        sentence_length = index - start + 1
-        if (
-            decision is None
-            and sentence_length >= policy.max_words_without_boundary
-        ):
-            decision = _BoundaryDecision(
-                BoundarySource.PAUSE_FALLBACK,
-                BoundaryStatus.FALLBACK,
-            )
         if decision is None and not has_next:
             decision = _BoundaryDecision(
-                BoundarySource.PAUSE_FALLBACK,
-                BoundaryStatus.FALLBACK,
+                BoundarySource.DOCUMENT_END,
+                BoundaryStatus.INFERRED,
             )
         signal = select_boundary_signal(
             (
@@ -246,9 +181,6 @@ def recover_sentences(
             else None
         )
         if decision is None:
-            next_speaker = contexts[next_index].speaker_label
-            if known_speaker is None and next_speaker is not None:
-                known_speaker = next_speaker
             continue
 
         sentence_words = timed_words[start : index + 1]
@@ -266,23 +198,10 @@ def recover_sentences(
             boundary_status=decision.status,
         )
         sentences.append(sentence)
-        if decision.status is BoundaryStatus.FALLBACK:
-            fallback_count += 1
         start = index + 1
-        known_speaker = contexts[start].speaker_label if start < len(contexts) else None
+        sentence_has_official_context = False
 
-    plan = SentenceBoundaryPlan(tuple(sentences), fallback_count)
-    ratio = fallback_count / len(sentences)
-    if (
-        fallback_count > policy.max_fallback_sentences
-        or ratio > policy.max_fallback_ratio
-    ):
-        raise SentenceBoundaryFailure(
-            "fallback boundary publication gate exceeded "
-            f"({fallback_count}/{len(sentences)}, ratio={ratio:.3f})",
-            diagnostic_plan=plan,
-        )
-    return plan
+    return SentenceBoundaryPlan(tuple(sentences))
 
 
 def _validate_detector_boundaries(values: Sequence[int], word_count: int) -> set[int]:
@@ -305,14 +224,13 @@ def _build_contexts(
     aligned_words: Sequence[AlignedAsrWord],
     official_tokens: Sequence[OfficialTranscriptToken],
 ) -> tuple[_WordContext, ...]:
-    aligned_by_id = {word.id: word for word in aligned_words}
+    aligned_ids = {word.id for word in aligned_words}
     official_by_id = {token.id: token for token in official_tokens}
     contexts: list[_WordContext] = []
     for word in words:
+        if any(word_id not in aligned_ids for word_id in word.asr_word_ids):
+            raise SentenceBoundaryFailure("fusion word references an unknown aligned word")
         try:
-            segment_ids = tuple(
-                dict.fromkeys(aligned_by_id[word_id].segment_id for word_id in word.asr_word_ids)
-            )
             mapped_official = tuple(
                 official_by_id[token_id] for token_id in word.official_token_ids
             )
@@ -328,99 +246,9 @@ def _build_contexts(
             raise SentenceBoundaryFailure(
                 "one fused word must not cross official paragraph or speaker context"
             )
-        official = None
-        if official_contexts:
-            chapter, paragraph, speaker = official_contexts.pop()
-            official = _OfficialContext(
-                chapter,
-                paragraph,
-                speaker,
-                mapped_official,
-            )
-        contexts.append(_WordContext(segment_ids, official))
+        speaker = official_contexts.pop()[2] if official_contexts else None
+        contexts.append(_WordContext(speaker, bool(mapped_official)))
     return tuple(contexts)
-
-
-def _boundary_surface_context(
-    words: tuple[TimedWordDTO, ...],
-    contexts: tuple[_WordContext, ...],
-) -> tuple[tuple[str, ...], tuple[int, ...]]:
-    surfaces: list[str] = []
-    tail_indices: list[int] = []
-    for word, context in zip(words, contexts, strict=True):
-        if context.official is None:
-            surfaces.append(word.text)
-        else:
-            surfaces.extend(token.text for token in context.official.tokens)
-        tail_indices.append(len(surfaces) - 1)
-    return tuple(surfaces), tuple(tail_indices)
-
-
-def _official_boundary_evidence(
-    words: tuple[TimedWordDTO, ...],
-    official_tokens: Sequence[OfficialTranscriptToken],
-    official_sentence_spans: Sequence[OfficialSentenceSpan],
-    policy: SentenceBoundaryPolicy,
-) -> tuple[set[int], set[int]]:
-    if not official_sentence_spans:
-        return set(), set()
-    asr_positions = {word_id: index for index, word in enumerate(words)
-                     for word_id in word.asr_word_ids}
-    official_positions = {token_id: index for index, word in enumerate(words)
-                          for token_id in word.official_token_ids}
-    token_indices = {token.id: index for index, token in enumerate(official_tokens)}
-    surfaces = tuple(token.text for token in official_tokens)
-    covered: set[int] = set()
-    endings: set[int] = set()
-    for sentence in official_sentence_spans:
-        asr_indices = {asr_positions[word_id] for word_id in sentence.asr_word_ids
-                       if word_id in asr_positions}
-        if not asr_indices:
-            continue
-        covered.update(asr_indices)
-        if not is_sentence_terminal(surfaces, token_indices[sentence.official_token_ids[-1]], policy):
-            continue
-        mapped_indices = {official_positions[token_id] for token_id in sentence.official_token_ids
-                          if token_id in official_positions}
-        if not mapped_indices:
-            continue
-        end_index = max(mapped_indices)
-        # The row's final timed word must have official evidence and belong to
-        # this row as a whole. A trailing ASR-only or shared word cannot locate
-        # the official ending precisely enough to introduce a new boundary.
-        end_word = words[end_index]
-        if (end_index >= max(asr_indices)
-                and set(end_word.asr_word_ids).issubset(sentence.asr_word_ids)
-                and set(end_word.official_token_ids).issubset(sentence.official_token_ids)):
-            endings.add(end_index)
-    return covered, endings
-
-
-def _pause_after(words: tuple[TimedWordDTO, ...], index: int) -> int:
-    if index + 1 >= len(words):
-        return 0
-    return words[index + 1].start_ms - words[index].end_ms
-
-
-def _segment_change(contexts: tuple[_WordContext, ...], index: int) -> bool:
-    if index + 1 >= len(contexts):
-        return False
-    left = contexts[index].segment_ids
-    right = contexts[index + 1].segment_ids
-    return bool(left and right and left[-1] != right[0])
-
-
-def _paragraph_change(contexts: tuple[_WordContext, ...], index: int) -> bool:
-    if index + 1 >= len(contexts):
-        return False
-    left = contexts[index].official
-    right = contexts[index + 1].official
-    if left is None or right is None:
-        return False
-    return (left.chapter_index, left.paragraph_index) != (
-        right.chapter_index,
-        right.paragraph_index,
-    )
 
 
 def _sentence_speaker(contexts: Sequence[_WordContext]) -> str | None:
@@ -526,19 +354,21 @@ class SentenceBoundaryService:
                 "source_alignment", "explicit overwrite required"
             )
 
-        surfaces = tuple(word.text for word in fusion.words)
         try:
+            canonical_words, annotations = separate_editorial_breaks(
+                fusion.words, official_tokens, source=asset_id.source
+            )
+            surfaces = tuple(word.text for word in canonical_words)
             chapter_plan = derive_effective_chapters(fusion.words, official_tokens)
             self._emit_chapter_assignments(asset_id, chapter_plan)
             detector_boundaries = self.detector.detect(surfaces, selected_boundary)
             plan = recover_sentences(
-                fusion.words,
+                canonical_words,
                 aligned.artifact.words,
                 official_tokens,
                 detector_boundaries,
                 selected_boundary,
                 chapter_plan,
-                official_sentence_spans=(fusion.artifact.official_sentence_spans if fusion.artifact else ()),
             )
             for sentence in plan.sentences:
                 self._emit_boundary(asset_id, sentence)
@@ -562,20 +392,11 @@ class SentenceBoundaryService:
                 self._emit_section_publication(
                     asset_id, SectionFallbackReason.NO_DIRECT_CHAPTERS, ()
                 )
-            canonical_words, annotations = separate_editorial_breaks(
-                fusion.words, official_tokens, source=asset_id.source
-            )
-            word_positions = {word.id: index for index, word in enumerate(canonical_words)}
-            canonical_sentences = tuple(
-                replace(sentence, text=reconstruct_sentence_text(canonical_words[
-                    word_positions[sentence.first_word_id]:word_positions[sentence.last_word_id] + 1
-                ])) for sentence in plan.sentences
-            )
             alignment = SourceAlignmentDTO(
                 language="en",
                 audio_duration_ms=aligned.artifact.audio_duration_ms,
                 words=canonical_words,
-                sentences=canonical_sentences,
+                sentences=plan.sentences,
                 sections=sections,
                 annotations=annotations,
             )
@@ -585,9 +406,6 @@ class SentenceBoundaryService:
                     "public source alignment DTO did not round-trip"
                 )
         except SentenceBoundaryFailure as error:
-            if error.diagnostic_plan is not None:
-                for sentence in error.diagnostic_plan.sentences:
-                    self._emit_boundary(asset_id, sentence)
             self._emit(
                 asset_id,
                 EventCode.STAGE_FAILED,
@@ -653,13 +471,16 @@ class SentenceBoundaryService:
                 else "validate_source_alignment"
             ),
             reason=(
-                "public DTO invariants and fallback publication gate passed"
+                "public DTO invariants passed"
                 if selected_publication.publish
-                else "public DTO invariants and fallback publication gate passed; publication deferred"
+                else "public DTO invariants passed; publication deferred"
             ),
             details={
                 "sentence_count": len(alignment.sentences),
-                "fallback_count": plan.fallback_count,
+                "document_end_count": sum(
+                    sentence.boundary_source is BoundarySource.DOCUMENT_END
+                    for sentence in alignment.sentences
+                ),
                 "section_count": len(alignment.sections),
                 "cache_key": cache_key,
             },
@@ -958,11 +779,11 @@ class SentenceBoundaryService:
 
     def _emit_boundary(self, asset_id: AssetId, sentence: SourceSentenceDTO) -> None:
         code, severity, action, reason = {
-            BoundarySource.OFFICIAL_PUNCTUATION: (
-                EventCode.BOUNDARY_OFFICIAL_APPLIED,
+            BoundarySource.FUSED_PUNCTUATION: (
+                EventCode.BOUNDARY_FUSED_APPLIED,
                 EventSeverity.INFO,
-                "apply_official_punctuation",
-                "verified official punctuation passed sentence exceptions",
+                "apply_fused_punctuation",
+                "final fused punctuation passed local sentence exceptions",
             ),
             BoundarySource.SPEAKER_CHANGE: (
                 EventCode.BOUNDARY_SPEAKER_CHANGE,
@@ -970,23 +791,11 @@ class SentenceBoundaryService:
                 "close_before_speaker_change",
                 "reliable official speaker metadata changed",
             ),
-            BoundarySource.ASR_PUNCTUATION: (
-                EventCode.BOUNDARY_ASR_APPLIED,
+            BoundarySource.DOCUMENT_END: (
+                EventCode.BOUNDARY_DOCUMENT_END,
                 EventSeverity.INFO,
-                "apply_asr_punctuation",
-                "ASR punctuation passed local sentence exceptions",
-            ),
-            BoundarySource.PUNCTUATION_AND_PAUSE: (
-                EventCode.BOUNDARY_PAUSE_INFERRED,
-                EventSeverity.INFO,
-                "combine_punctuation_and_pause",
-                "ASR punctuation and inter-word pause support a boundary",
-            ),
-            BoundarySource.PAUSE_FALLBACK: (
-                EventCode.BOUNDARY_FALLBACK_USED,
-                EventSeverity.WARNING,
-                "apply_versioned_fallback",
-                "weak local signals or abnormal unpunctuated length required fallback",
+                "close_at_document_end",
+                "the spoken timeline ended without terminal punctuation",
             ),
             BoundarySource.DOCUMENT_SECTION_CHANGE: (
                 EventCode.SECTION_DOCUMENT_CHANGE_BOUNDARY,

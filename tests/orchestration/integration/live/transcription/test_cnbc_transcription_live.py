@@ -54,7 +54,7 @@ def test_real_cnbc_transcription_pipeline_produces_every_artifact():
     assert positions[right.last_sentence_id] == len(alignment.sentences) - 1
     boundary = alignment.sentences[transition]
     assert boundary.boundary_status is BoundaryStatus.VERIFIED
-    assert boundary.boundary_source in {BoundarySource.OFFICIAL_PUNCTUATION, BoundarySource.SPEAKER_CHANGE, BoundarySource.DOCUMENT_SECTION_CHANGE}
+    assert boundary.boundary_source in {BoundarySource.FUSED_PUNCTUATION, BoundarySource.SPEAKER_CHANGE, BoundarySource.DOCUMENT_SECTION_CHANGE}
     records = {"audio", "vad", "raw_asr", "aligned_asr", "transcript_fusion", "source_alignment"}
     assert records <= set(AudioVadAsrCacheManifest.from_dict(payload("transcription_manifest.json")).records)
     assert first["stages"][-1]["cache_hits"] == []

@@ -29,7 +29,7 @@ def inputs():
                               TextSource.ASR, TimingSource.ACOUSTIC_ALIGNMENT)
                   for n, (text, start, end) in enumerate((("Hello", 0, 400), ("world.", 500, 1000)), 1))
     sentence = SourceSentenceDTO("s1", "w1", "w2", 0, 1000, "Hello world.", None,
-                                 TextSource.ASR, BoundarySource.ASR_PUNCTUATION, BoundaryStatus.INFERRED)
+                                 TextSource.ASR, BoundarySource.FUSED_PUNCTUATION, BoundaryStatus.INFERRED)
     alignment = SourceAlignmentDTO("en", 3000, words, (sentence,), ())
     media = MediaBoundaryDTO(HASH, 3000, tuple(range(0, 3000000, 40000)))
     chunk = SourceChunkDTO("k1", ("w1", "w2"), ("s1",), "Hello world.", 0, 1000,

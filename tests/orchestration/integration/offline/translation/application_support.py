@@ -63,7 +63,7 @@ def _sentence(position: int, text: str) -> SourceSentenceDTO:
         id=f"s{position}", first_word_id=f"w{position}", last_word_id=f"w{position}",
         start_ms=position * 100, end_ms=position * 100 + 50, text=text,
         speaker_label="Warren Buffett", text_source=TextSource.OFFICIAL_TRANSCRIPT,
-        boundary_source=BoundarySource.OFFICIAL_PUNCTUATION,
+        boundary_source=BoundarySource.FUSED_PUNCTUATION,
         boundary_status=BoundaryStatus.VERIFIED,
     )
 

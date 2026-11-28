@@ -7,6 +7,7 @@ from dataclasses import dataclass, replace
 from difflib import SequenceMatcher
 from functools import lru_cache
 from itertools import product
+import math
 from pathlib import Path
 from typing import Mapping, Sequence
 
@@ -1119,7 +1120,19 @@ class TranscriptFusionService:
                 if replacement is not None:
                     if retiming is not None:
                         self._apply_shared_times(asset_id, words, adjusted, context, retiming, asr)
-                    word = TimedWordDTO(
+                    split = self._split_sentence_replacement(
+                        replacement, original, tokens, len(words) + 1, normalization, config,
+                    )
+                    if split == ():
+                        self._emit(
+                            asset_id, EventCode.FUSION_ACOUSTIC_COMPARISON, EventSeverity.WARNING,
+                            action="retain_unsplit_sentence_replacement",
+                            reason="cross-sentence replacement lacks complete independent token timing",
+                            related_ids={"asr_word_ids": ",".join(item.id for item in original),
+                                         "official_word_ids": ",".join(item.id for item in tokens)},
+                            result_text=official_surface_text(tokens),
+                        )
+                    replacement_words = split or (TimedWordDTO(
                         id=f"w{len(words) + 1}", text=official_surface_text(tokens),
                         start_ms=replacement.start_ms, end_ms=replacement.end_ms,
                         asr_word_ids=tuple(item.id for item in original),
@@ -1127,13 +1140,17 @@ class TranscriptFusionService:
                         match_type=MatchType.SUBSTITUTION,
                         text_source=TextSource.OFFICIAL_TRANSCRIPT,
                         timing_source=TimingSource.ACOUSTIC_ALIGNMENT,
-                    )
-                    words.append(word)
-                    self._emit_mapping(
-                        asset_id, EventCode.FUSION_TEXT_REPLACED, EventSeverity.INFO, word,
-                        source_text=" ".join(item.text for item in original), result_text=word.text,
-                        action="replace_in_fixed_acoustic_window", reason=reason,
-                    )
+                    ),)
+                    for word in replacement_words:
+                        words.append(word)
+                        self._emit_mapping(
+                            asset_id,
+                            (EventCode.FUSION_TEXT_REPLACED if word.asr_word_ids
+                             else EventCode.FUSION_OFFICIAL_ONLY_RECOVERED),
+                            EventSeverity.INFO, word,
+                            source_text=" ".join(item.text for item in original), result_text=word.text,
+                            action="replace_in_fixed_acoustic_window", reason=reason,
+                        )
                     plan_index = run_end
                     continue
             elif tokens:
@@ -1452,6 +1469,56 @@ class TranscriptFusionService:
                 details={"original_start_ms": prior.start_ms, "original_end_ms": prior.end_ms,
                          "common_start_ms": result.start_ms, "common_end_ms": result.end_ms},
             )
+
+    @staticmethod
+    def _split_sentence_replacement(
+        replacement: AcousticCandidateEvidence,
+        original: tuple[AlignedAsrWord, ...],
+        tokens: tuple[OfficialTranscriptToken, ...],
+        first_word_number: int,
+        normalization: NormalizationPolicy,
+        config: OfficialAlignmentConfig,
+    ) -> tuple[TimedWordDTO, ...] | None:
+        surfaces = tuple(token.text for token in tokens)
+        if not any(is_sentence_terminal(surfaces, index, SentenceBoundaryPolicy())
+                   for index in range(len(tokens) - 1)):
+            return None
+        evidence = replacement.word_evidence
+        if (len(evidence) != len(tokens) or replacement.start_ms is None
+                or replacement.end_ms is None):
+            return ()
+        previous_end = replacement.start_ms
+        for token, word in zip(tokens, evidence, strict=True):
+            if (token.normalized != normalize_token(word.text, normalization)
+                    or not previous_end <= word.start_ms < word.end_ms <= replacement.end_ms
+                    or not math.isfinite(word.score) or not config.min_alignment_score <= word.score <= 1):
+                return ()
+            previous_end = word.end_ms
+
+        provenance: list[list[str]] = [[] for _ in tokens]
+        previous_index = 0
+        for source in original:
+            def affinity(index: int) -> tuple[int, int, int]:
+                word = evidence[index]
+                overlap = max(0, min(source.end_ms, word.end_ms) - max(source.start_ms, word.start_ms))
+                gap = max(word.start_ms - source.end_ms, source.start_ms - word.end_ms, 0)
+                return overlap, -gap, -index
+
+            index = max(range(len(evidence)), key=affinity)
+            if index < previous_index:
+                return ()
+            provenance[index].append(source.id)
+            previous_index = index
+        # Provenance is accounted once by temporal contribution; word cuts come
+        # solely from the chosen candidate, never from the source-token cuts.
+        return tuple(TimedWordDTO(
+            id=f"w{first_word_number + index}", text=token.text,
+            start_ms=word.start_ms, end_ms=word.end_ms,
+            asr_word_ids=tuple(source_ids), official_token_ids=(token.id,),
+            match_type=MatchType.SUBSTITUTION if source_ids else MatchType.OFFICIAL_ONLY,
+            text_source=TextSource.OFFICIAL_TRANSCRIPT,
+            timing_source=TimingSource.ACOUSTIC_ALIGNMENT,
+        ) for index, (token, word, source_ids) in enumerate(zip(tokens, evidence, provenance, strict=True)))
 
     def _recover_official_only(
         self,

@@ -171,7 +171,7 @@ class NormalizationPolicy:
 
 @dataclass(frozen=True)
 class MatchingPolicy:
-    version: str = "monotonic-local-dp.v7"
+    version: str = "monotonic-local-dp.v8"
     anchor_ngram_size: int = 2
     max_local_window_words: int = 24
     max_unanchored_conflict_words: int = 4

@@ -35,7 +35,7 @@ def fixture(tmp_path):
     video.write_bytes(b"fake expensive boundary media")
     sha = hashlib.sha256(video.read_bytes()).hexdigest()
     word = TimedWordDTO("w1", "Yes.", 0, 1000, ("aw1",), (), MatchType.ASR_ONLY, TextSource.ASR, TimingSource.ACOUSTIC_ALIGNMENT)
-    sentence = SourceSentenceDTO("s1", "w1", "w1", 0, 1000, "Yes.", None, TextSource.ASR, BoundarySource.ASR_PUNCTUATION, BoundaryStatus.VERIFIED)
+    sentence = SourceSentenceDTO("s1", "w1", "w1", 0, 1000, "Yes.", None, TextSource.ASR, BoundarySource.FUSED_PUNCTUATION, BoundaryStatus.VERIFIED)
     source = SourceAlignmentDTO("en", 2000, (word,), (sentence,), ())
     alignment = workspace / "source_alignment.json"
     alignment.write_bytes(metadata_bytes(source.to_dict()))

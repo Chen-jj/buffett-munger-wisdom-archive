@@ -60,8 +60,10 @@ FinalBilingualDraftDTO、StageManifestDTO，以及严格证据/实际帧PTS/保�
   `speaker_label`，并以有序 `stage_directions` 保存不属于 spoken text 的舞台说明；纯舞台
   说明 paragraph 使用空 `text`，但 paragraph 的 `text` 和 `stage_directions` 不得同时为空。
   当前语言固定为 `en`。
-- 同一入口发布 `transcription.source-alignment.v1` 的 `SourceAlignmentDTO`、
-  `TimedWordDTO`、`SourceSentenceDTO`、`SourceSectionDTO` 及其来源/边界枚举。schema 记录
+- 同一入口发布 `transcription.source-alignment.v2` 的 `SourceAlignmentDTO`、
+  `TimedWordDTO`、`SourceSentenceDTO`、`SourceSectionDTO` 及其来源/边界枚举。句界来源为
+  `fused_punctuation`、`speaker_change`、`document_section_change`、`document_end`；不再解析旧
+  ASR/官网/停顿/fallback 边界来源。融合来源类型不影响句末标点资格。schema 记录
   `audio_duration_ms`，所有时间为原音频时间轴上的非负整数毫秒。
 - timed word 与 sentence 的稳定 ID 分别严格使用文档顺序的一基格式 `w1..wN`、
   `s1..sN`。sentence 必须连续且恰好覆盖所有 words，冗余首尾时间必须匹配引用 word，

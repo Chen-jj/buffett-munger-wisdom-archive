@@ -1101,6 +1101,116 @@ def test_conflict_uses_a_shared_fixed_window_and_publishes_only_supported_timing
     assert sum(event.action.startswith("score_") for event in log.events) == 10
 
 
+def _cross_sentence_fusion(tmp_path: Path, mode: str = "valid"):
+    candidate_words = (
+        AcousticWordEvidence("see's", 1550965, 1551350, .383610),
+        AcousticWordEvidence("and", 1551451, 1552485, .349831),
+    )
+    if mode == "missing":
+        candidate_words = candidate_words[:1]
+    elif mode == "wrong_word":
+        candidate_words = (candidate_words[0], replace(candidate_words[1], text="or"))
+    elif mode == "overlap":
+        candidate_words = (candidate_words[0], replace(candidate_words[1], start_ms=1551349))
+    elif mode == "outside":
+        candidate_words = (candidate_words[0], replace(candidate_words[1], end_ms=1552486))
+    elif mode == "weak":
+        candidate_words = (candidate_words[0], replace(candidate_words[1], score=.05))
+    elif mode == "nonfinite":
+        candidate_words = (candidate_words[0], replace(candidate_words[1], score=float("nan")))
+    elif mode == "invalid_score":
+        candidate_words = (candidate_words[0], replace(candidate_words[1], score=1.1))
+
+    def score(start, end, readings):
+        assert readings == ("a season.", "See's. And")
+        return (
+            AcousticCandidateEvidence(-40),
+            AcousticCandidateEvidence(-10, 1550965, 1552485, .4, .3, .78, 0, candidate_words),
+        )
+
+    store = MemoryArtifactStore()
+    aligned = _aligned_input(
+        store, tmp_path,
+        ("Easter", "is", "a", "big", "sales", "period", "for", "a", "season.", "I", "don't", "know"),
+        timings=((1545222,1545500),(1545600,1545700),(1545800,1545900),(1546000,1546200),
+                 (1549764,1550124),(1550144,1550524),(1550784,1550904),(1550924,1550964),
+                 (1551004,1551605),(1552485,1552505),(1552525,1552645),(1552665,1552745)),
+    )
+    official = _official_input(store, tmp_path, _transcript("Easter is a big sales period for See's. And I don't know"))
+    service, log, _ = _service(store, tmp_path, FakeOfficialAligner(score=score))
+    options = dict(official=official, matching=_matching(anchor_ngram_size=3),
+                   official_alignment_config=replace(_alignment_config(), min_alignment_score=.20,
+                                                     min_anchor_alignment_score=.50))
+    return service, aligned, options, log
+
+
+def test_cross_sentence_substitution_publishes_real_token_times_and_unique_sources(tmp_path: Path) -> None:
+    service, aligned, options, log = _cross_sentence_fusion(tmp_path)
+
+    result = service.execute(aligned, **options)
+
+    assert [(w.text, w.start_ms, w.end_ms, w.asr_word_ids, w.official_token_ids, w.match_type)
+            for w in result.words[7:9]] == [
+        ("See's.", 1550965, 1551350, ("aw8", "aw9"), ("ot8",), MatchType.SUBSTITUTION),
+        ("And", 1551451, 1552485, (), ("ot9",), MatchType.OFFICIAL_ONLY),
+    ]
+    assert [source for w in result.words for source in w.asr_word_ids] == [w.id for w in aligned.artifact.words]
+    assert " ".join(w.text for w in result.words) == "Easter is a big sales period for See's. And I don't know"
+    result.artifact.validate_asr_coverage(aligned.artifact.words)
+    assert TranscriptFusionArtifact.from_dict(result.artifact.to_dict()) == result.artifact
+    assert result.artifact.matching.version == "monotonic-local-dp.v8"
+    assert service.execute(aligned, **options).cache_hit
+
+
+@pytest.mark.parametrize("mode", ("missing", "wrong_word", "overlap", "outside", "weak", "nonfinite", "invalid_score"))
+def test_cross_sentence_substitution_does_not_invent_missing_or_invalid_word_times(
+    tmp_path: Path, mode: str,
+) -> None:
+    service, aligned, options, log = _cross_sentence_fusion(tmp_path, mode)
+
+    result = service.execute(aligned, **options)
+
+    word = result.words[7]
+    assert (word.text, word.start_ms, word.end_ms) == ("See's. And", 1550965, 1552485)
+    assert word.asr_word_ids == ("aw8", "aw9")
+    assert word.official_token_ids == ("ot8", "ot9")
+    assert any(event.action == "retain_unsplit_sentence_replacement" for event in log.events)
+
+
+@pytest.mark.parametrize("text", ("$4.5 million", "See's and"))
+def test_same_sentence_combinations_and_decimal_amounts_do_not_require_split_timing(text: str) -> None:
+    tokens, _ = build_official_tokens(_transcript(text), NormalizationPolicy())
+
+    assert TranscriptFusionService._split_sentence_replacement(
+        AcousticCandidateEvidence(-10, 100, 900, .8), (), tokens, 1,
+        NormalizationPolicy(), _alignment_config(),
+    ) is None
+
+
+@pytest.mark.parametrize("reversed_sources", (False, True))
+def test_split_replacement_preserves_asr_order_or_refuses_backwards_attribution(reversed_sources: bool) -> None:
+    normalization = NormalizationPolicy()
+    tokens, _ = build_official_tokens(_transcript("See's. And"), normalization)
+    original = _aligned_artifact(("old", "reading", "again"),
+                                 timings=((100,140),(200,240),(300,340))).words
+    if reversed_sources:
+        original = original[::-1]
+    evidence = _acoustic_path(-10, (
+        AcousticWordEvidence("see's", 100, 170, .8),
+        AcousticWordEvidence("and", 190, 350, .8),
+    ))
+
+    words = TranscriptFusionService._split_sentence_replacement(
+        evidence, original, tokens, 1, normalization, _alignment_config(),
+    )
+
+    if reversed_sources:
+        assert words == ()
+    else:
+        assert [word.asr_word_ids for word in words] == [("aw1",), ("aw2", "aw3")]
+        assert [(word.start_ms, word.end_ms) for word in words] == [(100,170),(190,350)]
+
+
 def test_different_dollar_amount_is_published_between_retimed_shared_words(tmp_path: Path) -> None:
     original_reading = "a million one hundred and seven thousand four hundred"
     official_reading = "a billion one hundred and seven million four hundred thousand"

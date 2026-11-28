@@ -1,5 +1,12 @@
 # transcription AGENTS.md
 
+2026-11-28：ADR-0017 已由子 agent 实现、负责人独立验收。句界为 `sentence-boundary.v3`，
+按最终融合标点处理；融合 `monotonic-local-dp.v8` 只补跨句组合的真实逐词时间发布。
+完整离线 3010 passed / 1 skipped / 6 deselected；CNBC 两场回放 28 个反例、4 个连续样例通过，
+同进程和新进程复用零新评分与改写。契约及未核听限制见
+`docs/archive/decisions/0017-sentence-boundary-evidence.md` 与
+`output/cnbc-2020-adr0017-20261128/run-accepted-2/负责人验收.md`。
+
 2026-11-06：生产编排完整转录复用命中全部cache时，复验成功日志/报告/manifest并返回原报告，
 不重写任何阶段工件；实际工具身份可只读探测。真实ASR/跨层集成已迁入编排。
 
@@ -25,7 +32,7 @@
 - 通过 WhisperX 一体化管线运行 pyannote VAD、英文 ASR 和词级 forced alignment。
 - 持久化 VAD、raw ASR、aligned ASR、逐字稿融合、日志、报告和阶段 manifest。
 - 有结构化官网英文逐字稿时，本地融合其拼写、标点、句界和可靠 speaker metadata。
-- 无官网覆盖时，使用 Whisper 标点、本地 sentence detector 和停顿规则恢复完整句界。
+- 有无官网覆盖均按最终融合正文的标点与本地 sentence detector 恢复句界，可靠换人、章节和文末收尾独立处理；停顿留给 chunking。
 - 从可靠 chapter 映射派生来源无关的 sections，并在 document section 变化处强制完整句界；无法
   可靠派生时发布 `sections=[]`，不阻断有效 words/sentences。
 - 校验时间轴、word/sentence 覆盖、溯源、缓存和发布门禁。
@@ -51,8 +58,8 @@
 
 ## 工件与权威性
 
-- 音频决定是否真的说过；声学对齐决定时间；官网逐字稿优先提供文字/标点/句界；本地规则
-  处理无官网区域。
+- 音频决定是否真的说过；声学对齐决定时间；官网逐字稿在融合阶段优先提供文字和标点。
+  句界按融合 `words` 最终保留的标点处理，不要求同步官网原标点，`asr_only` 不降低句末资格。
 - `source_alignment.json` 是唯一供下游消费的 canonical 内容工件。
 - `raw_asr.json`、`aligned_asr.json`、`transcript_fusion.json` 是持久化缓存/诊断工件，不能被
   下游直接消费。
@@ -132,7 +139,7 @@
   双侧词汇锚点才可纳入，保留声学时间、ASR ID 和官网 token ID。保留官网拼写的撇号，
   不将普通动词 `sees` 当作该别名；无官网的 identity 路径不改写。清单已纳入融合缓存身份，
   不使 audio/VAD/ASR/alignment 失效。需重新切词或涉及官网编辑插注的疑似专名不自动猜测。
-- `monotonic-local-dp.v7` 按顺序对同一段里的差异配对。定位需要至少两个可靠声学匹配，且匹配
+- `monotonic-local-dp.v8` 按顺序对同一段里的差异配对。定位需要至少两个可靠声学匹配，且匹配
   的相对位置在局部窗口内唯一。相邻保留词的声学时间或音频端点限定差异，窗口上限 5 秒。
   句端可使用一侧同章段的定位证据。大段无可靠锚点冲突硬失败。
 - 官网连续增词按同一差异组发布，全部取得独立区间且对齐分均达到 `0.20` 可直接写入。完整
@@ -147,6 +154,10 @@
 - 完整金额在局部计划进入声学裁决前做等值归并，按统一格式及官网尾部标点发布。两侧均为多词时
   记录 `many_to_many` 及完整首尾声学范围。官网证实 `a` 属于数词且与相邻的短弱读 `a` 完整对应
   时一并归入金额。缺少显式币种证据的 `pounds` 保留原单位。
+- 选中替换组合跨有效句末时，只有候选的完整逐词文字、独立时间及分数校验通过才分词发布，
+  不按字符或原 ASR 切点均分。ASR 来源按与候选区间的最大重叠、无重叠时最近区间唯一归属，
+  归属必须保序；无 ASR 来源的候选词记录 `official_only`。如 `See's. And` 拆成独立两词，
+  原 `a / season.` 两个 ID 归 `See's.`，`And` 使用候选自身声学时间。证据不足则保留组合并明确 warning。
 - `transcript_fusion.json` v3 仅官网路径持久化，正文为 `words`，并记录官网词表、非口述内容、
   排除词、对齐验证和只含来源 ID 的 `official_sentence_spans`。`excluded_asr` 记录经验证移出的
   ASR ID、原词时间及原因。写入和复用都需按原顺序完整对账。没有 `chapters.json` 时返回
@@ -162,17 +173,15 @@
   `TranscriptFusionResult`。官网路径必须验证 canonical `transcript_fusion.json` 的 manifest
   status/path/size/SHA-256、cache key 和 aligned checksum chain；无官网路径必须严格等于 aligned
   ASR identity projection，不允许伪造或跳过 fusion 决策。
-- 官网映射 word 的 `. ? !` 经过版本化的省略号、缩写、姓名首字母和域名点号例外后是 verified boundary；
-  reliable speaker 变化强制切句。paragraph 变化、ASR segment 变化和固定 pause 都只是弱信号，
-  不得各自单独切句。
-- 无官网或 ASR-only 区域综合 ASR 标点、`SentenceBoundaryDetector`、pause 与 segment 弱提示。
-  ASR segment 可跨句也可被一句跨越；任何切分都不得使用字幕行宽、阅读速度或 cue 时长。
-- `official_sentence_spans` 提供官网边界的来源 ID。可靠定位的官网句内使用官网标点，
-  官网句末缺少独立词时间时，仅在最后一个带时间词完整属于该句且有官网映射时设置边界。
-- 无标点异常长文本只由 `sentence-boundary.v2` fallback policy 处理。fallback 数量/比例超过
-  policy 门禁时保留 boundary findings 与失败事件，但不得发布 `source_alignment.json`。
-  当前 policy 数值是 TR-05 的版本化离线基线；如未来 orchestration 集成验收调整数值，必须升级
-  policy 并使 sentence cache stale。
+- `sentence-boundary.v3` 先按已有来源规则分离 CNBC 编辑长破折号，再对同一份最终融合正文的
+  `. ? !` 应用省略号、缩写、姓名首字母和域名点号例外。所有来源统一记 `fused_punctuation`；
+  官网原词和 `official_sentence_spans` 不创建或屏蔽正文标点的句界。
+- reliable speaker 变化强制切句。同章前向可靠 speaker 仅用于换人检测，章变化清空；当前
+  源句尚无官网来源上下文时，不能把纯 ASR-only `Okay,`、`Well,` 等回答前缀归给前位而误切。
+  不向未知问题反向填入回答者标签，可靠身份不足时保持未知。
+- 不依据停顿、ASR segment、段落或词数强切，不保留 pause/fallback 政策或发布数量门槛。
+  无标点文末使用 `document_end` 收尾；完成事件记录 `document_end_count`。字幕行宽、阅读速度
+  和 cue 时长不属于句界输入。旧 sentence policy 及旧边界来源枚举直接拒绝，不作兼容解析。
 - canonical 发布前必须构造并 round-trip `archive_core.interfaces.SourceAlignmentDTO`，让公共 DTO
   校验稳定 ID、整数毫秒、时间单调、连续且恰好一次的 sentence 覆盖、冗余首尾时间和可重建文字。
   `speaker_label` 只来自映射后的结构化官网 token；identity/YouTube 路径保持 `null`。

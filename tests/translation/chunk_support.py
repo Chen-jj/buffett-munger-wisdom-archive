@@ -22,7 +22,7 @@ def source(count=3, *, sections=False, sentence_ids=None):
         group = [w for w, owner in zip(words,assignments) if owner==sid]
         sentences.append(SourceSentenceDTO(f"s{sid}", group[0].id, group[-1].id,
             group[0].start_ms, group[-1].end_ms, " ".join(w.text for w in group),
-            None, TextSource.ASR, BoundarySource.ASR_PUNCTUATION, BoundaryStatus.VERIFIED))
+            None, TextSource.ASR, BoundarySource.FUSED_PUNCTUATION, BoundaryStatus.VERIFIED))
     alignment = SourceAlignmentDTO("en",count*1100, words,tuple(sentences),
         (SourceSectionDTO("sec1","Title","s1",sentences[-1].id),) if sections else ())
     chunks = tuple(SourceChunkDTO(f"k{i}",(word.id,),(f"s{sid}",),word.text,

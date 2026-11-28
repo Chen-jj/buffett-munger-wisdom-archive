@@ -42,7 +42,7 @@ def alignment(specs, *, sections=(), speakers=None):
         sentences.append(SourceSentenceDTO(f"s{number}", part[0].id, part[-1].id, part[0].start_ms,
                                             part[-1].end_ms, reconstruct_sentence_text(part),
                                             (speakers or [None] * len(specs))[number - 1], TextSource.ASR,
-                                            BoundarySource.ASR_PUNCTUATION, BoundaryStatus.VERIFIED))
+                                            BoundarySource.FUSED_PUNCTUATION, BoundaryStatus.VERIFIED))
     return SourceAlignmentDTO("en", max(word.end_ms for word in words) + 1000, tuple(words), tuple(sentences), sections)
 
 

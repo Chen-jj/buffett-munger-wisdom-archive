@@ -70,7 +70,7 @@ def _sentence(position: int, first_word: int, last_word: int) -> SourceSentenceD
         text="sentence",
         speaker_label=None,
         text_source=TextSource.OFFICIAL_TRANSCRIPT,
-        boundary_source=BoundarySource.OFFICIAL_PUNCTUATION,
+        boundary_source=BoundarySource.FUSED_PUNCTUATION,
         boundary_status=BoundaryStatus.VERIFIED,
     )
 
@@ -227,9 +227,9 @@ def test_document_section_change_is_reported_before_the_new_chapter_word() -> No
 
 def test_verified_boundary_wins_while_section_change_replaces_weak_signal() -> None:
     official = BoundarySignal(
-        BoundarySource.OFFICIAL_PUNCTUATION, BoundaryStatus.VERIFIED
+        BoundarySource.FUSED_PUNCTUATION, BoundaryStatus.VERIFIED
     )
-    weak = BoundarySignal(BoundarySource.ASR_PUNCTUATION, BoundaryStatus.INFERRED)
+    weak = BoundarySignal(BoundarySource.FUSED_PUNCTUATION, BoundaryStatus.INFERRED)
 
     assert select_boundary_signal(official, document_section_change=True) == official
     assert select_boundary_signal(weak, document_section_change=True) == BoundarySignal(
